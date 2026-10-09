@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Xác minh email · Reup AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}?v=13.0">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/xports-theme.css') }}?v=8">
+</head>
+<body class="login-body theme-xports">
+<div class="login-shell">
+    <div class="login-brand"><span class="brand-mark big">R</span><div><h1>Reup AI</h1><p>Xác minh email</p></div></div>
+    <form class="login-card" method="post" action="/verify-email">
+        <h2>Nhập mã 6 số</h2>
+        <p>Mã đã gửi tới <strong>{{ email }}</strong>.</p>
+        {% if notice %}<div class="alert success">{{ notice }}</div>{% endif %}
+        {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+        <label for="code">Mã xác minh</label>
+        <input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autofocus required>
+        <button class="btn primary full" type="submit">Xác minh và đăng nhập</button>
+    </form>
+    <form method="post" action="/verify-email/resend" style="margin-top:12px;text-align:center">
+        <button class="btn" type="submit">Gửi lại mã</button>
+    </form>
+</div>
+</body>
+</html>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Các video source.mp4 đã lưu trên máy
+{% endblock %}
+
+{% block content %}
+
+<section class="panel">
+
+    <div class="panel-head">
+
+        <div>
+            <h2>Thư viện video đã tải</h2>
+            <p>{{ videos|length }} video đang có trong app/downloads/demo.</p>
+        </div>
+
+        <a
+            class="btn primary"
+            href="/sources"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-plus"></use></svg>
+            Lấy thêm video
+        </a>
+
+    </div>
+
+
+    {% if videos %}
+
+    <div class="library-grid">
+
+    {% for video in videos %}
+
+        <article class="library-card">
+
+            <div class="library-cover">
+
+                {% if video.cover_url %}
+                <img
+                    src="/api/cover?url={{ video.cover_url|urlencode }}"
+                    alt="{{ video.title }}"
+                    loading="lazy"
+                >
+                {% else %}
+                <video
+                    class="library-preview"
+                    src="/api/preview/source/{{ video.video_id }}"
+                    muted
+                    playsinline
+                    preload="metadata"
+                    aria-label="Xem trước {{ video.title }}"
+                    onloadedmetadata="this.currentTime = Math.min(0.1, this.duration || 0);"
+                ></video>
+                <span class="preview-badge" aria-hidden="true"><svg class="ui-icon"><use href="#ui-play"></use></svg> Xem trước</span>
+                {% endif %}
+
+            </div>
+
+
+            <div class="library-body">
+
+                <h3>
+                    {{ video.title }}
+                </h3>
+
+                <div class="library-meta">
+                    <span>{{ video.video_id }}</span>
+                    <span>{{ video.size_text }}</span>
+                    <span>{{ video.updated_at }}</span>
+                </div>
+
+                <div class="library-actions">
+
+                    <a
+                        class="btn secondary"
+                        href="/library/source/{{ video.video_id }}"
+                        target="_blank"
+                    >
+                        <svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg>
+                        Xem / tải
+                    </a>
+
+                    <a
+                        class="btn primary"
+                        href="/sources"
+                    >
+                        <svg class="ui-icon" aria-hidden="true"><use href="#ui-sparkles"></use></svg>
+                        Xử lý AI
+                    </a>
+
+                </div>
+
+            </div>
+
+        </article>
+
+    {% endfor %}
+
+    </div>
+
+    {% else %}
+
+    <div class="empty-state">
+        Chưa có video tải về.
+        Vào “Nguồn video” để tải video đầu tiên.
+    </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

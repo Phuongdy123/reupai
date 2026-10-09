@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Tổng quan hệ thống xử lý video · DB realtime
+{% endblock %}
+
+{% block content %}
+
+<div class="stats-grid">
+
+    <div class="stat-card">
+        <span><svg class="ui-icon"><use href="#ui-video"></use></svg></span>
+        <small>Video trong DB</small>
+        <strong>{{ stats.total_videos }}</strong>
+    </div>
+
+    <div class="stat-card">
+        <span><svg class="ui-icon"><use href="#ui-download"></use></svg></span>
+        <small>Đã tải</small>
+        <strong>{{ stats.downloaded }}</strong>
+    </div>
+
+    <div class="stat-card">
+        <span><svg class="ui-icon"><use href="#ui-sparkles"></use></svg></span>
+        <small>Thành phẩm</small>
+        <strong>{{ stats.outputs }}</strong>
+    </div>
+
+    <div class="stat-card">
+        <span><svg class="ui-icon"><use href="#ui-settings"></use></svg></span>
+        <small>Đang xử lý</small>
+        <strong id="activeJobCount">
+            {{ stats.processing_jobs }}
+        </strong>
+    </div>
+
+</div>
+
+
+<section class="panel">
+
+    <div class="panel-head">
+
+        <div>
+            <h2>Đang xử lý realtime</h2>
+            <p>
+                Tự cập nhật mỗi 2 giây từ bảng jobs.
+            </p>
+        </div>
+
+        <span
+            id="activeJobsBadge"
+            class="status processing"
+        >
+            {{ stats.processing_jobs }} job
+        </span>
+
+    </div>
+
+
+    <div id="activeJobs">
+
+        {% if stats.processing_jobs == 0 %}
+
+        <div class="empty-state compact">
+            Hiện không có pipeline nào đang chạy.
+        </div>
+
+        {% else %}
+
+        <div class="empty-state compact">
+            Đang tải trạng thái realtime...
+        </div>
+
+        {% endif %}
+
+    </div>
+
+</section>
+
+
+<div class="dashboard-grid">
+
+    <section class="panel">
+
+        <div class="panel-head">
+
+            <div>
+                <h2>Tình trạng hệ thống</h2>
+                <p>Dữ liệu từ SQLite + video_files.</p>
+            </div>
+
+        </div>
+
+        <div class="status-list">
+
+            <div>
+                <span>Nguồn đang bật</span>
+                <strong>{{ stats.total_sources }}</strong>
+            </div>
+
+            <div>
+                <span>Job hoàn tất</span>
+                <strong>{{ stats.completed_jobs }}</strong>
+            </div>
+
+            <div>
+                <span>Job lỗi</span>
+                <strong class="danger-text">
+                    {{ stats.failed_jobs }}
+                </strong>
+            </div>
+
+            <div>
+                <span>Dung lượng được index</span>
+                <strong>{{ stats.storage }}</strong>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-head">
+
+            <div>
+                <h2>Thao tác nhanh</h2>
+                <p>Đi tới khu vực cần làm việc.</p>
+            </div>
+
+        </div>
+
+        <div class="quick-actions">
+
+            <a
+                class="quick-card"
+                href="/sources"
+            >
+                <span><svg class="ui-icon"><use href="#ui-video"></use></svg></span>
+                <strong>Lấy video nguồn</strong>
+                <small>Bilibili → Vietsub / Voice</small>
+            </a>
+
+            <a
+                class="quick-card"
+                href="/downloads"
+            >
+                <span><svg class="ui-icon"><use href="#ui-download"></use></svg></span>
+                <strong>Video đã tải</strong>
+                <small>Quản lý source.mp4 local</small>
+            </a>
+
+            <a
+                class="quick-card"
+                href="/outputs"
+            >
+                <span><svg class="ui-icon"><use href="#ui-sparkles"></use></svg></span>
+                <strong>Thành phẩm</strong>
+                <small>Xem và tải video hoàn tất</small>
+            </a>
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<section class="panel">
+
+    <div class="panel-head">
+
+        <div>
+            <h2>Job gần đây</h2>
+            <p>Lịch sử mới nhất trong database V12.</p>
+        </div>
+
+        <a
+            class="text-link"
+            href="/history"
+        >
+            Xem tất cả →
+        </a>
+
+    </div>
+
+    {% if recent_jobs %}
+
+    <div class="table-wrap">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Video</th>
+                    <th>Mode</th>
+                    <th>Stage</th>
+                    <th>Tiến độ</th>
+                    <th>Trạng thái</th>
+                    <th>Cập nhật</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            {% for job in recent_jobs %}
+                <tr>
+                    <td class="mono">
+                        {{ job.platform_video_id }}
+                    </td>
+
+                    <td>
+                        {{ job.mode }}
+                    </td>
+
+                    <td>
+                        {{ job.stage or "-" }}
+                    </td>
+
+                    <td>
+                        {{ job.progress }}%
+                    </td>
+
+                    <td>
+                        <span class="status {{ job.status }}">
+                            {{ job.status }}
+                        </span>
+                    </td>
+
+                    <td>
+                        {{ job.updated_at or job.created_at }}
+                    </td>
+                </tr>
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    {% else %}
+
+    <div class="empty-state">
+        Chưa có job nào. Chạy Vietsub hoặc Voice AI ở
+        “Nguồn video” để tạo job đầu tiên.
+    </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script src="{{ url_for('static', path='/js/dashboard.js') }}?v=2"></script>
+{% endblock %}

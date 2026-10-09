@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Đăng ký · Reup AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}?v=13.0">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/xports-theme.css') }}?v=8">
+</head>
+<body class="login-body theme-xports">
+<div class="login-shell">
+    <div class="login-brand"><span class="brand-mark big">R</span><div><h1>Reup AI</h1><p>Local Engine · tài khoản riêng</p></div></div>
+    <form class="login-card" method="post" action="/register">
+        <h2>Tạo tài khoản</h2>
+        <p>Mỗi tài khoản có session và dữ liệu thư viện riêng.</p>
+        {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+        <label for="username">Tên đăng nhập</label>
+        <input id="username" name="username" value="{{ username }}" autocomplete="username" required>
+        <label for="email">Email nhận mã xác minh</label>
+        <input id="email" name="email" type="email" value="{{ email }}" autocomplete="email" required>
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" minlength="8" autocomplete="new-password" required>
+        <label for="password_confirm">Nhập lại mật khẩu</label>
+        <input id="password_confirm" name="password_confirm" type="password" minlength="8" autocomplete="new-password" required>
+        <button class="btn primary full" type="submit">Gửi mã xác minh</button>
+        <p class="login-help"><a href="/login">Đã có tài khoản? Đăng nhập</a></p>
+    </form>
+</div>
+</body>
+</html>

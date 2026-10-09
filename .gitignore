@@ -1,0 +1,17 @@
+venv/
+.venv/
+
+# Local Engine runtime data and large machine-specific assets
+app/data/douyin_browser/
+app/models/
+app/downloads/
+app/output/
+app/jobs/
+app/temp/
+app/channels/*/jobs/
+samples/video/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

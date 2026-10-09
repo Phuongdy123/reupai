@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Tìm video nguồn, tải xuống và chạy Vietsub / Voice AI
+{% endblock %}
+
+{% block content %}
+
+<section class="panel source-panel">
+
+    <div class="source-bar">
+
+        <input
+            id="sourceUrl"
+            value="https://space.bilibili.com/4856007"
+            placeholder="Dán link kênh hoặc link video Bilibili..."
+        >
+
+        <select
+            id="sourceInputMode"
+            class="source-input-mode"
+            aria-label="Loại link cần đồng bộ"
+        >
+            <option value="channel">Cả kênh</option>
+            <option value="video">Một video</option>
+        </select>
+
+        <button
+            class="btn primary"
+            id="syncSourceBtn"
+            onclick="loadVideos(true)"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-refresh"></use></svg>
+            Đồng bộ nguồn
+        </button>
+
+        <button
+            type="button"
+            class="btn green follow-source-btn"
+            id="followCurrentSource"
+            title="Theo dõi kênh hiện tại"
+            hidden
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-plus"></use></svg>
+            <span>Theo dõi</span>
+        </button>
+
+    </div>
+
+
+    <div class="control-bar">
+
+        <label class="search-field">
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-search"></use></svg>
+            <input
+                id="searchInput"
+                placeholder="Tìm trong trang hiện tại..."
+                oninput="resetAndRender()"
+            >
+        </label>
+
+        <select
+            id="statusFilter"
+            onchange="resetAndRender()"
+        >
+            <option value="all">Tất cả trạng thái</option>
+            <option value="not_downloaded">Chưa tải</option>
+            <option value="downloaded">Đã tải</option>
+            <option value="processing">Đang xử lý</option>
+            <option value="subtitle">Đã Vietsub</option>
+            <option value="voiceover">Đã lồng tiếng</option>
+            <option value="failed">Bị lỗi</option>
+        </select>
+
+        <button
+            class="btn secondary"
+            onclick="refreshDisplay()"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-refresh"></use></svg>
+            Làm mới
+        </button>
+
+    </div>
+
+
+    <div class="toolbar">
+
+        <button
+            class="btn secondary"
+            onclick="setSort('new')"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-calendar"></use></svg>
+            Mới nhất
+        </button>
+
+        <button
+            class="btn secondary"
+            onclick="setSort('view')"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-trending"></use></svg>
+            Top view
+        </button>
+
+        <button
+            type="button"
+            class="btn secondary source-series-btn"
+            id="sourceSeriesBtn"
+            onclick="focusSeriesPicker()"
+            title="Xem Series của nguồn hiện tại"
+        >
+            <svg class="ui-icon" aria-hidden="true"><use href="#ui-folder"></use></svg>
+            Series
+        </button>
+
+    </div>
+
+
+    <div
+        id="info"
+        class="info-line"
+    ></div>
+
+</section>
+
+
+<div
+    id="videos"
+    class="video-grid"
+></div>
+
+
+<div
+    id="bottomPages"
+    class="bottom-pages"
+></div>
+
+<div
+    id="pageInfo"
+    class="page-info"
+></div>
+
+{% endblock %}
+
+
+{% block modal %}
+
+<div
+    id="playerModal"
+    class="modal"
+    onclick="closePlayerIfBackdrop(event)"
+>
+
+    <div class="modal-box">
+
+        <div class="modal-head">
+
+            <div
+                id="playerTitle"
+                class="modal-title"
+            >
+                Video kết quả
+            </div>
+
+            <button
+                class="btn secondary"
+                onclick="closePlayer()"
+            >
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-close"></use></svg>
+            </button>
+
+        </div>
+
+        <video
+            id="player"
+            controls
+            playsinline
+        ></video>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+<script src="{{ url_for('static', path='/js/sources.js') }}?v=14.13"></script>
+{% endblock %}

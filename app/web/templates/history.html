@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Theo dõi lịch sử pipeline và lỗi xử lý
+{% endblock %}
+
+{% block content %}
+
+<section class="panel">
+
+    <div class="panel-head">
+
+        <div>
+            <h2>Lịch sử job</h2>
+            <p>Tối đa 200 job gần nhất trong SQLite.</p>
+        </div>
+
+    </div>
+
+
+    {% if jobs %}
+
+    <div class="table-wrap">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Video</th>
+                    <th>Channel</th>
+                    <th>Mode</th>
+                    <th>Stage</th>
+                    <th>Tiến độ</th>
+                    <th>Trạng thái</th>
+                    <th>Lỗi</th>
+                    <th>Cập nhật</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+            {% for job in jobs %}
+
+                <tr>
+                    <td>#{{ job.id }}</td>
+
+                    <td class="mono">
+                        {{ job.platform_video_id }}
+                    </td>
+
+                    <td>
+                        {{ job.channel_key }}
+                    </td>
+
+                    <td>
+                        {{ job.mode }}
+                    </td>
+
+                    <td>
+                        {{ job.stage or "-" }}
+                    </td>
+
+                    <td>
+                        {{ job.progress }}%
+                    </td>
+
+                    <td>
+                        <span class="status {{ job.status }}">
+                            {{ job.status }}
+                        </span>
+                    </td>
+
+                    <td class="error-cell">
+                        {{ job.error_message or "-" }}
+                    </td>
+
+                    <td>
+                        {{ job.updated_at or job.created_at }}
+                    </td>
+                </tr>
+
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    {% else %}
+
+    <div class="empty-state">
+        Chưa có job nào trong bảng jobs.
+    </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

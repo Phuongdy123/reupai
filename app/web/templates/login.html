@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>Đăng nhập · Reup AI</title>
+
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/css/app.css') }}?v=13.0"
+>
+
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/css/xports-theme.css') }}?v=8"
+>
+
+</head>
+
+<body class="login-body theme-xports">
+
+<div class="login-shell">
+
+    <div class="login-brand">
+
+        <span class="brand-mark big">
+            R
+        </span>
+
+        <div>
+            <h1>
+                Reup AI
+            </h1>
+
+            <p>
+                Video localization dashboard · V12.1
+            </p>
+        </div>
+
+    </div>
+
+
+    <form
+        class="login-card"
+        method="post"
+        action="/login"
+    >
+
+        <h2>
+            Đăng nhập
+        </h2>
+
+        <p>
+            Đăng nhập để dùng session và dữ liệu riêng của bạn.
+        </p>
+
+        {% if error %}
+        <div class="alert error">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <label for="username">
+            Tên đăng nhập
+        </label>
+
+        <input
+            id="username"
+            name="username"
+            value="{{ username }}"
+            autocomplete="username"
+            autofocus
+            required
+        >
+
+        <label for="password">
+            Mật khẩu
+        </label>
+
+        <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+        >
+
+        <button
+            class="btn primary full"
+            type="submit"
+        >
+            Đăng nhập
+        </button>
+
+        <p class="login-help">
+            <a href="/register">Tạo tài khoản mới</a>
+        </p>
+
+    </form>
+
+</div>
+
+</body>
+</html>

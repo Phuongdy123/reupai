@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Thông tin cấu hình hiện tại của Reup AI
+{% endblock %}
+
+{% block content %}
+
+<div class="settings-grid">
+
+    <section
+        class="panel translation-settings"
+        id="translation"
+    >
+
+        <div class="panel-head">
+            <div>
+                <h2>Dịch Trung → Việt</h2>
+                <p>Chức năng Vietsub trên từng video sẽ dùng cấu hình này.</p>
+            </div>
+
+            <span class="setting-status">Sẵn sàng</span>
+        </div>
+
+        <div class="setting-row">
+            <span>Ngôn ngữ nguồn</span>
+            <strong>中文 / Trung</strong>
+        </div>
+
+        <div class="setting-row">
+            <span>Ngôn ngữ đích</span>
+            <strong>Tiếng Việt</strong>
+        </div>
+
+        <a class="btn primary translation-action" href="/sources">
+            Mở nguồn video để dịch
+        </a>
+
+    </section>
+
+    <section class="panel">
+
+        <div class="panel-head">
+            <div>
+                <h2>Bảo mật</h2>
+                <p>Trạng thái session đăng nhập.</p>
+            </div>
+        </div>
+
+        <div class="setting-row">
+            <span>HTTPS-only cookie</span>
+
+            <strong>
+                {% if session_https %}
+                    Bật
+                {% else %}
+                    Tắt (local)
+                {% endif %}
+            </strong>
+        </div>
+
+        <div class="setting-row">
+            <span>Session</span>
+            <strong>7 ngày</strong>
+        </div>
+
+        <div class="setting-row">
+            <span>Password</span>
+            <strong>Argon2</strong>
+        </div>
+
+    </section>
+
+
+    <section class="panel">
+
+        <div class="panel-head">
+            <div>
+                <h2>Tiếp theo</h2>
+                <p>Những setting sẽ được nối DB ở V12.2.</p>
+            </div>
+        </div>
+
+        <div class="coming-list">
+            <span>Gemini model</span>
+            <span>Whisper model</span>
+            <span>Voice mặc định</span>
+            <span>Volume tiếng gốc</span>
+            <span>Số job tối đa</span>
+            <span>Preset subtitle</span>
+        </div>
+
+    </section>
+
+</div>
+
+{% endblock %}

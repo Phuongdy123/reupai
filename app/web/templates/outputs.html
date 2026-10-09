@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block subtitle %}
+Video Vietsub và Voice AI đã hoàn tất
+{% endblock %}
+
+{% block content %}
+
+<section class="panel">
+
+    <div class="panel-head">
+
+        <div>
+            <h2>Thành phẩm</h2>
+            <p>{{ videos|length }} file final hiện có.</p>
+        </div>
+
+    </div>
+
+
+    {% if videos %}
+
+    <div class="library-grid">
+
+    {% for video in videos %}
+
+        <article class="library-card">
+
+            <div class="library-cover">
+
+                {% if video.cover_url %}
+                <img
+                    src="/api/cover?url={{ video.cover_url|urlencode }}"
+                    alt="{{ video.title }}"
+                    loading="lazy"
+                >
+                {% else %}
+                <video
+                    class="library-preview"
+                    src="/api/stream/{{ video.video_id }}?channel={{ video.channel }}&mode={{ video.mode }}"
+                    muted
+                    playsinline
+                    preload="metadata"
+                    aria-label="Xem trước {{ video.title }}"
+                    onloadedmetadata="this.currentTime = Math.min(0.1, this.duration || 0);"
+                ></video>
+                <span class="preview-badge" aria-hidden="true"><svg class="ui-icon"><use href="#ui-play"></use></svg> Xem trước</span>
+                {% endif %}
+
+                <span class="mode-badge">
+                    {{ video.mode_label }}
+                </span>
+
+            </div>
+
+
+            <div class="library-body">
+
+                <h3>
+                    {{ video.title }}
+                </h3>
+
+                <div class="library-meta">
+                    <span>{{ video.video_id }}</span>
+                    <span>{{ video.channel }}</span>
+                    <span>{{ video.size_text }}</span>
+                    <span>{{ video.updated_at }}</span>
+                </div>
+
+                <div class="library-actions">
+
+                    <a
+                        class="btn primary"
+                        href="/api/stream/{{ video.video_id }}?channel={{ video.channel }}&mode={{ video.mode }}"
+                        target="_blank"
+                    >
+                        <svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg>
+                        Xem
+                    </a>
+
+                    <a
+                        class="btn secondary"
+                        href="/api/result/{{ video.video_id }}?channel={{ video.channel }}&mode={{ video.mode }}"
+                    >
+                        <svg class="ui-icon" aria-hidden="true"><use href="#ui-download"></use></svg>
+                        Tải
+                    </a>
+
+                </div>
+
+            </div>
+
+        </article>
+
+    {% endfor %}
+
+    </div>
+
+    {% else %}
+
+    <div class="empty-state">
+        Chưa tìm thấy final_sub.mp4 hoặc final_voice.mp4.
+    </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block subtitle %}Quản lý tài khoản và phân quyền{% endblock %}
+{% block content %}
+<section class="panel">
+    <div class="section-heading"><div><h2>Người dùng</h2><p>{{ users|length }} tài khoản</p></div></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>Tài khoản</th><th>Email</th><th>Quyền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>
+    {% for item in users %}<tr><td><strong>{{ item.username }}</strong></td><td>{{ item.email or '—' }}</td><td>{{ item.role|upper }}</td><td>{{ 'Đã xác minh' if item.email_verified else 'Chờ xác minh' }} · {{ 'Đang bật' if item.enabled else 'Đã khóa' }}</td><td>{% if item.role != 'admin' %}<form method="post" action="/admin/users/{{ item.id }}/toggle"><button class="btn" type="submit">{{ 'Khóa' if item.enabled else 'Mở khóa' }}</button></form>{% else %}<span>Admin tổng</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endblock %}
