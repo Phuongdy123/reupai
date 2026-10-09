@@ -10,6 +10,7 @@ app/jobs/
 app/temp/
 app/channels/*/jobs/
 samples/video/
+app/local_token
 __pycache__/
 *.py[cod]
 .env

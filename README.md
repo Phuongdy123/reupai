@@ -22,6 +22,21 @@ python -m app.main
 .\venv\Scripts\python.exe -m app.main
 ```
 
+Chạy Local Engine adapter riêng để chuẩn bị kết nối website:
+
+```powershell
+.\venv\Scripts\python.exe -m app.local_engine
+```
+
+Local Engine chỉ bind `127.0.0.1:17888`. Kiểm tra nhanh:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:17888/api/health
+```
+
+Các API điều khiển cần Bearer token trong file local `app/local_token` ở
+development. Token không được commit lên Git.
+
 Cần cấu hình `GEMINI_API_KEY` trong `.env` ở thư mục gốc để dùng dịch vụ dịch Gemini. Pipeline cũng cần các chương trình hệ thống mà nó gọi, gồm FFmpeg; hãy bảo đảm chúng có thể được tìm thấy qua `PATH`.
 
 ## Điều chỉnh tốc độ tải và RAM

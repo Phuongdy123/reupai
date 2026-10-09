@@ -1,4 +1,4 @@
-"""Centralized local storage paths for development and packaged builds.
+r"""Centralized local storage paths for development and packaged builds.
 
 Development keeps the existing project layout. Production can set
 REUP_DATA_DIR or REUP_ENV=production to use %LOCALAPPDATA%\ReupAI.
