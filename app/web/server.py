@@ -25,6 +25,12 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from runtime_paths import (
+    get_channels_dir,
+    get_data_dir,
+    get_downloads_dir,
+    get_output_dir,
+)
 
 
 # =========================================================
@@ -54,7 +60,7 @@ PROJECT_ROOT = APP_DIR.parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-DOWNLOAD_ROOT = APP_DIR / "downloads" / "demo"
+DOWNLOAD_ROOT = get_downloads_dir() / "demo"
 PIPELINE_FILE = APP_DIR / "pipeline.py"
 
 WEB_DIR = APP_DIR / "web"
@@ -146,8 +152,7 @@ def get_session_secret():
         return env_secret
 
     secret_file = (
-        APP_DIR
-        / "data"
+        get_data_dir()
         / ".session_secret"
     )
 
@@ -572,8 +577,7 @@ def job_dir_for(
 ) -> Path:
 
     return (
-        APP_DIR
-        / "channels"
+        get_channels_dir()
         / channel
         / "jobs"
         / video_id
@@ -1377,8 +1381,7 @@ def sync_existing_files_to_db():
                 )
 
     channels_dir = (
-        APP_DIR
-        / "channels"
+        get_channels_dir()
     )
 
     if not channels_dir.exists():
@@ -2063,8 +2066,8 @@ def _pipeline_worker_once(
 
                     "message":
                         (
-                            "Xử lý AI "
-                            "hoàn tất."
+                            progress.get("message")
+                            or "Xử lý AI hoàn tất."
                         ),
 
                     "mode":
@@ -2598,10 +2601,7 @@ def scan_outputs_library():
 
     items = []
 
-    channels_dir = (
-        APP_DIR
-        / "channels"
-    )
+    channels_dir = get_channels_dir()
 
     if not channels_dir.exists():
         return items
@@ -2708,6 +2708,12 @@ def scan_outputs_library():
                         file_mtime_text(
                             path
                         ),
+
+                    # Local Engine converts this absolute runtime path into a
+                    # safe runtime-relative file_path before returning it to
+                    # the browser. The legacy FastAPI UI ignores this field.
+                    "path":
+                        str(path),
                 })
 
     items.sort(

@@ -90,6 +90,14 @@ BLUR_PAD_Y_RATIO = 0.026
 _DETECTOR = None
 
 
+class SubtitleRegionNotFound(RuntimeError):
+    """OCR ran successfully but did not identify a reliable subtitle region."""
+
+    def __init__(self, message, reason):
+        super().__init__(message)
+        self.reason = reason
+
+
 # =========================================================
 # BASIC HELPERS
 # =========================================================
@@ -2542,9 +2550,10 @@ def detect_subtitle_region(
 
     if not positive_obs:
 
-        raise RuntimeError(
+        raise SubtitleRegionNotFound(
             "OCR khong tim thay text line "
-            "o cac frame co loi thoai."
+            "o cac frame co loi thoai.",
+            "no_text_lines",
         )
 
     ranked = (
@@ -2569,8 +2578,9 @@ def detect_subtitle_region(
 
     if not ranked:
 
-        raise RuntimeError(
-            "Khong gom duoc subtitle cluster."
+        raise SubtitleRegionNotFound(
+            "Khong gom duoc subtitle cluster.",
+            "no_subtitle_cluster",
         )
 
     print_ranked_candidates(
@@ -2590,9 +2600,10 @@ def detect_subtitle_region(
         < MIN_POSITIVE_HITS
     ):
 
-        raise RuntimeError(
+        raise SubtitleRegionNotFound(
             "Subtitle candidate xuat hien "
-            "qua it frame."
+            "qua it frame.",
+            "insufficient_hits",
         )
 
     if (
@@ -2602,9 +2613,10 @@ def detect_subtitle_region(
         < MIN_TEMPORAL_COVERAGE
     ):
 
-        raise RuntimeError(
+        raise SubtitleRegionNotFound(
             "Subtitle candidate chi xuat hien "
-            "o mot doan ngan cua video."
+            "o mot doan ngan cua video.",
+            "insufficient_coverage",
         )
 
     if (
@@ -2612,9 +2624,10 @@ def detect_subtitle_region(
         < MIN_FINAL_CONFIDENCE
     ):
 
-        raise RuntimeError(
+        raise SubtitleRegionNotFound(
             "Khong du tin cay de chot "
-            "vi tri subtitle."
+            "vi tri subtitle.",
+            "low_confidence",
         )
 
     region = (

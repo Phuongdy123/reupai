@@ -827,7 +827,7 @@ async function loadPage(
     try {
 
         const response = (
-            await fetch(
+            await window.reupEngineClient.request(
                 '/api/videos/page',
                 {
                     method:
@@ -1039,7 +1039,7 @@ async function loadVideos(refresh = false) {
 
         if (inputMode === 'video') {
 
-            const response = await fetch(
+            const response = await window.reupEngineClient.request(
                 '/api/library/direct/inspect',
                 {
                     method: 'POST',
@@ -1080,7 +1080,7 @@ async function loadVideos(refresh = false) {
         currentView = 'source';
 
         const response = (
-            await fetch(
+            await window.reupEngineClient.request(
                 '/api/videos',
                 {
                     method:
@@ -1904,7 +1904,7 @@ async function downloadVideo(
     try {
 
         const response = (
-            await fetch(
+            await window.reupEngineClient.request(
                 '/api/download',
                 {
                     method:
@@ -2885,7 +2885,7 @@ async function processVideo(
     try {
 
         const response = (
-            await fetch(
+            await window.reupEngineClient.request(
                 '/api/process',
                 {
                     method:
@@ -3134,7 +3134,7 @@ async function pollProcess(
         );
 
         const response = (
-            await fetch(
+            await window.reupEngineClient.request(
                 url
             )
         );
@@ -3202,7 +3202,7 @@ async function pollProcess(
                 '100%';
 
             progressStage.textContent =
-                'Hoàn tất';
+                data.message || 'Hoàn tất';
 
             stopButton.style.display =
                 'none';
@@ -3619,11 +3619,26 @@ async function apiJson(
     options = {}
 ) {
 
+    const useEngine = (
+        url.startsWith('/api/videos')
+        || url.startsWith('/api/download')
+        || url.startsWith('/api/process/')
+        || url.startsWith('/api/jobs')
+        || url.startsWith('/api/files/')
+        || url.startsWith('/api/library/sources')
+        || url.startsWith('/api/library/collections')
+        || url.startsWith('/api/library/favorites')
+        || url.startsWith('/api/library/videos')
+        || url.startsWith('/api/library/series')
+        || url.startsWith('/api/library/meta')
+        || url.startsWith('/api/library/ui-state')
+        || url.startsWith('/api/library/history')
+        || url.startsWith('/api/library/downloads')
+    );
     const response = (
-        await fetch(
-            url,
-            options
-        )
+        await (useEngine
+            ? window.reupEngineClient.request(url, options)
+            : fetch(url, options))
     );
 
     let data = {};
@@ -10467,7 +10482,7 @@ function queueServerStateSave(
     serverStateTimer = setTimeout(
         () => {
 
-            fetch(
+            apiJson(
                 '/api/library/ui-state/sources_v13',
                 {
                     method:

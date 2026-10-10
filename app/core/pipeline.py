@@ -72,6 +72,12 @@ if APP_DIR.name.lower() == "core" and (APP_DIR.parent / "services").exists():
 
 PROJECT_ROOT = APP_DIR.parent
 
+try:
+    from runtime_paths import get_channels_dir, get_jobs_dir
+except ImportError:  # pragma: no cover - standalone legacy invocation
+    get_channels_dir = lambda: APP_DIR / "channels"
+    get_jobs_dir = lambda: APP_DIR / "jobs"
+
 
 
 
@@ -2117,11 +2123,66 @@ def default_region_without_subtitle(source_video: Path) -> dict:
         pass
     return {
         "video": {"width": width, "height": height},
-        "blur": {"x": 0, "y": 0, "width": 2, "height": 2},
+        # The renderer also uses this box to lay out Vietnamese subtitles.
+        # Keep a usable bottom text area even though its blur is disabled.
+        "blur": {
+            "x": int(width * 0.07), "y": int(height * 0.80),
+            "width": int(width * 0.86), "height": max(2, int(height * 0.10)),
+        },
         "blur_enabled": False,
         "subtitle": {"x": width // 2, "y": int(height * 0.82), "position_percent": 82},
         "detected": {"method": "no_subtitle_fallback", "confidence": 0.0},
     }
+
+
+def resolve_subtitle_region(
+    source_video: Path, region_path: Path, preview_image: Path,
+    *, config=None, no_subtitle=False, force=False,
+) -> dict:
+    """Resolve current selection separately from the cached automatic detection."""
+    from services.subtitle_detector import SubtitleRegionNotFound
+
+    config = config if isinstance(config, dict) else {}
+    selected = config.get("blur_region")
+    preset = config.get("blur_preset")
+    has_selection = isinstance(selected, dict)
+    if has_selection or preset in {"top", "bottom", "center"}:
+        region = default_region_without_subtitle(source_video)
+        region["blur_enabled"] = True
+        region["detected"] = {"method": "manual_subtitle_region"}
+        if has_selection:
+            region["blur"] = {key: float(selected[key]) for key in ("x", "y", "width", "height")}
+        else:
+            width, height = region["video"]["width"], region["video"]["height"]
+            box_height = max(2, int(height * 0.22))
+            region["blur"] = {
+                "x": 0, "y": {"top": 0, "bottom": height - box_height,
+                              "center": (height - box_height) // 2}[preset],
+                "width": width, "height": box_height,
+            }
+    elif no_subtitle:
+        region = default_region_without_subtitle(source_video)
+    else:
+        # Never use the previous job's effective/manual selection as OCR cache.
+        auto_path = region_path.with_name("subtitle_region_auto.json")
+        try:
+            region = detect_subtitle_region(source_video, auto_path, preview_image, force=force)
+        except SubtitleRegionNotFound as error:
+            region = default_region_without_subtitle(source_video)
+            region["detected"] = {
+                "method": "ocr_not_detected", "confidence": 0.0, "reason": error.reason,
+            }
+            region["warnings"] = [
+                "OCR chưa xác định được vùng phụ đề gốc; video vẫn được xuất với "
+                "Vietsub/Voice, chưa làm mờ phụ đề gốc. Có thể chọn vùng mờ sub thủ công rồi xử lý lại."
+            ]
+            print(f"[WARNING] {error}")
+            print("[WARNING] Continuing without automatic subtitle blur. Select a manual region to cover the original text.")
+        if region.get("blur_enabled", True):
+            region = protect_auto_subtitle_from_top_watermark(region)
+
+    save_json(region_path, region)
+    return region
 
 
 def protect_auto_subtitle_from_top_watermark(region: dict) -> dict:
@@ -2597,7 +2658,7 @@ def pipeline(
 
 
 
-        jobs_root = APP_DIR / "channels" / channel_key / "jobs"
+        jobs_root = get_channels_dir() / channel_key / "jobs"
 
 
 
@@ -2605,7 +2666,7 @@ def pipeline(
 
 
 
-        jobs_root = APP_DIR / "jobs"
+        jobs_root = get_jobs_dir()
 
 
 
@@ -3356,36 +3417,10 @@ def pipeline(
 
 
 
-        region = default_region_without_subtitle(source_video) if no_subtitle else detect_subtitle_region(
-
-
-
-            source_video,
-
-
-
-            region_path,
-
-
-
-            region_preview,
-
-
-
-            force=force,
-
-
-
+        region = resolve_subtitle_region(
+            source_video, region_path, region_preview,
+            config=config, no_subtitle=no_subtitle, force=force,
         )
-
-
-
-
-
-
-
-        if not no_subtitle and not isinstance(config.get("blur_region"), dict):
-            region = protect_auto_subtitle_from_top_watermark(region)
 
         # Vùng mờ subtitle và vùng mờ tùy chỉnh là hai lớp độc lập. Trước đây
         # vùng tùy chỉnh bị ghi đè bởi blur_region của subtitle nên chọn trên
@@ -3403,50 +3438,6 @@ def pipeline(
                 "start": 0,
                 "end": 86400,
             })
-        selected_subtitle_blur = config.get("blur_region")
-        if isinstance(selected_subtitle_blur, dict):
-            region = {
-                **region,
-                "blur_enabled": True,
-                "blur": {
-                    **(region.get("blur") or {}),
-                    **{
-                        key: float(value)
-                        for key, value in selected_subtitle_blur.items()
-                        if key in {"x", "y", "width", "height"}
-                    },
-                },
-            }
-        blur_preset = config.get("blur_preset")
-        if blur_preset in {"top", "bottom", "center"}:
-            video_layout = region.get("video") or {}
-            video_width = float(video_layout.get("width") or 0)
-            video_height = float(video_layout.get("height") or 0)
-            box_height = max(1, int(video_height * 0.22))
-            box_y = {
-                "top": 0,
-                "bottom": max(0, int(video_height - box_height)),
-                "center": max(0, int((video_height - box_height) / 2)),
-            }[blur_preset]
-        if blur_preset in {"top", "bottom", "center"}:
-            region = {
-                **region,
-                "blur_enabled": True,
-                "blur": {
-                    **(region.get("blur") or {}),
-                    **{
-                        key: float(value)
-                        for key, value in {
-                            "x": 0,
-                            "y": box_y,
-                            "width": video_width,
-                            "height": box_height,
-                        }.items()
-                        if key in {"x", "y", "width", "height"}
-                    },
-                },
-            }
-
         # 7. RENDER
 
 
@@ -3706,6 +3697,7 @@ def pipeline(
 
 
             "status": "completed",
+            "warnings": region.get("warnings", []),
 
 
 
@@ -3761,7 +3753,7 @@ def pipeline(
 
 
 
-            message="Xu ly hoan tat.",
+            message="Xu ly hoan tat." + (" " + " ".join(region["warnings"]) if region.get("warnings") else ""),
 
 
 

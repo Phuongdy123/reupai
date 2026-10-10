@@ -150,7 +150,7 @@ function renderActiveJobs(jobs) {
 
 async function refreshActiveJobs() {
     try {
-        const response = await fetch(
+        const response = await window.reupEngineClient.request(
             '/api/jobs/active',
             {
                 cache: 'no-store'

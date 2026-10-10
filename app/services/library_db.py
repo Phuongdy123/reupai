@@ -8,6 +8,7 @@ from pathlib import Path
 from services.source_db import (
     get_connection,
 )
+from runtime_paths import get_channels_dir, get_downloads_dir
 
 
 APP_DIR = (
@@ -17,16 +18,9 @@ APP_DIR = (
     .parent
 )
 
-DOWNLOAD_ROOT = (
-    APP_DIR
-    / "downloads"
-    / "demo"
-)
+DOWNLOAD_ROOT = get_downloads_dir() / "demo"
 
-CHANNELS_ROOT = (
-    APP_DIR
-    / "channels"
-)
+CHANNELS_ROOT = get_channels_dir()
 
 
 # =========================================================

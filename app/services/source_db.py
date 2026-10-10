@@ -4,6 +4,7 @@ from datetime import datetime
 
 from runtime_paths import (
     APP_DIR,
+    get_channels_dir,
     get_data_dir,
 )
 
@@ -13,7 +14,7 @@ DATA_DIR = get_data_dir()
 
 DB_PATH = DATA_DIR / "reup.db"
 
-CHANNELS_DIR = APP_DIR / "channels"
+CHANNELS_DIR = get_channels_dir()
 
 
 def now():

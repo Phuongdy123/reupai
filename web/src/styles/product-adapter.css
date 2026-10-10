@@ -1,0 +1,44 @@
+/* The original local product styles are imported intact above. These rules
+   adapt React controls and scoped dialogs without changing that design. */
+.theme-xports .brand { margin: 0; }
+.theme-xports .brand > .brand-copy { display: block; width: auto; height: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-weight: inherit; }
+.theme-xports .sidebar .nav { overflow-y: auto; padding-bottom: 18px; }
+.theme-xports .sidebar-user { flex: 0 0 auto; }
+.theme-xports .topbar { padding: 0; }
+.theme-xports .page-content .panel { overflow: visible; }
+.theme-xports .local-engine-indicator { padding: 0; background: transparent; color: var(--muted); text-transform: none; font-size: 11px; }
+.theme-xports .local-engine-indicator > span { padding: 0; background: transparent; color: inherit; font-size: inherit; text-transform: none; }
+.theme-xports .local-engine-indicator[data-state=connected] { color: #67ddb0; }
+.theme-xports .local-engine-dot { flex: 0 0 8px; padding: 0; }
+.theme-xports .local-engine-indicator[data-state=connected] .local-engine-dot { background: #22c55e; }
+.theme-xports .local-engine-indicator[data-state=reconnecting] .local-engine-dot { background: #f59e0b; }
+.theme-xports .engine-retry { display: inline-grid; place-items: center; padding: 7px; margin: 0; }
+.theme-xports .engine-status-control { flex-wrap: wrap; }
+.theme-xports .state-panel { border-radius: 13px 4px; background: var(--panel); }
+.theme-xports .button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px 3px; }
+.theme-xports .button.primary { background: linear-gradient(120deg,#f21b2d,#ba0c1c); border-color: #f21b2d; }
+.theme-xports .library-page { display: block; }
+.theme-xports .library-intro { margin-bottom: 20px; }
+.theme-xports .table-wrap { overflow-x: auto; }
+.theme-xports .library-grid { grid-template-columns: repeat(auto-fill,minmax(270px,1fr)); }
+.theme-xports .control-bar select { width: auto; min-width: 180px; }
+.theme-xports .library-card .library-actions { flex-wrap: wrap; }
+.theme-xports .library-card .library-cover { position: relative; }
+.theme-xports .library-card .card-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.theme-xports .library-card .card-header-row h3 { flex: 1; min-width: 0; }
+.theme-xports .library-card .select-control { z-index: 2; }
+.theme-xports .library-card .library-preview { width: 100%; height: 100%; object-fit: cover; }
+.theme-xports .error-banner,.theme-xports .notice-banner { margin-bottom: 18px; }
+.theme-xports .source-runtime-host { min-width: 0; }
+.theme-xports .source-runtime-host > .modal,.theme-xports .source-runtime-host > dialog { z-index: 40; }
+.theme-xports .source-runtime-host video { max-width: 100%; }
+.theme-xports .library-preview-dialog { position: fixed; inset: 0; width: min(1080px,calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 14px 4px; background: #10151f; color: var(--text); }
+.theme-xports .library-preview-dialog::backdrop { background: rgb(0 0 0 / 75%); backdrop-filter: blur(4px); }
+.theme-xports .library-preview-dialog video { display: block; width: 100%; max-height: calc(100dvh - 110px); background: #000; }
+.theme-xports .library-preview-dialog .modal-head { padding: 16px 18px; }
+.theme-xports .library-preview-dialog .error-banner { margin: 18px; }
+.theme-xports .local-empty { padding: 40px 22px; text-align: center; }
+.theme-xports .local-empty h3 { color: var(--text); }
+.theme-xports .local-empty p { color: var(--muted); }
+@media (max-width: 940px) { .theme-xports .sidebar .nav { overflow-y: visible; }.theme-xports .sidebar .nav-label { display: none; }.theme-xports .sidebar .nav-group { display: flex; gap: 5px; }.theme-xports .sidebar .nav-item { white-space: nowrap; flex: 0 0 auto; }.theme-xports .sidebar-user { display: none; } }
+@media (max-width: 760px) { .theme-xports .topbar { padding: 18px 0; }.theme-xports .engine-status-control { width: 100%; justify-content: flex-start; }.theme-xports .local-engine-indicator { margin-right: auto; } }

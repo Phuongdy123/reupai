@@ -34,8 +34,42 @@ Local Engine chỉ bind `127.0.0.1:17888`. Kiểm tra nhanh:
 Invoke-WebRequest http://127.0.0.1:17888/api/health
 ```
 
-Các API điều khiển cần Bearer token trong file local `app/local_token` ở
-development. Token không được commit lên Git.
+Local Engine root kiểm tra nhanh tại `http://127.0.0.1:17888/` và không cần
+authentication. Runtime path development giữ ở `app/`; khi đặt
+`REUP_ENV=production` hoặc `REUP_DATA_DIR`, Local Engine dùng một root riêng
+(`data`, `downloads`, `projects`, `output`, `temp`, `models`, `browser`,
+`logs`, `config`, `channels`, `jobs`, `local_token`). Migration legacy chỉ
+copy file còn thiếu và ghi dấu migration, không ghi đè dữ liệu mới.
+
+Chạy frontend local (Phase 3.1):
+
+```powershell
+cd web
+Copy-Item .env.local.example .env.local
+npm install
+npm run dev
+```
+
+Frontend mở tại `http://localhost:3001`. Frontend dùng
+`NEXT_PUBLIC_LOCAL_ENGINE_URL` để tìm Local Engine; mặc định development là
+`http://127.0.0.1:17888`. Bấm **Kết nối ReupAI** để mở trang cấp quyền của
+Local Engine. Mã cấp quyền chỉ dùng một lần và được đổi thành browser session
+token; `app/local_token` không bao giờ được gửi cho trình duyệt.
+
+Development CORS có allowlist, mặc định gồm `http://localhost:3001` và
+`http://127.0.0.1:3001`. Có thể ghi đè bằng biến môi trường
+`REUP_ENGINE_ALLOWED_ORIGINS` (danh sách phân tách bằng dấu phẩy) khi cần đổi
+origin ở môi trường khác.
+
+`app/local_token` chỉ được Local Engine dùng nội bộ và không được commit lên
+Git. Browser frontend luôn dùng browser session token nhận sau bước cấp quyền;
+token nội bộ không được gửi ra ngoài process Engine.
+
+Sau lần cấp quyền đầu tiên, Local Engine lưu grant dạng fingerprint trong
+`app/config/authorization_grants.json` (hoặc `%LOCALAPPDATA%\\ReupAI\\config`
+khi chạy production). Browser chỉ giữ credential grant dạng opaque để xin
+browser session mới sau khi Engine restart; grant bị xóa hoàn toàn khi bấm
+**Thu hồi**.
 
 Cần cấu hình `GEMINI_API_KEY` trong `.env` ở thư mục gốc để dùng dịch vụ dịch Gemini. Pipeline cũng cần các chương trình hệ thống mà nó gọi, gồm FFmpeg; hãy bảo đảm chúng có thể được tìm thấy qua `PATH`.
 
@@ -100,8 +134,9 @@ Các thư mục dữ liệu trong `app/` được giữ nguyên vị trí vì m�
 
 The local dashboard now supports separate browser sessions, user registration
 with email verification, and an admin user-management page at `/admin/users`.
-The first local admin is created as `admin` / `Phuong2910` unless
-`REUP_ADMIN_USERNAME`, `REUP_ADMIN_PASSWORD`, and `REUP_ADMIN_EMAIL` are set.
+The first local admin is created only when `REUP_ADMIN_USERNAME`,
+`REUP_ADMIN_PASSWORD`, and `REUP_ADMIN_EMAIL` are configured. Existing local
+admin accounts are never reset when the server restarts.
 
 For real email delivery, copy the SMTP values from `.env.example` into the
 project `.env`. If SMTP is not configured, the six-digit verification code is

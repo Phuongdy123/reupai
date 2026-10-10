@@ -62,8 +62,8 @@ library videos, favorites, collections, series và UI state.
   xác minh email.
 - Đăng ký tạo mã 6 số trong `email_verification_codes`; SMTP dùng biến môi
   trường `REUP_SMTP_*`, local fallback ghi mã vào terminal.
-- Admin mặc định local: `admin` / `Phuong2910`, chỉ được khởi tạo/cập nhật ở
-  database local.
+- Admin local đầu tiên được khởi tạo từ biến môi trường `REUP_ADMIN_*`; mật
+  khẩu hiện có trong database local không bị thay đổi khi khởi động lại.
 - `/admin/users` cho admin xem và khóa/mở khóa user.
 
 Đây là session local của website hiện tại. Khi chuyển sang website cloud,

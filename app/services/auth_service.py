@@ -241,33 +241,27 @@ def send_verification_email(email: str, code: str):
 
 
 def ensure_default_admin():
-    """Create the requested local admin once, without overwriting an admin."""
+    """Create the first local admin once, without changing existing users."""
     conn = get_connection()
     try:
         username = os.getenv("REUP_ADMIN_USERNAME", "admin").strip() or "admin"
-        password = os.getenv("REUP_ADMIN_PASSWORD", "Phuong2910")
+        password = os.getenv("REUP_ADMIN_PASSWORD", "").strip()
         email = os.getenv("REUP_ADMIN_EMAIL", "admin@reupai.local").strip().lower()
         named_admin = conn.execute(
             "SELECT id, role FROM users WHERE lower(username) = lower(?) LIMIT 1",
             (username,),
         ).fetchone()
         if named_admin and named_admin["role"] == "admin":
-            conn.execute(
-                """
-                UPDATE users
-                SET password_hash = ?, email = COALESCE(NULLIF(email, ''), ?),
-                    email_verified = 1, enabled = 1
-                WHERE id = ?
-                """,
-                (password_hash.hash(password), email, named_admin["id"]),
-            )
-            conn.commit()
             return
         exists = conn.execute(
             "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
         ).fetchone()
         if exists:
             return
+        if not password or password.startswith("replace-with-"):
+            raise RuntimeError(
+                "REUP_ADMIN_PASSWORD must be set before creating the first local admin."
+            )
         conn.execute(
             """
             INSERT OR IGNORE INTO users

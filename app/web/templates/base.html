@@ -232,6 +232,13 @@
             </div>
 
             <div class="topbar-user">
+                <span id="localEngineIndicator" class="local-engine-indicator" data-state="checking">
+                    <span class="local-engine-dot"></span>
+                    <span id="localEngineLabel">Đang kiểm tra</span>
+                </span>
+                <button id="localEngineConnect" class="local-engine-action" type="button">Kết nối ReupAI</button>
+                <button id="localEngineRetry" class="local-engine-action" type="button" title="Kiểm tra lại">↻</button>
+                <button id="localEngineRevoke" class="local-engine-action" type="button" hidden>Thu hồi</button>
                 <svg class="ui-icon" aria-hidden="true"><use href="#ui-user"></use></svg> {{ user.username }}
                 <span>
                     {{ user.role }}
@@ -250,6 +257,11 @@
 </div>
 
 {% block modal %}{% endblock %}
+<script>
+    window.REUP_LOCAL_ENGINE_URL = {{ (local_engine_url | default('http://127.0.0.1:17888')) | tojson }};
+</script>
+<script src="{{ url_for('static', path='/js/local-engine-client.js') }}?v=2"></script>
+<script src="{{ url_for('static', path='/js/local-engine-ui.js') }}?v=2"></script>
 {% block scripts %}{% endblock %}
 
 </body>

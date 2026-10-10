@@ -10,9 +10,16 @@ app/jobs/
 app/temp/
 app/channels/*/jobs/
 samples/video/
+samples/audio/
 app/local_token
+app/config/
 __pycache__/
 *.py[cod]
 .env
 .env.*
 !.env.example
+!web/.env.local.example
+web/node_modules/
+web/.next/
+artifacts/ui-parity/
+artifacts/pipeline-smoke/
