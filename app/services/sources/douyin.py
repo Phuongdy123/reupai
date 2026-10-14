@@ -8,20 +8,8 @@ import urllib.parse
 from datetime import datetime
 from pathlib import Path
 
+from runtime_paths import get_browser_dir
 
-APP_DIR = (
-    Path(__file__)
-    .resolve()
-    .parent
-    .parent
-    .parent
-)
-
-BROWSER_PROFILE_DIR = (
-    APP_DIR
-    / "data"
-    / "douyin_browser"
-)
 
 DEFAULT_TIMEOUT_MS = 45000
 DEFAULT_SCROLL_WAIT_MS = 1100
@@ -47,6 +35,20 @@ class DouyinUnavailable(
     RuntimeError
 ):
     pass
+
+
+def _browser_profile_dir() -> Path:
+    """Return the persistent, user-owned Chrome profile for Douyin.
+
+    The Local Engine package itself is replaced when the app is updated.  A
+    Chrome profile inside that immutable bundle can be left locked after an
+    update or a crash, which makes Chrome exit immediately with code 21.
+    Runtime paths keep browser state in ``%LOCALAPPDATA%\\ReupAI`` for the
+    packaged application while preserving the existing app-local path in
+    development.
+    """
+
+    return get_browser_dir() / "douyin"
 
 
 # =========================================================
@@ -480,7 +482,11 @@ def _open_context(
         _playwright_import()
     )
 
-    BROWSER_PROFILE_DIR.mkdir(
+    profile_dir = (
+        _browser_profile_dir()
+    )
+
+    profile_dir.mkdir(
         parents=True,
         exist_ok=True,
     )
@@ -496,7 +502,7 @@ def _open_context(
             .chromium
             .launch_persistent_context(
                 user_data_dir=str(
-                    BROWSER_PROFILE_DIR
+                    profile_dir
                 ),
 
                 channel="chrome",
@@ -520,8 +526,22 @@ def _open_context(
             )
         )
 
-    except Exception:
+    except Exception as error:
         playwright.stop()
+
+        error_text = str(error).lower()
+        if (
+            "target page, context or browser has been closed"
+            in error_text
+            or "exitcode=21" in error_text
+            or "existing browser session" in error_text
+        ):
+            raise DouyinUnavailable(
+                "Chrome khong mo duoc profile Douyin. "
+                "Hay dong cua so Chrome ma ReupAI da mo, "
+                "sau do thu lai."
+            ) from error
+
         raise
 
     return (
