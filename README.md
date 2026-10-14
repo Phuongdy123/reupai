@@ -181,7 +181,7 @@ hoặc thành phẩm của người dùng.
 
 Website production dùng Supabase cho **tài khoản và quyền truy cập**. Local Engine, video, jobs, SQLite và file thành phẩm vẫn chỉ nằm trên máy người dùng.
 
-1. Tạo một Supabase project, mở **SQL Editor** và chạy `supabase/migrations/20261014_account_access.sql`.
+1. Tạo một Supabase project, mở **SQL Editor** và chạy `supabase/migrations/20261014_account_access.sql`. Nếu project đã tạo trước khi cập nhật username login, chạy thêm `supabase/migrations/20261014_username_login.sql`.
 2. Trong Supabase Authentication, bật xác minh email; thêm `https://www.reupai.cloud/auth/callback` và `https://reupai.cloud/auth/callback` vào Redirect URLs.
 3. Trong Vercel, thêm cho Production các biến sau rồi redeploy:
 
@@ -200,4 +200,4 @@ Website production dùng Supabase cho **tài khoản và quyền truy cập**. L
    where email = 'EMAIL_CHU_SO_HUU';
    ```
 
-Sau đó, chủ sở hữu dùng **Quản trị tài khoản** trong Workspace để duyệt hoặc khóa các tài khoản tiếp theo. Tài khoản mới luôn ở trạng thái `pending` cho đến khi được duyệt.
+Người dùng dùng email để đăng ký/xác minh và dùng **tên đăng nhập hoặc email** để đăng nhập. Sau đó, chủ sở hữu dùng **Quản trị tài khoản** trong Workspace để duyệt hoặc khóa các tài khoản tiếp theo. Tài khoản mới luôn ở trạng thái `pending` cho đến khi được duyệt.

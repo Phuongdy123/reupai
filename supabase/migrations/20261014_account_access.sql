@@ -5,6 +5,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   display_name text,
+  username text not null check (username ~ '^[a-z0-9][a-z0-9_.-]{2,31}$'),
   role text not null default 'user' check (role in ('user', 'admin')),
   status text not null default 'pending' check (status in ('pending', 'approved', 'disabled')),
   created_at timestamptz not null default now(),
@@ -21,8 +22,8 @@ returns trigger
 language plpgsql security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, display_name)
-  values (new.id, coalesce(new.email, ''), nullif(new.raw_user_meta_data ->> 'display_name', ''))
+  insert into public.profiles (id, email, display_name, username)
+  values (new.id, coalesce(new.email, ''), nullif(new.raw_user_meta_data ->> 'display_name', ''), lower(nullif(new.raw_user_meta_data ->> 'username', '')))
   on conflict (id) do nothing;
   return new;
 end;
@@ -41,6 +42,9 @@ $$;
 drop trigger if exists on_profile_updated on public.profiles;
 create trigger on_profile_updated before update on public.profiles
   for each row execute procedure public.set_profile_updated_at();
+
+create unique index if not exists profiles_username_unique
+  on public.profiles (lower(username));
 
 -- After registering and verifying the owner account, run this once in the Supabase SQL editor:
 -- update public.profiles set role = 'admin', status = 'approved' where email = 'YOUR_ADMIN_EMAIL';
