@@ -7,12 +7,12 @@ import { Icon } from "./icon";
 import { IconSprite } from "./icon-sprite";
 
 const groups = [
-  ["WORKSPACE", [["/", "home", "Dashboard"], ["/sources", "video", "Nguồn video"]]],
+  ["WORKSPACE", [["/app", "home", "Dashboard"], ["/sources", "video", "Nguồn video"]]],
   ["THƯ VIỆN", [["/downloads", "download", "Video đã tải"], ["/outputs", "sparkles", "Thành phẩm"], ["/favorites", "heart", "Video yêu thích", "sidebarFavorites"], ["/collections", "folder", "Collections"], ["/series", "folder", "Series"], ["/history", "history", "Lịch sử"], ["/sources?view=tracked", "radio", "Nguồn theo dõi", "trackedSourcesNav"]]],
-  ["HỆ THỐNG", [["/settings", "settings", "Cài đặt"]]],
+  ["HỆ THỐNG", [["/settings", "settings", "Cài đặt"], ["/admin/users", "grid", "Quản trị tài khoản"]]],
 ];
 const pages = {
-  "/": ["Dashboard", "Tổng quan hệ thống xử lý video · DB realtime"],
+  "/app": ["Dashboard", "Tổng quan hệ thống xử lý video · DB realtime"],
   "/sources": ["Nguồn video", "Tìm video nguồn, tải xuống và chạy Vietsub / Voice AI"],
   "/downloads": ["Video đã tải", "Thư viện video nguồn được lưu trên máy của bạn"],
   "/outputs": ["Thành phẩm", "Xem lại và tải video Vietsub / Voice đã hoàn tất"],
@@ -43,7 +43,7 @@ export function AppShell({ children }) {
   const [title, subtitle] = pages[pathname] || ["Reup AI", "Video workspace"];
   return <><IconSprite /><div className="app-shell">
     <aside className="sidebar">
-      <Link href="/" className="brand" aria-label="Reup AI Dashboard"><span className="brand-mark">R</span><span className="brand-copy"><strong>Reup AI</strong><small>V12.1</small></span></Link>
+      <Link href="/app" className="brand" aria-label="Reup AI Dashboard"><span className="brand-mark">R</span><span className="brand-copy"><strong>Reup AI</strong><small>V12.1</small></span></Link>
       <nav className="nav" aria-label="Điều hướng chính">{groups.map(([label, links]) => <div className="nav-group" key={label}><span className="nav-label">{label}</span>{links.map(([href, icon, text, id]) => <Link id={id} key={href} href={href} className={`nav-item ${pathname === href.split("?")[0] ? "active" : ""}`}><span className="nav-icon"><svg className="ui-icon" aria-hidden="true"><use href={`#ui-${icon}`} /></svg></span><span>{text}</span></Link>)}</div>)}</nav>
       <div className="sidebar-user"><div className="avatar"><Icon name="grid" size={17} /></div><div className="sidebar-user-info"><strong>Máy của bạn</strong><small>LOCAL WORKSPACE</small></div><Link className="logout-icon" href="/settings" title="Cài đặt Local Engine"><Icon name="settings" size={17} /></Link></div>
     </aside>

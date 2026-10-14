@@ -176,3 +176,28 @@ Setup (`iscc`) thì script đồng thời tạo installer trong `release\`. Có 
 lưu trong `%LOCALAPPDATA%\ReupAI`; cấu hình Local Engine nằm tại
 `%LOCALAPPDATA%\ReupAI\config\engine.env`. Gỡ ứng dụng không xóa video, project
 hoặc thành phẩm của người dùng.
+
+## Tài khoản website và phê duyệt truy cập
+
+Website production dùng Supabase cho **tài khoản và quyền truy cập**. Local Engine, video, jobs, SQLite và file thành phẩm vẫn chỉ nằm trên máy người dùng.
+
+1. Tạo một Supabase project, mở **SQL Editor** và chạy `supabase/migrations/20261014_account_access.sql`.
+2. Trong Supabase Authentication, bật xác minh email; thêm `https://www.reupai.cloud/auth/callback` và `https://reupai.cloud/auth/callback` vào Redirect URLs.
+3. Trong Vercel, thêm cho Production các biến sau rồi redeploy:
+
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+   SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+   ```
+
+   `SUPABASE_SERVICE_ROLE_KEY` chỉ dùng trên server Vercel. Không đưa nó vào file frontend, biến `NEXT_PUBLIC_*`, Git hoặc chat.
+4. Đăng ký và xác minh tài khoản chủ sở hữu. Trong SQL Editor, duyệt và gán quyền quản trị cho email đó một lần:
+
+   ```sql
+   update public.profiles
+   set role = 'admin', status = 'approved'
+   where email = 'EMAIL_CHU_SO_HUU';
+   ```
+
+Sau đó, chủ sở hữu dùng **Quản trị tài khoản** trong Workspace để duyệt hoặc khóa các tài khoản tiếp theo. Tài khoản mới luôn ở trạng thái `pending` cho đến khi được duyệt.
