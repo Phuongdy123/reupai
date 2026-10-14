@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { sendFeedback } from "./feedback-provider";
 
 const labels = { pending: "Chờ duyệt", approved: "Đã duyệt", disabled: "Đã khóa" };
 
@@ -20,6 +21,7 @@ export function AdminUsersPage() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
   async function setStatus(id, status) {
     setBusyId(id); setError("");
     try {

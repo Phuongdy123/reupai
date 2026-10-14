@@ -260,6 +260,7 @@
 <script>
     window.REUP_LOCAL_ENGINE_URL = {{ (local_engine_url | default('http://127.0.0.1:17888')) | tojson }};
 </script>
+<script src="{{ url_for('static', path='/js/feedback.js') }}?v=1"></script>
 <script src="{{ url_for('static', path='/js/local-engine-client.js') }}?v=2"></script>
 <script src="{{ url_for('static', path='/js/local-engine-ui.js') }}?v=2"></script>
 {% block scripts %}{% endblock %}

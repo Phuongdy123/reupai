@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "./icon";
+import { sendFeedback } from "./feedback-provider";
 
 export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", interrupted: "Bị gián đoạn", cancelled: "Đã dừng", stopped: "Đã dừng" };
 export const ACTIVE_JOBS = new Set(["queued", "processing", "running", "stopping"]);
@@ -58,10 +59,14 @@ export function EngineGate({ status, connect, check, title }) {
   </div></section>;
 }
 export function ErrorMessage({ error, retry }) {
+  useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
   return error ? <div className="error-banner" role="alert"><span><Icon name="alert" size={17} /> {error}</span>{retry && <button onClick={retry}>Thử lại</button>}</div> : null;
 }
 export function Notice({ children }) { return children ? <div className="notice-banner" role="status"><Icon name="check" size={17} />{children}</div> : null; }
-export function Loading({ label = "Đang tải dữ liệu local" }) { return <div className="empty-state compact" role="status"><span className="spinner" /> {label}</div>; }
+export function Loading({ label = "Đang tải dữ liệu local" }) {
+  useEffect(() => { const id = `loading-${crypto.randomUUID()}`; sendFeedback("waiting", label, id); return () => sendFeedback("done", "", id); }, [label]);
+  return <div className="empty-state compact" role="status"><span className="spinner" /> Vui lòng chờ · {label}</div>;
+}
 export function Pager({ page, total, pageSize, onChange }) {
   const pages = Math.ceil(total / pageSize);
   if (pages < 2) return null;

@@ -132,7 +132,9 @@ export async function mountProductRuntime(host, client, startRuntime) {
   try {
     runtime = startRuntime({ document: scopedDocument, window: scopedWindow, localStorage, setTimeout: timed, clearTimeout: clearTimed, setInterval: (handler, delay) => { const id = nativeWindow.setInterval(() => { if (!disposed) handler(); }, delay); intervals.add(id); return id; }, clearInterval: (id) => { nativeWindow.clearInterval(id); intervals.delete(id); }, fetch: facade.request, history: nativeWindow.history });
     adapt(host);
-    runtime.ready?.catch((error) => { if (!disposed) host.dispatchEvent(new CustomEvent("product-runtime:error", { detail: error })); });
+    Promise.resolve(runtime.ready).then(() => {
+      if (!disposed) host.dispatchEvent(new CustomEvent("product-runtime:ready"));
+    }).catch((error) => { if (!disposed) host.dispatchEvent(new CustomEvent("product-runtime:error", { detail: error })); });
     return cleanup;
   } catch (error) {
     cleanup();

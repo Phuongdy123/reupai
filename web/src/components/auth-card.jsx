@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
+import { sendFeedback } from "./feedback-provider";
 
 function AuthUnavailable() {
   return <p className="account-notice error">Cổng tài khoản chưa được cấu hình. Quản trị viên cần thêm biến môi trường Supabase trên Vercel trước khi mở đăng ký.</p>;
@@ -20,6 +21,7 @@ export function AuthCard({ mode }) {
   const [busy, setBusy] = useState(false);
   const router = useRouter();
   const signUp = mode === "sign-up";
+  useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
 
   async function submit(event) {
     event.preventDefault();

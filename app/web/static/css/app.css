@@ -29,6 +29,7 @@ html {
 .local-engine-indicator[data-state="permission_denied"] .local-engine-dot { background:#ef4444; }
 .local-engine-action { border:1px solid var(--line); border-radius:8px; padding:7px 10px; background:transparent; color:inherit; cursor:pointer; margin-right:5px; }
 .local-engine-action:hover { border-color:#8b5cf6; color:#c4b5fd; }
+.reup-feedback-overlay{position:fixed;inset:0;z-index:10000;display:grid;place-items:center;padding:20px;background:rgb(2 5 10 / 68%);backdrop-filter:blur(5px)}.reup-feedback-dialog{display:grid;grid-template-columns:auto 1fr;gap:16px;width:min(480px,100%);border:1px solid #39475d;border-radius:14px;padding:22px;background:#111925;color:#eef4ff;box-shadow:0 28px 90px rgb(0 0 0 / 48%)}.reup-feedback-mark{display:grid;width:25px;height:25px;place-items:center;border-radius:50%;background:#e7213b;color:#fff;font-weight:900}.reup-feedback-dialog h2{margin:1px 0 7px;font-size:20px}.reup-feedback-dialog p{margin:0;color:#aebbd0;line-height:1.5}.reup-feedback-dialog button{margin-top:16px;border:0;border-radius:7px;padding:9px 14px;background:#e7213b;color:white;font-weight:700;cursor:pointer}
 
 /* Keep the connection control reachable on the compact real UI viewport. */
 @media (max-width: 760px) {

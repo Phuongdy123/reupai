@@ -5,6 +5,8 @@ import { useEngine } from "./engine-provider";
 import { mountProductRuntime } from "../lib/product-runtime";
 import { sourcesMarkup } from "../legacy/sources-markup";
 import { startSourcesRuntime } from "../legacy/sources-runtime";
+import { sendFeedback } from "./feedback-provider";
+import { useFeedback } from "./feedback-provider";
 
 export function SourcesPage() {
   const { status, client, connect, check } = useEngine();
@@ -12,24 +14,31 @@ export function SourcesPage() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
+  const { beginWaiting, endWaiting } = useFeedback();
 
   useEffect(() => {
     if (status !== "connected" || !host.current) return;
     const element = host.current;
     let active = true;
     let dispose;
+    const waitId = beginWaiting("Đang chuẩn bị thư viện video trên máy của bạn.");
+    const finishWaiting = () => endWaiting(waitId);
     setReady(false);
     setError(null);
     element.innerHTML = sourcesMarkup;
-    const onError = (event) => { if (active) setError(event.detail?.message || "Không thể hoàn tất thao tác trên Local Engine."); };
+    const onError = (event) => { const message = event.detail?.message || "Không thể hoàn tất thao tác trên Local Engine."; if (active) setError(message); sendFeedback("error", message); };
+    const onReady = () => { if (active) { finishWaiting(); setReady(true); } };
     element.addEventListener("product-runtime:error", onError);
+    element.addEventListener("product-runtime:ready", onReady);
     mountProductRuntime(element, client, startSourcesRuntime).then((cleanup) => {
       if (!active) cleanup();
-      else { dispose = cleanup; setReady(true); }
-    }).catch((requestError) => { if (active) setError(requestError.message || "Không đọc được dữ liệu local."); });
+      else { dispose = cleanup; }
+    }).catch((requestError) => { const message = requestError.message || "Không đọc được dữ liệu local."; finishWaiting(); if (active) setError(message); sendFeedback("error", message); });
     return () => {
       active = false;
+      finishWaiting();
       element.removeEventListener("product-runtime:error", onError);
+      element.removeEventListener("product-runtime:ready", onReady);
       dispose?.();
       element.innerHTML = "";
     };

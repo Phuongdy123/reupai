@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
+import { sendFeedback } from "./feedback-provider";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -64,6 +65,7 @@ export function SettingsPage() {
     }
     return () => { requestSequence.current += 1; };
   }, [connected, load]);
+  useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
 
   const save = async (event) => {
     event.preventDefault();
