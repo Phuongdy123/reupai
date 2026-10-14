@@ -431,6 +431,29 @@
             line-height: 1;
         }
 
+        .compact-meta .media-facts {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+            min-height: 20px;
+            margin-left: 3px;
+            padding: 2px 7px;
+            border: 1px solid #293b56;
+            border-radius: 999px;
+            background: #142035;
+            white-space: nowrap;
+        }
+
+        .compact-meta .source-video-id {
+            color: #8392a8;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .compact-meta .meta-divider {
+            color: #465774;
+        }
+
         .compact-meta .media-inline .ui-icon {
             width: 12px;
             height: 12px;
@@ -1333,6 +1356,12 @@
             color: #72829a !important;
             font-size: 10.5px !important;
             line-height: 1.35 !important;
+        }
+
+        #videos .compact-meta .media-facts {
+            gap: 7px;
+            margin-left: 3px;
+            padding: 2px 7px;
         }
 
         #videos .favorite-btn {

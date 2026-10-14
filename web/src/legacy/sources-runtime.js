@@ -88,6 +88,28 @@ function formatViews(
 }
 
 
+function formatCompactViews(
+    value
+) {
+
+    const views = Number(value || 0);
+
+    if (!Number.isFinite(views) || views <= 0) {
+        return 'Chưa có lượt xem';
+    }
+
+    if (views >= 1000000) {
+        return `${(views / 1000000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} Tr lượt xem`;
+    }
+
+    if (views >= 1000) {
+        return `${(views / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} N lượt xem`;
+    }
+
+    return `${formatViews(views)} lượt xem`;
+}
+
+
 function formatDuration(
     value
 ) {
@@ -139,14 +161,16 @@ function mediaMetaHtml(
         return '';
     }
 
-    return [
+    const facts = [
         duration
-            ? `<span>•</span><span class="media-inline" title="Thời lượng video">${uiIcon('clock', 12)} ${duration}</span>`
+            ? `<span class="media-inline" title="Thời lượng video">${uiIcon('clock', 12)} ${duration}</span>`
             : '',
         ratio
-            ? `<span>•</span><span class="media-inline" title="Tỷ lệ khung hình">${uiIcon('video', 12)} ${ratio}</span>`
+            ? `<span class="media-inline" title="Tỷ lệ khung hình">${uiIcon('video', 12)} ${ratio}</span>`
             : '',
-    ].join('');
+    ].filter(Boolean).join('');
+
+    return `<span class="media-facts">${facts}</span>`;
 }
 
 
@@ -174,6 +198,22 @@ function formatDate(
         return String(
             value
         );
+    }
+}
+
+
+function formatCardDate(
+    value
+) {
+
+    if (!value) {
+        return '';
+    }
+
+    try {
+        return new Date(value).toLocaleDateString('vi-VN');
+    } catch {
+        return String(value);
     }
 }
 
@@ -1599,12 +1639,12 @@ function buildCard(
                     </div>
 
                     <div class="meta compact-meta">
-                        ${escapeHtml(video.video_id)}
-                        <span>•</span>
-                        ${formatViews(video.play_count)} lượt xem
+                        <span class="source-video-id" title="${escapeHtml(video.video_id)}">${escapeHtml(video.video_id)}</span>
+                        <span class="meta-divider">•</span>
+                        <span>${formatCompactViews(video.play_count)}</span>
                         ${
                             video.published_at
-                            ? `<span>•</span>${escapeHtml(formatDate(video.published_at))}`
+                            ? `<span class="meta-divider">•</span><time title="${escapeHtml(formatDate(video.published_at))}">${escapeHtml(formatCardDate(video.published_at))}</time>`
                             : ''
                         }
                         ${mediaMetaHtml(video)}
@@ -4192,6 +4232,45 @@ function injectV13Styles() {
             color: #708096 !important;
             font-size: 10.5px !important;
             line-height: 1.3;
+        }
+
+        .compact-meta .media-facts {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+            min-height: 20px;
+            margin-left: 3px;
+            padding: 2px 7px;
+            border: 1px solid #293b56;
+            border-radius: 999px;
+            background: #142035;
+            white-space: nowrap;
+        }
+
+        .compact-meta .media-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            color: #9ba9bc;
+            font-size: inherit;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .compact-meta .media-inline .ui-icon {
+            width: 12px;
+            height: 12px;
+            color: #91a2ba;
+        }
+
+        .compact-meta .source-video-id {
+            color: #8392a8;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .compact-meta .meta-divider {
+            color: #465774;
         }
 
         .compact-badges {
@@ -11662,6 +11741,12 @@ function injectV134CardFix() {
             color: #72829a !important;
             font-size: 10.5px !important;
             line-height: 1.35 !important;
+        }
+
+        #videos .compact-meta .media-facts {
+            gap: 7px;
+            margin-left: 3px;
+            padding: 2px 7px;
         }
 
         #videos .favorite-btn {
