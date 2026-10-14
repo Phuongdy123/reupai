@@ -18,14 +18,43 @@ from google.genai import types
 # The packaged Local Engine stores user configuration outside the install folder.
 # Load it explicitly because pipeline child processes do not inherit the desktop
 # process environment on every Windows launch.
-ENGINE_ENV_PATH = Path(
-    os.getenv("REUP_ENGINE_CONFIG_PATH", "").strip()
-    or get_config_dir() / "engine.env"
-)
-engine_values = dotenv_values(ENGINE_ENV_PATH)
-engine_api_key = (engine_values.get("GEMINI_API_KEY") or "").strip()
-if engine_api_key:
-    os.environ["GEMINI_API_KEY"] = engine_api_key
+def _engine_env_candidates() -> list[Path]:
+    """Return local-only config locations in order of preference.
+
+    A frozen pipeline child may lose its inherited ``REUP_ENGINE_CONFIG_PATH``
+    even though the desktop Engine is running.  The LocalAppData fallback is
+    therefore explicit instead of relying only on its parent environment.
+    """
+
+    candidates = [
+        Path(os.getenv("REUP_ENGINE_CONFIG_PATH", "").strip())
+        if os.getenv("REUP_ENGINE_CONFIG_PATH", "").strip()
+        else None,
+        get_config_dir() / "engine.env",
+    ]
+    local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "ReupAI" / "config" / "engine.env")
+
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+ENGINE_ENV_PATH = get_config_dir() / "engine.env"
+engine_api_key = ""
+for candidate in _engine_env_candidates():
+    engine_values = dotenv_values(candidate)
+    candidate_key = (engine_values.get("GEMINI_API_KEY") or "").strip()
+    if candidate_key:
+        ENGINE_ENV_PATH = candidate
+        engine_api_key = candidate_key
+        os.environ["REUP_ENGINE_CONFIG_PATH"] = str(candidate.resolve())
+        os.environ["GEMINI_API_KEY"] = candidate_key
+        break
+
 load_dotenv(ENGINE_ENV_PATH, override=True)
 
 # Preserve the existing development workflow where the project .env is used.

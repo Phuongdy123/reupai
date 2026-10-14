@@ -41,12 +41,20 @@ def _build_child_environment() -> dict[str, str]:
     from dotenv import dotenv_values
 
     env = os.environ.copy()
-    config_path = get_config_dir() / "engine.env"
-    env["REUP_ENGINE_CONFIG_PATH"] = str(config_path.resolve())
-    if config_path.is_file():
+    config_paths = [get_config_dir() / "engine.env"]
+    local_app_data = env.get("LOCALAPPDATA", "").strip()
+    if local_app_data:
+        config_paths.append(Path(local_app_data) / "ReupAI" / "config" / "engine.env")
+
+    for config_path in config_paths:
+        if not config_path.is_file():
+            continue
+        env["REUP_ENGINE_CONFIG_PATH"] = str(config_path.resolve())
         for key, value in dotenv_values(config_path).items():
             if value is not None:
                 env[key] = value
+        if (env.get("GEMINI_API_KEY") or "").strip():
+            break
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     return env
