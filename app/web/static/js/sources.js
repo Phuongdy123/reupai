@@ -23,6 +23,9 @@ let librarySeriesGroups = [];
 let activeSeriesKey = '';
 
 const UI_STATE_KEY = 'reup.sources.v13';
+// Keep the pasted source only for this browser tab/session.  It survives
+// navigation and reloads, but is not restored on another device or a new tab.
+const SOURCE_SESSION_KEY = 'reup.sources.active-session.v1';
 const activePollKeys = new Set();
 
 let uiStateTimer = null;
@@ -1079,6 +1082,8 @@ async function loadVideos(refresh = false) {
         ?.value
         || 'channel'
     );
+
+    saveSourceSession();
 
     const info = (
         document
@@ -10889,9 +10894,73 @@ function applyUiStateFields(
 }
 
 
-// The source page starts a fresh source session on every browser boot.
-// Saved sources remain in the database, but the last typed URL and its
-// video snapshot must not be re-injected into a new login/device session.
+function resetSourceSessionData() {
+
+    currentVideos = [];
+    for (const key of Object.keys(pageCache)) {
+        delete pageCache[key];
+    }
+
+    sourceTotal = null;
+    totalPages = null;
+    remoteHasMore = true;
+    currentPage = 1;
+    activeSeriesKey = '';
+    lastLoadedSourceUrl = '';
+    lastLoadedInputMode = 'channel';
+    currentView = 'source';
+}
+
+
+function saveSourceSession() {
+
+    const sourceUrl = document.getElementById('sourceUrl')?.value?.trim() || '';
+    const inputMode = document.getElementById('sourceInputMode')?.value || 'channel';
+
+    try {
+        if (!sourceUrl) {
+            window.sessionStorage.removeItem(SOURCE_SESSION_KEY);
+            return;
+        }
+
+        window.sessionStorage.setItem(
+            SOURCE_SESSION_KEY,
+            JSON.stringify({ sourceUrl, inputMode })
+        );
+    } catch {
+        // Session storage can be unavailable in a privacy-restricted browser.
+    }
+}
+
+
+function restoreSourceSession() {
+
+    try {
+        const raw = window.sessionStorage.getItem(SOURCE_SESSION_KEY);
+        const state = raw ? JSON.parse(raw) : null;
+        const sourceUrl = typeof state?.sourceUrl === 'string' ? state.sourceUrl.trim() : '';
+
+        if (!sourceUrl) {
+            return false;
+        }
+
+        resetSourceSessionData();
+
+        const sourceInput = document.getElementById('sourceUrl');
+        const inputMode = document.getElementById('sourceInputMode');
+        if (sourceInput) sourceInput.value = sourceUrl;
+        if (inputMode && ['channel', 'video'].includes(state.inputMode)) {
+            inputMode.value = state.inputMode;
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+
+// A new browser session starts empty; the last pasted source is retained only
+// while the current tab session remains open.
 function clearSourceSessionState() {
 
     const sourceInput = (
@@ -10914,19 +10983,13 @@ function clearSourceSessionState() {
         inputMode.value = 'channel';
     }
 
-    currentVideos = [];
-    for (const key of Object.keys(pageCache)) {
-        delete pageCache[key];
-    }
+    resetSourceSessionData();
 
-    sourceTotal = null;
-    totalPages = null;
-    remoteHasMore = true;
-    currentPage = 1;
-    activeSeriesKey = '';
-    lastLoadedSourceUrl = '';
-    lastLoadedInputMode = 'channel';
-    currentView = 'source';
+    try {
+        window.sessionStorage.removeItem(SOURCE_SESSION_KEY);
+    } catch {
+        // ignore unavailable storage
+    }
 }
 
 
@@ -11293,7 +11356,11 @@ async function initializeV13() {
         state
     );
 
-    clearSourceSessionState();
+    // The Engine UI state intentionally does not restore a source across
+    // devices.  Prefer the current browser tab's session when it exists.
+    if (!restoreSourceSession()) {
+        clearSourceSessionState();
+    }
 
     if (currentVideos.length) {
         lastLoadedSourceUrl = (
@@ -11462,6 +11529,8 @@ window.addEventListener(
     'beforeunload',
     () => {
 
+        saveSourceSession();
+
         const state = (
             buildUiState()
         );
@@ -11503,6 +11572,7 @@ for (
         'searchInput',
         'statusFilter',
         'sourceUrl',
+            'sourceInputMode',
     ]
 ) {
 
@@ -11524,6 +11594,12 @@ for (
             ? 'input'
             : 'change',
             () => {
+                if (
+                    id === 'sourceUrl'
+                    || id === 'sourceInputMode'
+                ) {
+                    saveSourceSession();
+                }
                 saveUiState();
             }
         );
