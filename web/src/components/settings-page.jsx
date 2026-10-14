@@ -23,6 +23,7 @@ export function SettingsPage() {
   const { status, client, connect, check, revoke } = useEngine();
   const [settings, setSettings] = useState(DEFAULTS);
   const [engineInfo, setEngineInfo] = useState(null);
+  const [diagnostics, setDiagnostics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -38,15 +39,16 @@ export function SettingsPage() {
     const sequence = ++requestSequence.current;
     setLoading(true); setError("");
     try {
-      const [state, info] = await Promise.all([
+      const [state, info, runtime] = await Promise.all([
         client.json("/api/library/ui-state/next-settings", { cache: "no-store" }),
         client.json("/api/status", { cache: "no-store" }),
+        client.json("/api/diagnostics", { cache: "no-store" }),
       ]);
       if (sequence !== requestSequence.current) return;
       const value = state.value && typeof state.value === "object" && !Array.isArray(state.value) ? state.value : {};
       const interval = Number(value.refresh_interval);
       setSettings({ ...value, refresh_interval: REFRESH_INTERVALS.includes(interval) ? interval : DEFAULTS.refresh_interval });
-      setEngineInfo(info); setLoaded(true);
+      setEngineInfo(info); setDiagnostics(runtime); setLoaded(true);
     } catch (requestError) {
       if (sequence === requestSequence.current) setError(requestError.message || "Không thể đọc cài đặt trên máy. Hãy thử lại.");
     } finally {
@@ -58,7 +60,7 @@ export function SettingsPage() {
     if (connected) load();
     else {
       requestSequence.current += 1;
-      setEngineInfo(null); setLoaded(false); setLoading(false); setSaved(false);
+      setEngineInfo(null); setDiagnostics(null); setLoaded(false); setLoading(false); setSaved(false);
     }
     return () => { requestSequence.current += 1; };
   }, [connected, load]);
@@ -124,6 +126,15 @@ export function SettingsPage() {
         <div className="setting-row"><span>Thư mục dữ liệu</span><code style={{ overflowWrap: "anywhere", textAlign: "right" }}>{engineInfo?.storage?.root || "—"}</code></div>
         <div className="setting-row"><span>Video đã tải</span><code style={{ overflowWrap: "anywhere", textAlign: "right" }}>{engineInfo?.storage?.downloads || "—"}</code></div>
         <div className="setting-row"><span>Thành phẩm</span><code style={{ overflowWrap: "anywhere", textAlign: "right" }}>{engineInfo?.storage?.output || "—"}</code></div>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head"><div><h2>Chẩn đoán xử lý</h2><p>Kiểm tra nhanh môi trường chạy pipeline trên máy này.</p></div><span className="setting-status">{diagnostics?.tools?.ffmpeg && diagnostics?.tools?.ffprobe ? "Sẵn sàng" : "Cần kiểm tra"}</span></div>
+        <div className="setting-row"><span>FFmpeg</span><strong>{diagnostics ? (diagnostics.tools?.ffmpeg ? "Đã cài" : "Không tìm thấy") : "—"}</strong></div>
+        <div className="setting-row"><span>FFprobe</span><strong>{diagnostics ? (diagnostics.tools?.ffprobe ? "Đã cài" : "Không tìm thấy") : "—"}</strong></div>
+        <div className="setting-row"><span>Python</span><strong>{diagnostics?.python || "—"}</strong></div>
+        <div className="setting-row"><span>CPU logic</span><strong>{diagnostics?.cpu_count || "—"}</strong></div>
+        <div className="setting-row"><span>Chế độ dữ liệu</span><strong>{diagnostics?.runtime_mode === "production" ? "Production" : diagnostics?.runtime_mode === "development" ? "Development" : "—"}</strong></div>
       </section>
     </div>
   </div>;

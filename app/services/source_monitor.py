@@ -282,7 +282,22 @@ def save_source_video(
             video.get(
                 "share_count",
                 0
-            )
+            ),
+
+        duration_seconds=
+            video.get(
+                "duration_seconds"
+            ),
+
+        video_width=
+            video.get(
+                "video_width"
+            ),
+
+        video_height=
+            video.get(
+                "video_height"
+            ),
     )
 
 
@@ -442,13 +457,12 @@ def run_auto_pipeline(
     # COMMAND
     # -----------------------------------------------------
 
-    command = [
-    sys.executable,
-    str(pipeline_file),
-    video_url,
-    "--channel",
-    channel_key,
-]
+    from services.engine_runtime import pipeline_command
+    command = pipeline_command(
+        video_url,
+        "--channel",
+        channel_key,
+    )
     print(
         "\nCommand:"
     )

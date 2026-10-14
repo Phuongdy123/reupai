@@ -1,0 +1,136 @@
+"""Runtime guard and diagnostics for the loopback Local Engine."""
+
+from __future__ import annotations
+
+import os
+import platform
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from runtime_paths import get_config_dir, get_runtime_root
+
+
+_lock_handle = None
+
+
+def suppress_child_console_windows() -> None:
+    """Keep command-line child tools invisible for the packaged Windows app.
+
+    The Local Engine is a windowed executable, but ffmpeg, ffprobe, yt-dlp and
+    pipeline workers are console applications.  Windows otherwise creates a
+    short-lived cmd window for each child.  Patching ``subprocess.Popen`` once
+    also covers ``subprocess.run`` without changing pipeline behaviour.
+    """
+    if os.name != "nt" or getattr(subprocess, "_reupai_no_console", False):
+        return
+
+    original_popen = subprocess.Popen
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    class HiddenPopen(original_popen):
+        def __init__(self, *args, **kwargs):
+            flags = int(kwargs.get("creationflags", 0) or 0)
+            kwargs["creationflags"] = flags | no_window
+            super().__init__(*args, **kwargs)
+
+    # asyncio.windows_utils subclasses subprocess.Popen during import, so this
+    # must remain a class rather than a function wrapper.
+    subprocess.Popen = HiddenPopen
+    subprocess._reupai_no_console = True
+
+
+def bundled_resource(*parts: str) -> Path:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    return base.joinpath(*parts)
+
+
+def python_module_command(module: str, *arguments: str) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--python-module", module, *arguments]
+    return [sys.executable, "-m", module, *arguments]
+
+
+def pipeline_command(*arguments: str) -> list[str]:
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--pipeline", *arguments]
+    pipeline_file = Path(__file__).resolve().parents[1] / "pipeline.py"
+    return [sys.executable, str(pipeline_file), *arguments]
+
+
+def acquire_instance_lock() -> None:
+    """Ensure only one Local Engine process owns this runtime directory."""
+    global _lock_handle
+    if _lock_handle is not None:
+        return
+
+    lock_path = get_config_dir() / "local_engine.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+b")
+    if lock_path.stat().st_size == 0:
+        handle.write(b"0")
+        handle.flush()
+    handle.seek(0)
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (OSError, IOError) as error:
+        handle.close()
+        raise RuntimeError(
+            "Một Local Engine khác đang sử dụng thư mục dữ liệu này."
+        ) from error
+
+    _lock_handle = handle
+
+
+def release_instance_lock() -> None:
+    global _lock_handle
+    handle = _lock_handle
+    _lock_handle = None
+    if handle is None:
+        return
+    try:
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+
+def runtime_diagnostics() -> dict:
+    root = get_runtime_root()
+    usage = shutil.disk_usage(root)
+    tools = {
+        name: bool(shutil.which(name))
+        for name in ("ffmpeg", "ffprobe")
+    }
+    return {
+        "platform": platform.system(),
+        "platform_release": platform.release(),
+        "python": platform.python_version(),
+        "cpu_count": os.cpu_count() or 1,
+        "tools": tools,
+        "storage": {
+            "total_bytes": usage.total,
+            "used_bytes": usage.used,
+            "free_bytes": usage.free,
+        },
+        "runtime_mode": (
+            "production"
+            if root != Path(__file__).resolve().parents[1]
+            else "development"
+        ),
+    }

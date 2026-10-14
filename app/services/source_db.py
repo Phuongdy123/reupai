@@ -31,12 +31,21 @@ def get_connection():
     )
 
     conn = sqlite3.connect(
-        DB_PATH
+        DB_PATH,
+        timeout=30,
     )
 
     conn.row_factory = (
         sqlite3.Row
     )
+
+    # Local Engine has background download/render workers while the browser
+    # polls job state. WAL lets those readers continue while a worker commits
+    # progress, and busy_timeout avoids transient "database is locked" errors.
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=30000")
 
     return conn
 
@@ -217,6 +226,25 @@ def init_db():
                 REFERENCES sources(id)
         )
     """)
+
+    # The upstream platforms do not always return media metadata.  Add these
+    # nullable columns without invalidating cached source rows from older
+    # Local Engine versions.
+    source_video_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(source_videos)"
+        ).fetchall()
+    }
+    for column, definition in (
+        ("duration_seconds", "REAL"),
+        ("video_width", "INTEGER"),
+        ("video_height", "INTEGER"),
+    ):
+        if column not in source_video_columns:
+            cursor.execute(
+                f"ALTER TABLE source_videos ADD COLUMN {column} {definition}"
+            )
 
     # Cache the latest sync result by normalized profile URL so channels
     # remain usable without being added to the tracked-sources list.
@@ -487,7 +515,10 @@ def save_video(
     play_count=0,
     like_count=0,
     comment_count=0,
-    share_count=0
+    share_count=0,
+    duration_seconds=None,
+    video_width=None,
+    video_height=None,
 ):
 
     # score tam thoi
@@ -527,6 +558,9 @@ def save_video(
                 like_count = ?,
                 comment_count = ?,
                 share_count = ?,
+                duration_seconds = ?,
+                video_width = ?,
+                video_height = ?,
                 hot_score = ?,
                 updated_at = ?
 
@@ -540,6 +574,9 @@ def save_video(
                 like_count,
                 comment_count,
                 share_count,
+                duration_seconds,
+                video_width,
+                video_height,
                 hot_score,
                 now(),
                 existing["id"]
@@ -565,6 +602,9 @@ def save_video(
                 like_count,
                 comment_count,
                 share_count,
+                duration_seconds,
+                video_width,
+                video_height,
                 hot_score,
                 status,
                 first_seen_at,
@@ -572,7 +612,7 @@ def save_video(
             )
 
             VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                 'new', ?, ?
             )
             """,
@@ -587,6 +627,9 @@ def save_video(
                 like_count,
                 comment_count,
                 share_count,
+                duration_seconds,
+                video_width,
+                video_height,
                 hot_score,
                 now(),
                 now()

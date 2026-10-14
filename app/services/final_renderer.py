@@ -6,6 +6,10 @@ import math
 
 
 
+import os
+
+
+
 import re
 
 
@@ -15,6 +19,20 @@ import subprocess
 
 
 from pathlib import Path
+
+
+
+def _detached_media_process_kwargs():
+    """Keep ffmpeg/ffprobe isolated from the packaged app console on Windows."""
+    kwargs = {
+        "stdin": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = (
+            getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        )
+    return kwargs
 
 
 
@@ -520,6 +538,10 @@ def ffmpeg_has_nvenc():
 
 
 
+        **_detached_media_process_kwargs(),
+
+
+
     )
 
 
@@ -678,7 +700,7 @@ def ffmpeg_filter_path(path):
 
             ).replace(
 
-                "\\\\",
+                "\\",
 
                 "/",
 
@@ -704,7 +726,7 @@ def ffmpeg_filter_path(path):
 
                     value[0]
 
-                    + r"\\:"
+                    + r"\:"
 
                     + value[2:]
 
@@ -718,7 +740,7 @@ def ffmpeg_filter_path(path):
 
         "'",
 
-        r"\\'",
+        r"\'",
 
     )
 
@@ -1491,6 +1513,10 @@ def ffprobe_video_size(
 
 
             errors="replace",
+
+
+
+            **_detached_media_process_kwargs(),
 
 
 
@@ -6361,9 +6387,34 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 
 
 
+def _safe_boxblur_filter(width, height, requested_radius, power=2):
+    """Return a boxblur filter that is valid for YUV video planes.
+
+    FFmpeg applies ``boxblur`` to chroma planes too.  With common 4:2:0
+    sources those planes are half-resolution, so a radius that is valid for
+    the visible crop can still be invalid for a short subtitle strip.  Keep
+    the requested strength whenever it fits, and clamp it from the crop's
+    actual dimensions otherwise.  This makes the render independent of the
+    source aspect ratio and of the size selected in the editor.
+    """
+    try:
+        minimum_dimension = min(int(width), int(height))
+        requested = max(0, int(requested_radius))
+        blur_power = max(1, int(power))
+    except (TypeError, ValueError):
+        return "boxblur=0:1"
+
+    # Chroma is subsampled in both dimensions for yuv420p.  FFmpeg requires
+    # the chroma radius to remain strictly below its calculated limit.
+    maximum_safe_radius = max(0, (minimum_dimension // 4) - 1)
+    radius = min(requested, maximum_safe_radius)
+    return f"boxblur={radius}:{blur_power}"
+
+
 def build_video_filter(
     region,
     logo_input_index=None,
+    logo_is_prepared=False,
 ):
 
     layout = normalize_region(region)
@@ -6398,7 +6449,7 @@ def build_video_filter(
         parts.extend([
             "[0:v]split=2[base][crop_src]",
             f"[crop_src]crop={width}:{height}:{x}:{y},"
-            f"boxblur={BLUR_RADIUS}:{BLUR_POWER}[blurred]",
+            f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)}[blurred]",
             f"[base][blurred]overlay={x}:{y}[clean_sub]",
         ])
         current = "clean_sub"
@@ -6422,7 +6473,7 @@ def build_video_filter(
             parts.extend([
                 f"[{current}]split=2[{src_label}][{crop_label}]",
                 f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},"
-                f"boxblur=14:2[{blur_label}]",
+                f"{_safe_boxblur_filter(bw, bh, 14, 2)}[{blur_label}]",
                 f"[{src_label}][{blur_label}]overlay={bx}:{by}[{out_label}]",
             ])
             current = out_label
@@ -6448,7 +6499,8 @@ def build_video_filter(
         out_label = f"interval_out_{interval_index}"
         parts.extend([
             f"[{current}]split=2[{src_label}][{crop_label}]",
-            f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},boxblur=20:2[{blur_label}]",
+            f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},"
+            f"{_safe_boxblur_filter(bw, bh, 20, 2)}[{blur_label}]",
             f"[{src_label}][{blur_label}]overlay={bx}:{by}:enable='between(t,{start},{end})'[{out_label}]",
         ])
         current = out_label
@@ -6459,17 +6511,22 @@ def build_video_filter(
         ly = int(logo_layout["y"])
         logo_size = int(logo_layout["size"])
 
-        parts.append(
-            f"[{logo_input_index}:v]"
-            f"scale={logo_size}:{logo_size}:force_original_aspect_ratio=increase,"
-            f"crop={logo_size}:{logo_size},format=rgba,"
-            f"geq="
-            f"r='r(X,Y)':"
-            f"g='g(X,Y)':"
-            f"b='b(X,Y)':"
-            f"a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),255,0)'"
-            f"[channel_logo]"
-        )
+        if logo_is_prepared:
+            parts.append(
+                f"[{logo_input_index}:v]format=rgba[channel_logo]"
+            )
+        else:
+            parts.append(
+                f"[{logo_input_index}:v]"
+                f"scale={logo_size}:{logo_size}:force_original_aspect_ratio=increase,"
+                f"crop={logo_size}:{logo_size},format=rgba,"
+                f"geq="
+                f"r='r(X,Y)':"
+                f"g='g(X,Y)':"
+                f"b='b(X,Y)':"
+                f"a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),255,0)'"
+                f"[channel_logo]"
+            )
 
         parts.append(
             f"[{current}][channel_logo]"
@@ -6503,7 +6560,16 @@ def build_video_filter(
         f"[{current}]subtitles=filename='{ass}'[{subtitle_label}]"
     )
 
-    if target_width and target_height:
+    needs_output_resize = (
+        target_width
+        and target_height
+        and (
+            video_width != target_width
+            or video_height != target_height
+        )
+    )
+
+    if needs_output_resize:
         target_ratio = target_width / target_height
         source_ratio = video_width / video_height
         if source_ratio > target_ratio:
@@ -6542,6 +6608,38 @@ def build_video_filter(
 
     print("==================================")
     return ";".join(parts)
+
+
+def prepare_round_logo(source_path, output_dir, size):
+    """Resize and mask a logo once instead of running geq for every video frame."""
+    from PIL import Image, ImageChops, ImageDraw, ImageOps
+
+    source = Path(source_path)
+    target = Path(output_dir) / f".reupai_round_logo_{int(size)}.png"
+    if (
+        target.exists()
+        and target.stat().st_size > 0
+        and target.stat().st_mtime_ns >= source.stat().st_mtime_ns
+    ):
+        return target
+
+    with Image.open(source) as image:
+        rgba = image.convert("RGBA")
+        fitted = ImageOps.fit(
+            rgba,
+            (int(size), int(size)),
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+        circle = Image.new("L", fitted.size, 0)
+        ImageDraw.Draw(circle).ellipse(
+            (0, 0, fitted.width - 1, fitted.height - 1),
+            fill=255,
+        )
+        circle = ImageChops.multiply(fitted.getchannel("A"), circle)
+        fitted.putalpha(circle)
+        fitted.save(target, "PNG", optimize=True)
+    return target
 
 
 # =========================================================
@@ -6922,6 +7020,12 @@ def run_ffmpeg_with_fallback(
 
 
 
+        current_command = list(current_command)
+        if "-nostdin" not in current_command:
+            current_command.insert(1, "-nostdin")
+
+
+
         print()
 
         print(
@@ -6981,6 +7085,10 @@ def run_ffmpeg_with_fallback(
             errors="replace",
 
             check=False,
+
+
+
+            **_detached_media_process_kwargs(),
 
         )
 
@@ -7353,6 +7461,24 @@ def render_final(region):
         and file_ok(logo_path)
     )
 
+    logo_is_prepared = False
+    if use_logo:
+        try:
+            normalized = normalize_region(region)
+            video_layout = normalized["video"]
+            logo_layout = get_bilibili_logo_layout(
+                int(video_layout["width"]),
+                int(video_layout["height"]),
+            )
+            logo_path = prepare_round_logo(
+                logo_path,
+                output_path.parent,
+                int(logo_layout["size"]),
+            )
+            logo_is_prepared = True
+        except Exception as exc:
+            print(f"[WARN] Khong cache duoc logo tron, dung filter cu: {exc}")
+
     use_music = bool(MUSIC_PATH and file_ok(MUSIC_PATH))
 
     logo_input_index = (
@@ -7364,6 +7490,7 @@ def render_final(region):
     video_filter = build_video_filter(
         region,
         logo_input_index=logo_input_index,
+        logo_is_prepared=logo_is_prepared,
     )
 
 

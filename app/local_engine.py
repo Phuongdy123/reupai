@@ -22,6 +22,11 @@ APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
+# Importing the compatibility handlers from web.server must not bootstrap the
+# legacy dashboard account database. Local Engine access is protected by its
+# own origin-scoped browser authorization flow.
+os.environ.setdefault("REUP_LOCAL_ENGINE", "1")
+
 import uvicorn
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +40,12 @@ from runtime_paths import (
     get_config_dir,
     ensure_runtime_dirs,
 )
-from services.job_db import list_active_jobs
+from services.job_db import ensure_job_schema, list_active_jobs, recover_interrupted_jobs
+from services.engine_runtime import (
+    acquire_instance_lock,
+    release_instance_lock,
+    runtime_diagnostics,
+)
 from web.server import (
     DownloadRequest,
     PageRequest,
@@ -84,7 +94,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.1.0"
+ENGINE_VERSION = "0.2.0"
 LOCAL_TOKEN_PATH = get_local_token_path()
 ensure_runtime_dirs()
 
@@ -111,6 +121,8 @@ def _allowed_origins() -> list[str]:
     # Development defaults.  Production only needs this environment variable
     # changed to the deployed web origin.
     return [
+        "https://www.reupai.cloud",
+        "https://reupai.cloud",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
         "http://localhost:3000",
@@ -182,6 +194,23 @@ app.add_middleware(
     # restricted to ALLOWED_ORIGINS; it does not make the engine public.
     allow_private_network=True,
 )
+
+
+@app.on_event("startup")
+def local_engine_startup():
+    # Importing web.server reuses its pipeline functions, but FastAPI does not
+    # run startup handlers registered on that other app. Recovery therefore
+    # has to be registered on the Local Engine app itself.
+    acquire_instance_lock()
+    ensure_job_schema()
+    interrupted = recover_interrupted_jobs()
+    if interrupted:
+        print(f"[Local Engine] marked interrupted jobs: {interrupted}")
+
+
+@app.on_event("shutdown")
+def local_engine_shutdown():
+    release_instance_lock()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -388,6 +417,18 @@ def status(_: bool = Depends(require_token)):
     }
 
 
+@app.get("/api/diagnostics")
+def diagnostics(_: bool = Depends(require_token)):
+    details = runtime_diagnostics()
+    details.update({
+        "engine": "ReupAI",
+        "version": ENGINE_VERSION,
+        "active_jobs": list_active_jobs(limit=50),
+        "allowed_origins": ALLOWED_ORIGINS,
+    })
+    return details
+
+
 @app.post("/api/videos")
 def videos(body: SourceRequest, _: bool = Depends(require_token)):
     return api_videos(body)
@@ -579,7 +620,10 @@ def download(body: DownloadRequest, _: bool = Depends(require_token)):
 
 def local_request() -> Request:
     request = SimpleNamespace()
-    request.state = SimpleNamespace(user={"id": 1, "role": "local"})
+    # A Local Engine consent session is not a cloud/local dashboard account.
+    # Keep created_by NULL instead of assuming that users.id=1 exists on a
+    # fresh installation (foreign key checks are enabled for data integrity).
+    request.state = SimpleNamespace(user={"id": None, "role": "local"})
     return request  # type: ignore[return-value]
 
 

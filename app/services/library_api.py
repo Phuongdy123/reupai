@@ -307,16 +307,15 @@ def ytdlp_metadata(
     url,
 ):
 
-    command = [
-        sys.executable,
-        "-m",
+    from services.engine_runtime import python_module_command
+    command = python_module_command(
         "yt_dlp",
         "--dump-single-json",
         "--skip-download",
         "--no-warnings",
         "--no-playlist",
         url,
-    ]
+    )
 
     result = subprocess.run(
         command,
@@ -859,6 +858,12 @@ def api_direct_video(
 
         "cover_url":
             cover,
+
+        "duration_seconds": metadata.get("duration"),
+
+        "video_width": metadata.get("width"),
+
+        "video_height": metadata.get("height"),
 
         "source_type":
             "direct",

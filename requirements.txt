@@ -42,6 +42,7 @@ pycparser==3.0
 pydantic==2.13.5
 pydantic_core==2.46.5
 pydub==0.25.1
+pwdlib==0.3.1
 python-dotenv==1.2.3
 python-multipart==0.0.32
 PyYAML==6.0.3

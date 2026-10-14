@@ -1,8 +1,112 @@
+import hashlib
+import json
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 from services.source_db import get_connection
+
+
+ACTIVE_JOB_STATUSES = ("queued", "processing", "stopping")
+_schema_lock = threading.Lock()
+_schema_ready = False
+
+
+class ActiveJobExists(RuntimeError):
+    def __init__(self, job):
+        self.job = dict(job)
+        super().__init__("Video này đã có job đang chạy.")
+
+
+def canonical_job_config(config) -> tuple[str, str]:
+    """Return an immutable JSON snapshot and its stable fingerprint."""
+    payload = config if isinstance(config, dict) else {}
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return encoded, hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def ensure_job_schema():
+    """Create/migrate the local job tables without destroying user data."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    with _schema_lock:
+        if _schema_ready:
+            return
+        conn = get_connection()
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_key TEXT UNIQUE,
+                    platform_video_id TEXT NOT NULL,
+                    channel_key TEXT NOT NULL,
+                    mode TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    stage TEXT,
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    source_path TEXT,
+                    output_path TEXT,
+                    created_by INTEGER,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    config_json TEXT,
+                    config_fingerprint TEXT,
+                    request_url TEXT
+                )
+                """
+            )
+            columns = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(jobs)").fetchall()
+            }
+            additions = {
+                "config_json": "TEXT",
+                "config_fingerprint": "TEXT",
+                "request_url": "TEXT",
+            }
+            for name, sql_type in additions.items():
+                if name not in columns:
+                    conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {sql_type}")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS video_files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    platform_video_id TEXT NOT NULL,
+                    job_id INTEGER,
+                    file_type TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(platform_video_id, file_type, path),
+                    FOREIGN KEY(job_id) REFERENCES jobs(id)
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_video ON jobs(platform_video_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_fingerprint "
+                "ON jobs(platform_video_id, mode, config_fingerprint)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_video_files_video "
+                "ON video_files(platform_video_id)"
+            )
+            conn.commit()
+            _schema_ready = True
+        finally:
+            conn.close()
 
 
 def now():
@@ -37,6 +141,8 @@ def create_job(
     mode: str,
     created_by=None,
     source_path=None,
+    config=None,
+    request_url=None,
 ):
     job_key = (
         f"{platform_video_id}:"
@@ -44,9 +150,30 @@ def create_job(
         f"{uuid.uuid4().hex[:12]}"
     )
 
+    ensure_job_schema()
+    config_json, config_fingerprint = canonical_job_config(config)
     conn = get_connection()
 
     try:
+        # Serialize the duplicate check and insert across threads/processes.
+        # The in-memory guard in server.py remains useful for a fast response,
+        # while this transaction is the authoritative protection.
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute(
+            """
+            SELECT id, job_key, platform_video_id, channel_key, mode,
+                   status, stage, progress, created_at, updated_at
+            FROM jobs
+            WHERE platform_video_id = ?
+              AND status IN ('queued', 'processing', 'stopping')
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (platform_video_id,),
+        ).fetchone()
+        if existing:
+            conn.rollback()
+            raise ActiveJobExists(existing)
         cursor = conn.execute(
             """
             INSERT INTO jobs (
@@ -60,14 +187,17 @@ def create_job(
                 source_path,
                 created_by,
                 created_at,
-                updated_at
+                updated_at,
+                config_json,
+                config_fingerprint,
+                request_url
             )
             VALUES (
                 ?, ?, ?, ?,
                 'queued',
                 'queued',
                 0,
-                ?, ?, ?, ?
+                ?, ?, ?, ?, ?, ?, ?
             )
             """,
             (
@@ -81,6 +211,9 @@ def create_job(
                 created_by,
                 now(),
                 now(),
+                config_json,
+                config_fingerprint,
+                str(request_url or ""),
             ),
         )
 
@@ -96,6 +229,9 @@ def create_job(
 
             "job_key":
                 job_key,
+
+            "config_fingerprint":
+                config_fingerprint,
         }
 
     finally:
@@ -303,6 +439,7 @@ def register_video_file(
     path,
     job_id=None,
 ):
+    ensure_job_schema()
     path = Path(
         path
     )
@@ -446,6 +583,7 @@ def list_active_jobs(
     limit=20,
     created_by=None,
 ):
+    ensure_job_schema()
     conn = get_connection()
 
     try:
@@ -470,10 +608,12 @@ def list_active_jobs(
                 created_at,
                 started_at,
                 updated_at
+                ,config_fingerprint
             FROM jobs
             WHERE status IN (
                 'queued',
-                'processing'
+                'processing',
+                'stopping'
             ){where_owner}
             ORDER BY id DESC
             LIMIT ?
@@ -493,6 +633,7 @@ def list_active_jobs(
 
 
 def file_stats():
+    ensure_job_schema()
     conn = get_connection()
 
     try:
@@ -568,22 +709,43 @@ def file_stats():
 
 
 def recover_interrupted_jobs():
+    """Close jobs orphaned by a previous Engine process.
+
+    The pipeline has stage caches but is not transactionally resumable yet.
+    Marking the old execution as ``interrupted`` prevents it from appearing
+    active forever. A new request can safely reuse valid stage outputs while
+    receiving a fresh immutable configuration snapshot.
+    """
+    ensure_job_schema()
     conn = get_connection()
 
     try:
+        conn.execute(
+            """
+            UPDATE source_videos
+            SET status = 'interrupted', updated_at = ?
+            WHERE platform_video_id IN (
+                SELECT platform_video_id
+                FROM jobs
+                WHERE status IN ('queued', 'processing', 'stopping')
+            )
+            """,
+            (now(),),
+        )
         cursor = conn.execute(
             """
             UPDATE jobs
             SET
-                status = 'failed',
+                status = 'interrupted',
                 stage = 'interrupted',
                 error_message =
-                    'Server đã khởi động lại trước khi job hoàn tất.',
+                    'Local Engine đã khởi động lại trước khi job hoàn tất. Có thể chạy lại job để tiếp tục từ cache hợp lệ.',
                 completed_at = ?,
                 updated_at = ?
             WHERE status IN (
                 'queued',
-                'processing'
+                'processing',
+                'stopping'
             )
             """,
             (

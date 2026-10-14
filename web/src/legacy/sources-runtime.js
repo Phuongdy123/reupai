@@ -88,6 +88,68 @@ function formatViews(
 }
 
 
+function formatDuration(
+    value
+) {
+    const seconds = Number(value);
+
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+        return '';
+    }
+
+    const total = Math.round(seconds);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const remaining = total % 60;
+
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`;
+    }
+
+    return `${minutes}:${String(remaining).padStart(2, '0')}`;
+}
+
+
+function formatVideoRatio(
+    video
+) {
+    const width = Number(video.video_width || video.width || 0);
+    const height = Number(video.video_height || video.height || 0);
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return '';
+    }
+
+    const gcd = (left, right) => right ? gcd(right, left % right) : left;
+    const divisor = gcd(Math.round(width), Math.round(height));
+
+    return divisor > 0
+        ? `${Math.round(width / divisor)}:${Math.round(height / divisor)}`
+        : '';
+}
+
+
+function mediaMetaHtml(
+    video
+) {
+    const duration = formatDuration(video.duration_seconds || video.duration);
+    const ratio = formatVideoRatio(video);
+
+    if (!duration && !ratio) {
+        return '';
+    }
+
+    return [
+        duration
+            ? `<span>•</span><span class="media-inline" title="Thời lượng video">${uiIcon('clock', 12)} ${duration}</span>`
+            : '',
+        ratio
+            ? `<span>•</span><span class="media-inline" title="Tỷ lệ khung hình">${uiIcon('video', 12)} ${ratio}</span>`
+            : '',
+    ].join('');
+}
+
+
 function formatDate(
     value
 ) {
@@ -1545,6 +1607,7 @@ function buildCard(
                             ? `<span>•</span>${escapeHtml(formatDate(video.published_at))}`
                             : ''
                         }
+                        ${mediaMetaHtml(video)}
                     </div>
 
                 </div>

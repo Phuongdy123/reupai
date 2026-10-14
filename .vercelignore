@@ -1,0 +1,28 @@
+# The Vercel project uses web/ as its Root Directory. Keep local runtime data,
+# Python environments, models, build products and secrets out of uploads.
+/.git/
+/.vercel/
+/app/
+/archive/
+/artifacts/
+/build/
+/dist/
+/packaging/
+/release/
+/samples/
+/scripts/
+/tests/
+/venv/
+/.env
+/.env.*
+/*.log
+/*.db
+/*.sqlite*
+/*.mp4
+/*.m4a
+/*.wav
+/*.onnx
+web/.next/
+web/node_modules/
+web/.vercel/
+web/.env*

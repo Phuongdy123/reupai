@@ -1,0 +1,16 @@
+-r requirements.txt
+
+# Windows Local Engine runtime and media/OCR integrations.
+paddleocr==3.7.0
+paddlepaddle==3.3.0
+pypdfium2==5.13.0
+opencv-contrib-python==4.10.0.84
+pyclipper==1.4.0
+shapely==2.1.2
+imagesize==2.0.1
+python-bidi==0.6.11
+playwright==1.63.0
+vieneu==3.8.3
+sea-g2p==0.10.0
+pillow==12.1.0
+pystray==0.19.5

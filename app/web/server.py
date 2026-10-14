@@ -3,6 +3,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -27,10 +28,28 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from runtime_paths import (
     get_channels_dir,
+    get_config_dir,
     get_data_dir,
     get_downloads_dir,
     get_output_dir,
+    get_runtime_root,
 )
+
+
+def _build_child_environment() -> dict[str, str]:
+    """Load current local settings for every packaged worker process."""
+    from dotenv import dotenv_values
+
+    env = os.environ.copy()
+    config_path = get_config_dir() / "engine.env"
+    env["REUP_ENGINE_CONFIG_PATH"] = str(config_path.resolve())
+    if config_path.is_file():
+        for key, value in dotenv_values(config_path).items():
+            if value is not None:
+                env[key] = value
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
 
 
 # =========================================================
@@ -101,6 +120,7 @@ from services.library_db import (
 )
 
 from services.job_db import (
+    ActiveJobExists,
     complete_job,
     create_job,
     fail_job,
@@ -130,9 +150,11 @@ from services.download_config import (
     max_parallel_pipelines,
     ytdlp_performance_args,
 )
+from services.engine_runtime import pipeline_command, python_module_command
 
 init_db()
-ensure_default_admin()
+if os.getenv("REUP_LOCAL_ENGINE", "").strip() != "1":
+    ensure_default_admin()
 
 
 # =========================================================
@@ -563,7 +585,7 @@ def local_source_for_process(
     ]
 
     for folder in candidates:
-        source = find_downloaded_video(folder)
+        source = find_valid_downloaded_video(folder)
 
         if source:
             return source
@@ -678,9 +700,7 @@ def find_downloaded_video(
         / "source.mp4"
     )
 
-    if file_ok(
-        preferred
-    ):
+    if file_ok(preferred):
         return preferred
 
     for ext in (
@@ -695,12 +715,90 @@ def find_downloaded_video(
             / f"source.{ext}"
         )
 
-        if file_ok(
-            path
-        ):
+        if file_ok(path):
             return path
 
     return None
+
+
+def find_valid_downloaded_video(folder: Path) -> Path | None:
+    candidate = find_downloaded_video(folder)
+    return candidate if candidate and media_file_ok(candidate) else None
+
+
+def media_file_ok(path: Path) -> bool:
+    """Validate a downloaded source once and cache the ffprobe result."""
+    if not file_ok(path):
+        return False
+    try:
+        stat = path.stat()
+        marker = path.with_name(f".{path.name}.probe.json")
+        cached = read_json_file(marker)
+        if (
+            isinstance(cached, dict)
+            and cached.get("size") == stat.st_size
+            and cached.get("mtime_ns") == stat.st_mtime_ns
+        ):
+            return bool(cached.get("valid"))
+
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=codec_type:format=duration",
+                "-of", "json",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=30,
+        )
+        payload = json.loads(result.stdout or "{}") if result.returncode == 0 else {}
+        streams = payload.get("streams") or []
+        duration = float((payload.get("format") or {}).get("duration") or 0)
+        valid = duration > 0 and any(item.get("codec_type") == "video" for item in streams)
+        temporary = marker.with_suffix(marker.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(
+                {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "duration": duration,
+                    "valid": valid,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(marker)
+        return valid
+    except (OSError, ValueError, TypeError, subprocess.SubprocessError, json.JSONDecodeError):
+        return False
+
+
+def finalize_staged_download(folder: Path) -> Path:
+    candidates = [
+        path
+        for path in folder.glob("source.pending.*")
+        if path.is_file() and path.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}
+    ]
+    for candidate in candidates:
+        if not media_file_ok(candidate):
+            continue
+        destination = folder / f"source{candidate.suffix.lower()}"
+        candidate.replace(destination)
+        probe_marker = candidate.with_name(f".{candidate.name}.probe.json")
+        probe_marker.unlink(missing_ok=True)
+        if not media_file_ok(destination):
+            destination.unlink(missing_ok=True)
+            break
+        return destination
+    raise RuntimeError("File tải về không có video stream hợp lệ hoặc bị hỏng.")
 
 
 def find_result_file(
@@ -908,6 +1006,12 @@ def load_cached_videos(
                 row["share_count"]
                 or 0,
 
+            "duration_seconds": row["duration_seconds"],
+
+            "video_width": row["video_width"],
+
+            "video_height": row["video_height"],
+
             "db_status":
                 row["status"]
                 or "new",
@@ -1008,6 +1112,21 @@ def cache_live_videos(
                             0,
                         )
                         or 0
+                    ),
+
+                duration_seconds=
+                    video.get(
+                        "duration_seconds"
+                    ),
+
+                video_width=
+                    video.get(
+                        "video_width"
+                    ),
+
+                video_height=
+                    video.get(
+                        "video_height"
                     ),
             )
 
@@ -1627,24 +1746,25 @@ def _pipeline_worker_once(
         / f"web_{mode}.log"
     )
 
-    command = [
-        sys.executable,
-        str(
-            PIPELINE_FILE
-        ),
+    command = pipeline_command(
         video_url,
         "--channel",
         channel,
         "--mode",
         mode,
-    ]
+    )
 
-    config_path = job_dir / "process_config.json"
+    # A job must always render from the exact settings submitted for that job.
+    # A per-job file prevents a later click/preset from replacing the config
+    # while the current worker is queued or already running.
+    config_path = job_dir / f"process_config.{db_job_id}.json"
     if settings:
-        config_path.write_text(
+        temporary_config = config_path.with_suffix(config_path.suffix + ".tmp")
+        temporary_config.write_text(
             json.dumps(settings, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        temporary_config.replace(config_path)
         command.extend(["--config", str(config_path)])
 
     source_path = (
@@ -1738,17 +1858,7 @@ def _pipeline_worker_once(
 
             log_file.flush()
 
-            env = (
-                os.environ.copy()
-            )
-
-            env[
-                "PYTHONIOENCODING"
-            ] = "utf-8"
-
-            env[
-                "PYTHONUTF8"
-            ] = "1"
+            env = _build_child_environment()
 
             popen_extra = {}
 
@@ -1769,6 +1879,7 @@ def _pipeline_worker_once(
                 cwd=str(
                     PROJECT_ROOT
                 ),
+                stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=
                     subprocess.STDOUT,
@@ -3618,9 +3729,7 @@ def build_ytdlp_download_command(
     *,
     use_browser_cookies: bool,
 ):
-    command = [
-        sys.executable,
-        "-m",
+    command = python_module_command(
         "yt_dlp",
         "--continue",
         "--retries",
@@ -3631,7 +3740,7 @@ def build_ytdlp_download_command(
         "1",
         "--socket-timeout",
         "30",
-    ]
+    )
 
     command.extend(ytdlp_performance_args())
 
@@ -3663,9 +3772,7 @@ def run_platform_download(
     output_template: str,
     platform: str,
 ):
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env["PYTHONUTF8"] = "1"
+    env = _build_child_environment()
 
     # Douyin: bo qua yt-dlp extractor.
     # Lay media URL bang Playwright session roi tai bang ffmpeg.
@@ -4403,7 +4510,7 @@ def api_download(
     )
 
     existing = (
-        find_downloaded_video(
+        find_valid_downloaded_video(
             folder
         )
     )
@@ -4428,22 +4535,30 @@ def api_download(
                 ),
         )
 
-    output_template = str(
-        folder
-        / "source.%(ext)s"
-    )
+    output_template = str(folder / "source.pending.%(ext)s")
 
     try:
         with DOWNLOAD_SLOTS:
             # Recheck after acquiring a slot so duplicate requests for the
             # same video do not start a second downloader process.
-            existing = find_downloaded_video(folder)
+            existing = find_valid_downloaded_video(folder)
             if not existing:
+                # Remove only known invalid/staging files inside this video's
+                # own download folder. A valid source is never touched.
+                for stale in folder.glob("source.pending.*"):
+                    if stale.is_file():
+                        stale.unlink(missing_ok=True)
+                for suffix in (".mp4", ".mkv", ".webm", ".mov"):
+                    invalid = folder / f"source{suffix}"
+                    if invalid.exists() and not media_file_ok(invalid):
+                        invalid.unlink(missing_ok=True)
+                        invalid.with_name(f".{invalid.name}.probe.json").unlink(missing_ok=True)
                 run_platform_download(
                     body.url,
                     output_template,
                     platform,
                 )
+                finalize_staged_download(folder)
 
     except Exception as error:
 
@@ -4457,7 +4572,7 @@ def api_download(
         )
 
     video_path = (
-        find_downloaded_video(
+        find_valid_downloaded_video(
             folder
         )
     )
@@ -4504,7 +4619,7 @@ def api_process(
     request: Request,
 ):
 
-    if not PIPELINE_FILE.exists():
+    if not getattr(sys, "frozen", False) and not PIPELINE_FILE.exists():
 
         raise HTTPException(
             status_code=500,
@@ -4529,6 +4644,23 @@ def api_process(
     mode = (
         body.mode
     )
+
+    try:
+        minimum_free = max(
+            256 * 1024 * 1024,
+            int(os.getenv("REUP_MIN_FREE_DISK_BYTES", str(2 * 1024**3))),
+        )
+    except (TypeError, ValueError):
+        minimum_free = 2 * 1024**3
+    free_space = shutil.disk_usage(get_runtime_root()).free
+    if free_space < minimum_free:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Không đủ dung lượng trống để xử lý video. "
+                f"Cần tối thiểu {minimum_free // (1024**2)} MB."
+            ),
+        )
 
     with PROCESS_LOCK:
 
@@ -4573,35 +4705,43 @@ def api_process(
         )
     )
 
-    db_job = create_job(
-        platform_video_id=
-            video_id,
-        channel_key=
-            channel,
-        mode=
-            mode,
-        created_by=
-            request.state.user[
-                "id"
-            ],
-        source_path=
-            (
+    job_settings = body.model_dump(exclude_none=True)
+    try:
+        db_job = create_job(
+            platform_video_id=video_id,
+            channel_key=channel,
+            mode=mode,
+            created_by=request.state.user["id"],
+            source_path=(
                 source_path
-                if (
-                    source_path
-                    and file_ok(
-                        source_path
-                    )
-                )
+                if source_path and file_ok(source_path)
                 else None
             ),
-    )
+            config=job_settings,
+            request_url=body.url,
+        )
+    except ActiveJobExists as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Video này đang được xử lý.",
+                "job": error.job,
+            },
+        ) from error
 
     db_job_id = (
         db_job[
             "id"
         ]
     )
+
+    # progress.json belongs to the previous execution of this video. Leaving
+    # it in place makes a freshly queued job briefly report 100%/completed.
+    stale_progress = job_dir_for(channel, video_id) / "progress.json"
+    try:
+        stale_progress.unlink(missing_ok=True)
+    except OSError:
+        pass
 
     update_source_video_state(
         platform_video_id=
@@ -4664,7 +4804,7 @@ def api_process(
                     db_job_id,
 
                 "settings":
-                    body.model_dump(exclude_none=True),
+                    job_settings,
             },
 
             daemon=True,
@@ -4811,6 +4951,16 @@ def api_process_stop(
             state.get(
                 "process"
             )
+        )
+
+        db_job_id = state.get("db_job_id")
+
+    if db_job_id:
+        update_job_progress(
+            int(db_job_id),
+            status="stopping",
+            stage="stopping",
+            progress=state.get("percent", 0),
         )
 
     terminate_process_tree(

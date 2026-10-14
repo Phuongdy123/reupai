@@ -21,5 +21,16 @@ __pycache__/
 !web/.env.local.example
 web/node_modules/
 web/.next/
+build/
+dist/
+release/
+packaging/reupai.ico
+build-windows.*.log
+inno.*.log
 artifacts/ui-parity/
 artifacts/pipeline-smoke/
+artifacts/download-staging-smoke/
+artifacts/engine-runtime-smoke/
+
+.vercel
+.env*

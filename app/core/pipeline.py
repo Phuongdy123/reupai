@@ -100,6 +100,17 @@ def configure_project_root():
 
 
 
+    if getattr(sys, "frozen", False):
+        # Keep relative bundled resources (for example app/assets) anchored at
+        # PyInstaller's immutable application directory. Runtime jobs and
+        # outputs still use runtime_paths under %LOCALAPPDATA%\ReupAI.
+        PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        APP_DIR = PROJECT_ROOT
+        os.chdir(PROJECT_ROOT)
+        if str(APP_DIR) not in sys.path:
+            sys.path.insert(0, str(APP_DIR))
+        return
+
     candidate = Path(__file__).resolve().parent
 
     # The implementation lives in app/core while runtime paths stay under app/.
@@ -313,6 +324,37 @@ def file_ok(path: Path) -> bool:
 
 
     return path.exists() and path.is_file() and path.stat().st_size > 0
+
+
+def stable_fingerprint(payload) -> str:
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def file_fingerprint(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def cache_fingerprint_matches(path: Path, expected: str) -> bool:
+    try:
+        return path.read_text(encoding="utf-8").strip() == expected
+    except OSError:
+        return False
+
+
+def write_cache_fingerprint(path: Path, value: str) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(value, encoding="utf-8")
+    temporary.replace(path)
 
 
 
@@ -880,10 +922,9 @@ def build_ytdlp_command(
 ):
 
     from services.download_config import ytdlp_performance_args
+    from services.engine_runtime import python_module_command
 
-    command = [
-        sys.executable,
-        "-m",
+    command = python_module_command(
         "yt_dlp",
         "--continue",
         "--retries",
@@ -894,14 +935,14 @@ def build_ytdlp_command(
         "1",
         "--socket-timeout",
         "30",
-    ]
+    )
 
-    if reliable:
-        # Một số máy chủ Bilibili trả response rất ngắn khi dùng chunk HTTP
-        # hoặc nhiều fragment đồng thời. Profile này ưu tiên hoàn tất file.
-        command.extend(["--concurrent-fragments", "1"])
-    else:
-        command.extend(ytdlp_performance_args())
+    # Bilibili can advertise premium 1080p formats to anonymous users, then
+    # reject the actual transfer.  This pipeline only needs a stable source
+    # for subtitle/voice processing, so consistently request an accessible
+    # 720p-or-lower stream and avoid parallel fragments that Bilibili often
+    # truncates mid-transfer.
+    command.extend(["--concurrent-fragments", "1"])
 
     if use_browser_cookies:
 
@@ -915,7 +956,7 @@ def build_ytdlp_command(
 
     command.extend([
         "-f",
-        "bv*[height<=720]+ba/b" if reliable else "bv*+ba/b",
+        "bv*[height<=720]+ba/b",
         "--merge-output-format",
         "mp4",
         "--no-playlist",
@@ -1867,7 +1908,7 @@ def create_voice(
 
 
 
-    manifest = tts.create_tts_clips(subtitles)
+    manifest = tts.create_tts_clips(subtitles, reuse_fitted=not force)
 
 
 
@@ -2747,32 +2788,37 @@ def pipeline(
 
     music_url = str(config.get("music_url") or "").strip()
     if music_url and music_path is None:
+        # A fixed background_music.m4a reused audio from an earlier URL. The
+        # URL fingerprint makes the cache identity explicit while retaining
+        # valid audio when the same link is selected again.
+        music_key = stable_fingerprint({"url": music_url})[:16]
         music_path = next(
             (
                 candidate
-                for candidate in sorted(job_dir.glob("background_music.*"))
+                for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
                 if valid_music_file(candidate)
             ),
-            job_dir / "background_music.m4a",
+            job_dir / f"background_music_{music_key}.m4a",
         )
         if not valid_music_file(music_path):
-            for stale in job_dir.glob("background_music.*"):
-                if stale.exists() and not valid_music_file(stale):
+            for stale in job_dir.glob(f"background_music_{music_key}.*"):
+                if stale.exists():
                     try:
                         stale.unlink()
                     except OSError:
                         pass
-            music_template = str(job_dir / "background_music.%(ext)s")
-            music_command = [
-                sys.executable, "-m", "yt_dlp",
+            music_template = str(job_dir / f"background_music_{music_key}.%(ext)s")
+            from services.engine_runtime import python_module_command
+            music_command = python_module_command(
+                "yt_dlp",
                 "--no-playlist", "--no-warnings",
                 "-x", "--audio-format", "m4a",
                 "-o", music_template, music_url,
-            ]
+            )
             subprocess.run(music_command, cwd=str(PROJECT_ROOT), check=True)
             candidates = [
                 candidate
-                for candidate in sorted(job_dir.glob("background_music.*"))
+                for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
                 if valid_music_file(candidate)
             ]
             if candidates:
@@ -2813,6 +2859,8 @@ def pipeline(
 
 
     tts_manifest = job_dir / "tts_manifest.json"
+    tts_fingerprint_path = job_dir / "tts_fingerprint.sha256"
+    tts_in_progress_fingerprint_path = job_dir / "tts_in_progress.sha256"
 
 
 
@@ -3325,6 +3373,22 @@ def pipeline(
 
 
 
+            tts_fingerprint = stable_fingerprint({
+                "schema": 1,
+                "subtitle": file_fingerprint(vietnamese_srt),
+                "voice": config.get("voice") or "default",
+                "speed": float(config.get("tts_speed") or 1.10),
+            })
+            tts_force = bool(
+                force
+                or not (
+                    cache_fingerprint_matches(tts_fingerprint_path, tts_fingerprint)
+                    or cache_fingerprint_matches(tts_in_progress_fingerprint_path, tts_fingerprint)
+                )
+            )
+            # Keep completed clips after an interruption only when subtitle,
+            # voice and speed still match the configuration that made them.
+            write_cache_fingerprint(tts_in_progress_fingerprint_path, tts_fingerprint)
             create_voice(
 
 
@@ -3349,7 +3413,7 @@ def pipeline(
 
 
 
-                force=force,
+                force=tts_force,
 
 
 
@@ -3362,6 +3426,8 @@ def pipeline(
 
 
             )
+            write_cache_fingerprint(tts_fingerprint_path, tts_fingerprint)
+            tts_in_progress_fingerprint_path.unlink(missing_ok=True)
 
 
 

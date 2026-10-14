@@ -582,7 +582,9 @@ select:focus {
 
 .badge.work,
 .status.processing,
-.status.queued {
+.status.running,
+.status.queued,
+.status.stopping {
     background: #3b3116;
     color: #f1ce76;
 }
@@ -591,6 +593,17 @@ select:focus {
 .status.failed {
     background: #411e25;
     color: #ff8fa0;
+}
+
+.status.interrupted {
+    background: #422718;
+    color: #ffb477;
+}
+
+.status.cancelled,
+.status.stopped {
+    background: #292e38;
+    color: #aab2c0;
 }
 
 .channel-row {

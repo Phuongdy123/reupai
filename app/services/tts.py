@@ -4,10 +4,19 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
+import wave
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from pydub import AudioSegment
+
+
+# FFmpeg/ffprobe run hundreds of times in a long voiceover job.  A detached
+# Windows child must not depend on a terminal pipe that may be closed while the
+# job is still running.
+MEDIA_CREATIONFLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
 
 try:
     import edge_tts
@@ -64,6 +73,23 @@ VIENEU_BACKEND = (
     .lower()
     or "onnx"
 )
+
+try:
+    # ONNX Runtime defaults to half the logical cores (capped at eight).  The
+    # turbo mode below runs two independent engines, so four threads each keeps
+    # the i5-12450H busy without oversubscribing it.
+    VIENEU_THREADS = int(os.getenv("REUP_VIENEU_THREADS", "0"))
+except ValueError:
+    VIENEU_THREADS = 0
+
+try:
+    # CPU/ONNX inference is serialized inside one VieNeu engine.  Two engines
+    # use more RAM but can synthesize separate subtitle lines concurrently.
+    TTS_ONNX_WORKERS = int(os.getenv("REUP_TTS_ONNX_WORKERS", "1"))
+except ValueError:
+    TTS_ONNX_WORKERS = 1
+
+TTS_ONNX_WORKERS = max(1, min(TTS_ONNX_WORKERS, 2))
 
 try:
     VIENEU_TEMPERATURE = float(
@@ -147,6 +173,9 @@ BASE_TTS_SPEED = max(0.5, min(BASE_TTS_SPEED, 2.0))
 
 _VIENEU_ENGINE = None
 _VIENEU_VOICE_IDS = None
+_PARALLEL_VIENEU = threading.local()
+_PARALLEL_VIENEU_ENGINES = []
+_PARALLEL_VIENEU_LOCK = threading.Lock()
 
 
 def _close_vieneu():
@@ -156,18 +185,41 @@ def _close_vieneu():
 
     _VIENEU_ENGINE = None
 
-    if engine is None:
-        return
+    engines = [engine] if engine is not None else []
+    with _PARALLEL_VIENEU_LOCK:
+        engines.extend(_PARALLEL_VIENEU_ENGINES)
+        _PARALLEL_VIENEU_ENGINES.clear()
 
-    try:
-        engine.close()
-    except Exception:
-        pass
+    for item in engines:
+        try:
+            item.close()
+        except Exception:
+            pass
 
 
 atexit.register(
     _close_vieneu
 )
+
+
+def _create_vieneu_engine():
+    """Create one local VieNeu engine with the configured ONNX thread budget."""
+    try:
+        from vieneu import Vieneu
+    except Exception as error:
+        raise RuntimeError(
+            "Chua cai VieNeu-TTS. "
+            "Chay: venv\\Scripts\\python.exe -m pip install -U vieneu"
+        ) from error
+
+    kwargs = {"backend": VIENEU_BACKEND}
+    if VIENEU_THREADS > 0:
+        # In Turbo mode each worker owns a separate ONNX runtime. Divide the
+        # configured CPU budget between them so REUP_VIENEU_THREADS=8 means
+        # two engines x four threads, instead of oversubscribing sixteen.
+        workers = TTS_ONNX_WORKERS if _parallel_onnx_enabled() else 1
+        kwargs["threads"] = max(1, VIENEU_THREADS // workers)
+    return Vieneu(**kwargs)
 
 
 def _get_vieneu_engine():
@@ -177,14 +229,6 @@ def _get_vieneu_engine():
     if _VIENEU_ENGINE is not None:
         return _VIENEU_ENGINE
 
-    try:
-        from vieneu import Vieneu
-    except Exception as error:
-        raise RuntimeError(
-            "Chua cai VieNeu-TTS. "
-            "Chay: venv\\Scripts\\python.exe -m pip install -U vieneu"
-        ) from error
-
     print(
         "\n[VieNeu] Dang load v3 Turbo..."
     )
@@ -193,9 +237,7 @@ def _get_vieneu_engine():
         f"[VieNeu] Backend: {VIENEU_BACKEND}"
     )
 
-    _VIENEU_ENGINE = Vieneu(
-        backend=VIENEU_BACKEND
-    )
+    _VIENEU_ENGINE = _create_vieneu_engine()
 
     try:
         voices = (
@@ -244,6 +286,17 @@ def _get_vieneu_engine():
     )
 
     return _VIENEU_ENGINE
+
+
+def _get_parallel_vieneu_engine():
+    """Return one ONNX engine per worker thread; sessions must not be shared."""
+    engine = getattr(_PARALLEL_VIENEU, "engine", None)
+    if engine is None:
+        engine = _create_vieneu_engine()
+        _PARALLEL_VIENEU.engine = engine
+        with _PARALLEL_VIENEU_LOCK:
+            _PARALLEL_VIENEU_ENGINES.append(engine)
+    return engine
 
 
 def set_voice(
@@ -411,6 +464,8 @@ def get_video_duration_ms(
         capture_output=True,
         text=True,
         check=True,
+        stdin=subprocess.DEVNULL,
+        creationflags=MEDIA_CREATIONFLAGS,
     )
 
     seconds = float(
@@ -425,6 +480,16 @@ def get_video_duration_ms(
 def get_audio_duration(
     audio_path
 ):
+    # VieNeu and FFmpeg clips are PCM WAV. Reading their header avoids
+    # launching ffprobe twice for every subtitle in a long job.
+    if str(audio_path).lower().endswith(".wav"):
+        try:
+            with wave.open(str(audio_path), "rb") as wav:
+                frame_rate = wav.getframerate()
+                if frame_rate > 0 and wav.getnframes() > 0:
+                    return wav.getnframes() / frame_rate
+        except (OSError, EOFError, wave.Error):
+            pass
     command = [
         "ffprobe",
         "-v",
@@ -441,6 +506,8 @@ def get_audio_duration(
         capture_output=True,
         text=True,
         check=True,
+        stdin=subprocess.DEVNULL,
+        creationflags=MEDIA_CREATIONFLAGS,
     )
 
     return float(
@@ -454,11 +521,10 @@ def get_audio_duration(
 
 def generate_vieneu_tts(
     text,
-    output_path
+    output_path,
+    engine=None,
 ):
-    engine = (
-        _get_vieneu_engine()
-    )
+    engine = engine or _get_vieneu_engine()
 
     audio = engine.infer(
         text=str(text).strip(),
@@ -546,6 +612,7 @@ def generate_edge_fallback(
         subprocess.run(
             [
                 "ffmpeg",
+                "-nostdin",
                 "-y",
                 "-i",
                 temp_mp3,
@@ -560,6 +627,8 @@ def generate_edge_fallback(
             stderr=
                 subprocess.DEVNULL,
             check=True,
+            stdin=subprocess.DEVNULL,
+            creationflags=MEDIA_CREATIONFLAGS,
         )
 
     finally:
@@ -580,7 +649,8 @@ def generate_edge_fallback(
 
 def generate_tts(
     text,
-    output_path
+    output_path,
+    engine=None,
 ):
     provider = (
         TTS_PROVIDER
@@ -606,6 +676,7 @@ def generate_tts(
                 generate_vieneu_tts(
                     text,
                     output_path,
+                    engine=engine,
                 )
             else:
                 generate_edge_fallback(
@@ -743,8 +814,10 @@ def fit_audio(
         )
     )
 
+    partial_output = str(output_file) + ".partial.wav"
     command = [
         "ffmpeg",
+        "-nostdin",
         "-y",
         "-i",
         input_file,
@@ -754,15 +827,43 @@ def fit_audio(
         "44100",
         "-ac",
         "2",
-        output_file,
+        partial_output,
     ]
 
-    subprocess.run(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=True,
-    )
+    for attempt in range(3):
+        try:
+            if os.path.exists(partial_output):
+                os.remove(partial_output)
+            subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=True,
+                creationflags=MEDIA_CREATIONFLAGS,
+            )
+            if not os.path.isfile(partial_output) or os.path.getsize(partial_output) <= 44:
+                raise RuntimeError("FFmpeg tao WAV rong.")
+            os.replace(partial_output, output_file)
+            break
+        except (OSError, subprocess.CalledProcessError, RuntimeError) as error:
+            if attempt == 2:
+                try:
+                    os.remove(partial_output)
+                except FileNotFoundError:
+                    pass
+                detail = (
+                    (error.stderr or "").strip()[-500:]
+                    if isinstance(error, subprocess.CalledProcessError)
+                    else str(error)
+                )
+                raise RuntimeError(
+                    f"FFmpeg khong xu ly duoc clip TTS sau 3 lan: {detail}"
+                ) from error
+            time.sleep(0.5 * (attempt + 1))
 
     final_duration = (
         get_audio_duration(
@@ -849,12 +950,78 @@ def _safe_voice_slug():
     )
 
 
+def _tts_file_paths(subtitle_id, voice_slug):
+    raw_wav = os.path.join(
+        TTS_FOLDER,
+        (
+            f"{subtitle_id:04d}"
+            f"_raw_"
+            f"{TTS_PROVIDER}_"
+            f"{voice_slug}.wav"
+        ),
+    )
+    fitted_wav = os.path.join(
+        TTS_FOLDER,
+        f"{subtitle_id:04d}.wav",
+    )
+    return raw_wav, fitted_wav
+
+
+def _parallel_onnx_enabled():
+    return (
+        TTS_PROVIDER == "vieneu"
+        and VIENEU_BACKEND == "onnx"
+        and TTS_ONNX_WORKERS > 1
+    )
+
+
+def _generate_parallel_raw_tts(pending):
+    """Generate independent subtitle lines concurrently with separate ONNX engines.
+
+    Each worker owns an engine because the ONNX engine serializes its sessions.
+    Two workers are intentionally the maximum: this uses extra RAM while keeping
+    the CPU and laptop thermals stable for the rest of the pipeline.
+    """
+    if not pending:
+        return
+
+    total = len(pending)
+    print(
+        f"\n[TTS Turbo] Tao {total} cau bang {TTS_ONNX_WORKERS} ONNX engines "
+        f"({VIENEU_THREADS or 'auto'} luong/engine)."
+    )
+
+    def run_one(text, output_path):
+        generate_tts(
+            text,
+            output_path,
+            engine=_get_parallel_vieneu_engine(),
+        )
+        return output_path
+
+    with ThreadPoolExecutor(max_workers=TTS_ONNX_WORKERS) as executor:
+        futures = {
+            executor.submit(run_one, text, output_path): (index, subtitle_id)
+            for index, subtitle_id, text, output_path in pending
+        }
+        completed = 0
+        for future in as_completed(futures):
+            index, subtitle_id = futures[future]
+            future.result()
+            completed += 1
+            print(
+                f"[TTS Turbo] {completed}/{total} xong "
+                f"(subtitle {index}, ID {subtitle_id})."
+            )
+
+
 # =========================================================
 # CREATE ALL TTS CLIPS
 # =========================================================
 
 def create_tts_clips(
-    subtitles
+    subtitles,
+    reuse_fitted=False,
 ):
     os.makedirs(
         TTS_FOLDER,
@@ -870,6 +1037,17 @@ def create_tts_clips(
     voice_slug = (
         _safe_voice_slug()
     )
+
+    # The default remains one engine.  Turbo is opt-in through engine.env so
+    # existing installations preserve their current memory footprint.
+    if _parallel_onnx_enabled():
+        pending = []
+        for index, subtitle in enumerate(subtitles, start=1):
+            subtitle_id = subtitle["id"]
+            raw_wav, _ = _tts_file_paths(subtitle_id, voice_slug)
+            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+                pending.append((index, subtitle_id, subtitle["text"], raw_wav))
+        _generate_parallel_raw_tts(pending)
 
     for index, subtitle in enumerate(
         subtitles,
@@ -905,24 +1083,10 @@ def create_tts_clips(
             ]
         )
 
-        raw_wav = os.path.join(
-            TTS_FOLDER,
-            (
-                f"{subtitle_id:04d}"
-                f"_raw_"
-                f"{TTS_PROVIDER}_"
-                f"{voice_slug}.wav"
-            ),
-        )
+        raw_wav, fitted_wav = _tts_file_paths(subtitle_id, voice_slug)
 
-        fitted_wav = os.path.join(
-            TTS_FOLDER,
-            f"{subtitle_id:04d}.wav",
-        )
-
-        if not os.path.exists(
-            raw_wav
-        ):
+        raw_existed = os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44
+        if not raw_existed:
             print(
                 "Dang tao voice..."
             )
@@ -935,9 +1099,7 @@ def create_tts_clips(
             )
 
         else:
-            print(
-                "Raw TTS da ton tai -> skip"
-            )
+            print("Raw TTS da ton tai -> skip")
 
         target_seconds = (
             subtitle[
@@ -946,11 +1108,22 @@ def create_tts_clips(
             / 1000.0
         )
 
-        fit_info = fit_audio(
-            raw_wav,
-            fitted_wav,
-            target_seconds,
-        )
+        fit_info = None
+        if reuse_fitted and raw_existed and os.path.isfile(fitted_wav) and os.path.getsize(fitted_wav) > 44:
+            try:
+                original_duration = get_audio_duration(raw_wav)
+                final_duration = get_audio_duration(fitted_wav)
+                fit_info = {
+                    "original_duration": original_duration,
+                    "final_duration": final_duration,
+                    "speed": BASE_TTS_SPEED,
+                    "overflow_seconds": max(0.0, final_duration - max(target_seconds, 0.0)),
+                }
+                print("Fitted TTS da ton tai -> skip FFmpeg")
+            except (OSError, subprocess.CalledProcessError, ValueError):
+                fit_info = None
+        if fit_info is None:
+            fit_info = fit_audio(raw_wav, fitted_wav, target_seconds)
 
         speed = (
             fit_info[

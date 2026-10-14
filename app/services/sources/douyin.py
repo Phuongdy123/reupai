@@ -281,6 +281,13 @@ def _aweme_to_video(
         or {}
     )
 
+    duration_raw = (
+        video_obj.get("duration")
+        or aweme.get("duration")
+        or 0
+    )
+    duration_ms = _safe_int(duration_raw)
+
     cover_url = ""
 
     for key in (
@@ -329,6 +336,17 @@ def _aweme_to_video(
 
         "cover_url":
             cover_url,
+
+        # Douyin returns the duration in milliseconds in its aweme payload.
+        "duration_seconds": (
+            round(duration_ms / 1000, 3)
+            if duration_ms >= 1000
+            else duration_ms or None
+        ),
+
+        "video_width": _safe_int(video_obj.get("width")) or None,
+
+        "video_height": _safe_int(video_obj.get("height")) or None,
 
         "published_at":
             _published_at(

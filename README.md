@@ -82,11 +82,19 @@ REUP_MAX_PARALLEL_DOWNLOADS=1
 REUP_MAX_PARALLEL_PIPELINES=1
 REUP_YTDLP_CONCURRENT_FRAGMENTS=2
 REUP_SUBTITLE_MIN_POSITIVE_HITS=2
+REUP_MIN_FREE_DISK_BYTES=2147483648
 ```
 
 `REUP_YTDLP_CONCURRENT_FRAGMENTS` tăng tốc các video DASH/HLS bằng cách tải một số phân đoạn song song; đặt `1` để giảm RAM hoặc tăng tối đa `8` nếu máy còn dư tài nguyên. Tùy chọn HTTP chunk `2M` hiện tại được giữ để tương thích; đặt `REUP_HTTP_CHUNK_SIZE=off` để tắt nếu nguồn không bị bóp băng thông. Các giá trị giới hạn đồng thời được chặn trong khoảng an toàn của ứng dụng.
 
 `REUP_SUBTITLE_MIN_POSITIVE_HITS=2` cho phép phụ đề ngắn được chấp nhận khi điểm OCR và độ phủ thời gian vẫn đạt ngưỡng. Tăng lên `3` nếu muốn detector khó chấp nhận vùng chữ hơn.
+
+Mỗi job lưu một snapshot cấu hình bất biến và fingerprint trong SQLite. Vì vậy
+job đang chờ không bị preset mới ghi đè, thay đổi giọng/tốc độ sẽ tạo lại cache
+TTS, và mỗi link nhạc có cache riêng. Local Engine dùng SQLite WAL, từ chối job
+trùng và đánh dấu `interrupted` cho job bị ngắt do Engine restart. Endpoint
+`/api/diagnostics` cung cấp trạng thái FFmpeg, Python, CPU, ổ đĩa và hàng đợi
+sau khi browser đã được cấp quyền.
 
 ## Lệnh tiện ích
 
@@ -148,3 +156,23 @@ The intended deployment boundary is:
 
 The current implementation remains local; no public deployment or external
 database is enabled.
+
+## Đóng gói Local Engine cho Windows
+
+Cài dependency runtime và build trong virtual environment của dự án:
+
+```powershell
+venv\Scripts\python.exe -m pip install -r requirements-windows.txt
+venv\Scripts\python.exe -m pip install -r requirements-build.txt
+.\scripts\build_windows.ps1
+```
+
+Bản portable được tạo tại `dist\ReupAI\ReupAI.exe`. Nếu máy build có Inno
+Setup (`iscc`) thì script đồng thời tạo installer trong `release\`. Có thể dùng
+`-SkipInstaller` để chỉ tạo bản portable.
+
+Ứng dụng chỉ lắng nghe tại `127.0.0.1:17888`, mở frontend
+`https://www.reupai.cloud` và nằm trong khay hệ thống. Dữ liệu production được
+lưu trong `%LOCALAPPDATA%\ReupAI`; cấu hình Local Engine nằm tại
+`%LOCALAPPDATA%\ReupAI\config\engine.env`. Gỡ ứng dụng không xóa video, project
+hoặc thành phẩm của người dùng.

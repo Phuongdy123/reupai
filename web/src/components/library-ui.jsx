@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "./icon";
 
-export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", cancelled: "Đã dừng", stopped: "Đã dừng" };
+export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", interrupted: "Bị gián đoạn", cancelled: "Đã dừng", stopped: "Đã dừng" };
 export const ACTIVE_JOBS = new Set(["queued", "processing", "running", "stopping"]);
 export const numberText = (value) => Number(value || 0).toLocaleString("vi-VN");
 export const progressValue = (value) => Math.round(Math.max(0, Math.min(100, Number(value) || 0)));

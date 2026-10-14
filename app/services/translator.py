@@ -1,11 +1,13 @@
 import hashlib
+from pathlib import Path
 import json
 import os
 import re
 import time
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from google import genai
+from runtime_paths import get_config_dir
 from google.genai import types
 
 
@@ -13,13 +15,28 @@ from google.genai import types
 # CONFIG
 # =========================================================
 
-load_dotenv()
+# The packaged Local Engine stores user configuration outside the install folder.
+# Load it explicitly because pipeline child processes do not inherit the desktop
+# process environment on every Windows launch.
+ENGINE_ENV_PATH = Path(
+    os.getenv("REUP_ENGINE_CONFIG_PATH", "").strip()
+    or get_config_dir() / "engine.env"
+)
+engine_values = dotenv_values(ENGINE_ENV_PATH)
+engine_api_key = (engine_values.get("GEMINI_API_KEY") or "").strip()
+if engine_api_key:
+    os.environ["GEMINI_API_KEY"] = engine_api_key
+load_dotenv(ENGINE_ENV_PATH, override=True)
+
+# Preserve the existing development workflow where the project .env is used.
+if not os.getenv("GEMINI_API_KEY"):
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not API_KEY:
     raise ValueError(
-        "Khong tim thay GEMINI_API_KEY trong file .env"
+        r"Chua cau hinh GEMINI_API_KEY. Mo %LOCALAPPDATA%\ReupAI\config\engine.env va them GEMINI_API_KEY=<your-key>."
     )
 
 client = genai.Client(

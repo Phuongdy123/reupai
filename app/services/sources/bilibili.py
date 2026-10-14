@@ -203,6 +203,22 @@ def normalize_video(item):
         or item.get("created")
     )
 
+    dimension = item.get("dimension") or {}
+
+    def duration_seconds(value):
+        if isinstance(value, str) and ":" in value:
+            try:
+                total = 0
+                for unit in value.split(":"):
+                    total = total * 60 + int(unit)
+                return total
+            except ValueError:
+                return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
+
     return {
         "platform":
             "bilibili",
@@ -222,6 +238,20 @@ def normalize_video(item):
 
         "cover_url":
             cover,
+
+        "duration_seconds": duration_seconds(item.get("duration")),
+
+        "video_width": safe_int(
+            dimension.get("width")
+            if isinstance(dimension, dict)
+            else item.get("width")
+        ) or None,
+
+        "video_height": safe_int(
+            dimension.get("height")
+            if isinstance(dimension, dict)
+            else item.get("height")
+        ) or None,
 
         "published_at":
             format_timestamp(
