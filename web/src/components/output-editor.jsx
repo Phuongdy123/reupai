@@ -26,6 +26,34 @@ function drawRect(context, rect, color, label) {
   context.restore();
 }
 
+function rectHandle(rect, point, radius) {
+  if (!rect) return null;
+  const corners = {
+    nw: { x: rect.x, y: rect.y }, ne: { x: rect.x + rect.width, y: rect.y },
+    sw: { x: rect.x, y: rect.y + rect.height }, se: { x: rect.x + rect.width, y: rect.y + rect.height },
+  };
+  return Object.entries(corners).find(([, corner]) => Math.hypot(point.x - corner.x, point.y - corner.y) <= radius)?.[0] || null;
+}
+
+function pointInRect(rect, point) {
+  return Boolean(rect && point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height);
+}
+
+function moveRect(rect, dx, dy, bounds) {
+  return { ...rect, x: Math.max(0, Math.min(bounds.width - rect.width, Math.round(rect.x + dx))), y: Math.max(0, Math.min(bounds.height - rect.height, Math.round(rect.y + dy))) };
+}
+
+function resizeRect(rect, handle, point, bounds) {
+  const right = rect.x + rect.width;
+  const bottom = rect.y + rect.height;
+  const next = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+  if (handle.includes("w")) { next.x = Math.max(0, Math.min(point.x, right - 2)); next.width = right - next.x; }
+  if (handle.includes("e")) next.width = Math.max(2, Math.min(bounds.width, point.x) - rect.x);
+  if (handle.includes("n")) { next.y = Math.max(0, Math.min(point.y, bottom - 2)); next.height = bottom - next.y; }
+  if (handle.includes("s")) next.height = Math.max(2, Math.min(bounds.height, point.y) - rect.y);
+  return cleanRect(next);
+}
+
 export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -52,6 +80,11 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     const context = canvas.getContext("2d");
     context.clearRect(0, 0, canvas.width, canvas.height);
     drawRect(context, region, "#ff3850", "Vùng phụ đề");
+    if (region) {
+      const radius = Math.max(14, Math.round(context.canvas.width / 96));
+      context.fillStyle = "#ff3850";
+      [[region.x, region.y], [region.x + region.width, region.y], [region.x, region.y + region.height], [region.x + region.width, region.y + region.height]].forEach(([x, y]) => { context.beginPath(); context.arc(x, y, radius, 0, Math.PI * 2); context.fill(); });
+    }
     intervals.forEach((entry, index) => drawRect(context, entry, "#21d3a2", `Chi tiết ${index + 1}`));
     drawRect(context, draft, "#ffd166", "Vùng mới");
   }, [dimensions, draft, intervals, region]);
@@ -102,12 +135,25 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       y: Math.max(0, Math.min(canvas.height, (event.clientY - bounds.top) * canvas.height / bounds.height)),
     };
   };
-  const pointerDown = (event) => { if (!dimensions) return; event.currentTarget.setPointerCapture(event.pointerId); dragRef.current = point(event); };
+  const pointerDown = (event) => {
+    if (!dimensions) return;
+    const start = point(event);
+    event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
+    if (tool === "subtitle" && region) {
+      const handle = rectHandle(region, start, Math.max(24, Math.round(dimensions.width / 76)));
+      if (handle) { dragRef.current = { type: "resize", handle, start, rect: region }; return; }
+      if (pointInRect(region, start)) { dragRef.current = { type: "move", start, rect: region }; return; }
+    }
+    dragRef.current = { type: "create", start };
+  };
   const pointerMove = (event) => {
-    const start = dragRef.current;
-    if (!start) return;
+    const drag = dragRef.current;
+    if (!drag) return;
     const end = point(event);
-    const next = cleanRect({ x: Math.min(start.x, end.x), y: Math.min(start.y, end.y), width: Math.abs(end.x - start.x), height: Math.abs(end.y - start.y) });
+    let next;
+    if (drag.type === "move") next = moveRect(drag.rect, end.x - drag.start.x, end.y - drag.start.y, dimensions);
+    else if (drag.type === "resize") next = resizeRect(drag.rect, drag.handle, end, dimensions);
+    else next = cleanRect({ x: Math.min(drag.start.x, end.x), y: Math.min(drag.start.y, end.y), width: Math.abs(end.x - drag.start.x), height: Math.abs(end.y - drag.start.y) });
     if (tool === "subtitle") setRegion(next); else setDraft(next);
   };
   const pointerUp = (event) => { dragRef.current = null; try { event.currentTarget.releasePointerCapture(event.pointerId); } catch (_) {} };
@@ -142,7 +188,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       <div className="modal-head"><div><strong className="modal-title">Chỉnh vùng mờ · {modeLabel(item.mode)}</strong><p className="muted">{item.title || item.video_id} · chỉ xuất lại video, không tải hay chạy AI lại.</p></div><button className="btn secondary" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button></div>
       {loading ? <Loading label="Đang mở video nguồn và cấu hình trước đó" /> : error && !sourceUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <div className="output-editor-body">
         <ErrorMessage error={error} /><Notice>{notice}</Notice>
-        <div className="output-editor-help"><button className={`btn ${tool === "subtitle" ? "primary" : "secondary"}`} onClick={() => setTool("subtitle")}>1. Kéo vùng phụ đề</button><button className={`btn ${tool === "detail" ? "primary" : "secondary"}`} onClick={() => setTool("detail")}>2. Vùng chi tiết</button><span>{tool === "subtitle" ? "Kéo trực tiếp để đặt lại vùng che phụ đề gốc." : "Kéo để khoanh chi tiết cần làm mờ, sau đó thêm khoảng thời gian."}</span></div>
+        <div className="output-editor-help"><button className={`btn ${tool === "subtitle" ? "primary" : "secondary"}`} onClick={() => setTool("subtitle")}>1. Kéo vùng phụ đề</button><button className={`btn ${tool === "detail" ? "primary" : "secondary"}`} onClick={() => setTool("detail")}>2. Vùng chi tiết</button>{tool === "subtitle" && <button className="btn secondary" onClick={() => setRegion(null)}>Đặt lại vùng</button>}<span>{tool === "subtitle" ? "Kéo giữa khung đỏ để di chuyển; kéo chấm ở góc để đổi kích thước. Bấm Đặt lại để khoanh vùng mới." : "Kéo để khoanh chi tiết cần làm mờ, sau đó thêm khoảng thời gian."}</span></div>
         <div className="output-editor-stage">{sourceUrl && <><video ref={videoRef} src={sourceUrl} controls playsInline crossOrigin="anonymous" onLoadedMetadata={syncCanvas} onCanPlay={syncCanvas} onResize={syncCanvas} onError={() => setError("Không thể mở video nguồn local. Hãy kiểm tra Local Engine rồi thử lại.")} /><canvas ref={canvasRef} className="output-editor-canvas" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} /></>}</div>
         <div className="output-editor-summary"><span>Vùng phụ đề: {region ? `${region.x}, ${region.y} · ${region.width} × ${region.height}px` : "chưa chọn"}</span>{dimensions && <span>Video gốc: {dimensions.width} × {dimensions.height}px</span>}</div>
         <div className="output-editor-detail"><div><strong>Vùng mờ chi tiết</strong><p>Ví dụ che logo, chữ hoặc thông tin chỉ xuất hiện trong một đoạn.</p></div><button className="btn secondary" onClick={addInterval} disabled={!draft}><Icon name="plus" size={16} />Thêm vùng đang chọn</button></div>
