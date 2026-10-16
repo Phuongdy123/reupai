@@ -451,7 +451,7 @@ class ProcessRequest(BaseModel):
     subtitle_font_size: Optional[int] = None
     blur_region: Optional[dict[str, float]] = None
     blur_preset: Optional[str] = None
-    blur_intervals: list[dict[str, float]] = []
+    blur_intervals: list[dict[str, Any]] = []
     custom_blur_region: Optional[dict[str, float]] = None
     auto_brand_blur: bool = False
     logo_mode: str = "default"
@@ -478,7 +478,9 @@ class RenderEditRequest(BaseModel):
     channel: str = "2d_animation"
     mode: Literal["subtitle", "voiceover"] = "subtitle"
     blur_region: Optional[dict[str, float]] = None
-    blur_intervals: list[dict[str, float]] = []
+    # `kind` is UI metadata (logo versus a timed detail) retained with the
+    # local job config.  The renderer only reads numeric geometry/timing keys.
+    blur_intervals: list[dict[str, Any]] = []
     # Voice changes are available only for an existing voiceover.  The worker
     # regenerates local TTS clips, then renders from the saved source/SRT.
     voice: Optional[str] = None

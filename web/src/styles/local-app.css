@@ -1893,7 +1893,8 @@ tbody tr:hover {
 .output-editor-help span { flex:1 1 260px; color:var(--muted); font-size:12px; }
 .output-editor-stage { position:relative; width:fit-content; max-width:100%; margin:0 auto; background:#02050a; line-height:0; overflow:hidden; border-radius:12px; border:1px solid var(--line); }
 .output-editor-stage video { width:auto; max-width:min(100%, 880px); max-height:56vh; height:auto; margin:0; }
-.output-editor-canvas { position:absolute; inset:0; cursor:crosshair; touch-action:none; }
+.output-editor-canvas { position:absolute; inset:0; pointer-events:none; touch-action:none; }
+.output-editor-canvas.editable { pointer-events:auto; cursor:crosshair; }
 .output-editor-summary { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:12px; }
 .output-editor-detail { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:4px; }
 .output-editor-detail-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
