@@ -1807,23 +1807,34 @@ function buildCard(
                 <div class="progress-head">
 
                     <div class="progress-copy">
+
+                        <span class="progress-state">
+                            <span class="progress-pulse"></span>
+                            Đang xử lý
+                        </span>
+
                         <div class="progress-stage">
                             Đang chuẩn bị
                         </div>
 
+                    </div>
+
+                    <div class="progress-actions">
+
                         <div class="progress-text">
                             0%
                         </div>
-                    </div>
 
-                    <button
-                        class="stop-process-btn modern-icon-btn"
-                        type="button"
-                        title="Ngừng xử lý"
-                        aria-label="Ngừng xử lý"
-                    >
-                        ${uiIcon('stop', 15)}
-                    </button>
+                        <button
+                            class="stop-process-btn modern-icon-btn"
+                            type="button"
+                            title="Ngừng xử lý"
+                            aria-label="Ngừng xử lý"
+                        >
+                            ${uiIcon('stop', 15)}
+                        </button>
+
+                    </div>
 
                 </div>
 
@@ -1832,6 +1843,8 @@ function buildCard(
                 </div>
 
                 <div class="progress-footer">
+                    <span class="progress-live-note">Cập nhật trực tiếp</span>
+
                     <details class="process-details">
                         <summary>
                             Chi tiết
@@ -12206,6 +12219,205 @@ function injectV135MoreButtonFix() {
 
 
 injectV135MoreButtonFix();
+
+
+// =========================================================
+// V13.6 PROCESSING PANEL POLISH
+// =========================================================
+
+function injectV136ProcessingPanelPolish() {
+
+    if (document.getElementById('v136ProcessingPanelPolish')) return;
+
+    const style = document.createElement('style');
+    style.id = 'v136ProcessingPanelPolish';
+    style.textContent = `
+        #videos .progress-wrap {
+            margin-top: 14px !important;
+            padding: 12px 13px !important;
+            border: 1px solid rgba(251, 56, 80, .26) !important;
+            border-radius: 13px !important;
+            background:
+                linear-gradient(135deg, rgba(40, 20, 30, .58), rgba(16, 24, 38, .96) 42%, rgba(14, 22, 35, .98)) !important;
+            box-shadow: inset 3px 0 0 rgba(251, 56, 80, .9), 0 10px 24px rgba(0, 0, 0, .14) !important;
+        }
+
+        #videos .progress-head {
+            display: flex !important;
+            align-items: flex-start !important;
+            justify-content: space-between !important;
+            gap: 12px !important;
+            margin-bottom: 10px !important;
+        }
+
+        #videos .progress-copy {
+            display: grid !important;
+            grid-template-columns: auto minmax(0, 1fr) !important;
+            align-items: center !important;
+            gap: 9px !important;
+            min-width: 0 !important;
+        }
+
+        #videos .progress-state {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            min-height: 22px !important;
+            padding: 0 8px !important;
+            border: 1px solid rgba(251, 56, 80, .25) !important;
+            border-radius: 999px !important;
+            background: rgba(251, 56, 80, .11) !important;
+            color: #ff9cab !important;
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            letter-spacing: .025em !important;
+            white-space: nowrap !important;
+        }
+
+        #videos .progress-pulse {
+            width: 6px !important;
+            height: 6px !important;
+            border-radius: 50% !important;
+            background: #ff4761 !important;
+            box-shadow: 0 0 0 4px rgba(255, 71, 97, .12) !important;
+            animation: reup-progress-pulse 1.45s ease-in-out infinite !important;
+        }
+
+        #videos .progress-stage {
+            color: #e3e9f4 !important;
+            font-size: 12px !important;
+            font-weight: 650 !important;
+            line-height: 1.35 !important;
+        }
+
+        #videos .progress-actions {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 8px !important;
+            flex: none !important;
+        }
+
+        #videos .progress-text {
+            display: inline-grid !important;
+            place-items: center !important;
+            min-width: 39px !important;
+            height: 28px !important;
+            margin: 0 !important;
+            padding: 0 7px !important;
+            border: 1px solid rgba(148, 163, 184, .18) !important;
+            border-radius: 8px !important;
+            background: rgba(15, 23, 42, .72) !important;
+            color: #f4f7fb !important;
+            font-size: 11px !important;
+            font-weight: 850 !important;
+            font-variant-numeric: tabular-nums !important;
+        }
+
+        #videos .stop-process-btn {
+            width: 28px !important;
+            height: 28px !important;
+            min-width: 28px !important;
+            border-color: rgba(251, 86, 103, .45) !important;
+            border-radius: 8px !important;
+            background: rgba(251, 56, 80, .13) !important;
+            color: #ff8494 !important;
+        }
+
+        #videos .stop-process-btn:hover:not(:disabled) {
+            border-color: rgba(255, 128, 143, .78) !important;
+            background: rgba(251, 56, 80, .24) !important;
+            color: #fff !important;
+        }
+
+        #videos .progress {
+            position: relative !important;
+            height: 7px !important;
+            border: 1px solid rgba(148, 163, 184, .10) !important;
+            border-radius: 999px !important;
+            background: rgba(2, 6, 14, .72) !important;
+        }
+
+        #videos .progress-bar {
+            position: relative !important;
+            border-radius: inherit !important;
+            background: linear-gradient(90deg, #ec1838 0%, #ff4e67 62%, #ff8a9a 100%) !important;
+            box-shadow: 0 0 14px rgba(251, 56, 80, .34) !important;
+            transition: width .45s ease !important;
+        }
+
+        #videos .progress-bar::after {
+            content: "" !important;
+            position: absolute !important;
+            inset: 0 !important;
+            border-radius: inherit !important;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent) !important;
+            transform: translateX(-100%) !important;
+            animation: reup-progress-shine 1.8s linear infinite !important;
+        }
+
+        #videos .progress-footer {
+            min-height: 19px !important;
+            margin-top: 9px !important;
+            align-items: center !important;
+        }
+
+        #videos .progress-live-note {
+            color: #71819a !important;
+            font-size: 10px !important;
+            font-weight: 650 !important;
+        }
+
+        #videos .process-details {
+            flex: 0 0 auto !important;
+        }
+
+        #videos .process-details > summary {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 5px !important;
+            min-height: 23px !important;
+            color: #9aabc4 !important;
+            font-size: 10px !important;
+            font-weight: 750 !important;
+        }
+
+        #videos .process-details > summary::before {
+            content: "›" !important;
+            color: #ff7285 !important;
+            font-size: 15px !important;
+            line-height: 1 !important;
+            transition: transform .15s ease !important;
+        }
+
+        #videos .process-details[open] > summary::before {
+            transform: rotate(90deg) !important;
+        }
+
+        #videos .process-details[open] .log {
+            margin-top: 8px !important;
+            border: 1px solid rgba(148,163,184,.12) !important;
+        }
+
+        @keyframes reup-progress-pulse {
+            50% { opacity: .52; transform: scale(.8); }
+        }
+
+        @keyframes reup-progress-shine {
+            to { transform: translateX(100%); }
+        }
+
+        @media (max-width: 620px) {
+            #videos .progress-head { gap: 8px !important; }
+            #videos .progress-copy { grid-template-columns: 1fr !important; gap: 5px !important; }
+            #videos .progress-state { width: max-content !important; }
+            #videos .progress-live-note { display: none !important; }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+
+injectV136ProcessingPanelPolish();
 
 
 
