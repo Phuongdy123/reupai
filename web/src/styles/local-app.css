@@ -1887,17 +1887,30 @@ tbody tr:hover {
 .outputs-grid {
     grid-template-columns:repeat(auto-fill, minmax(330px, 1fr));
     gap:18px;
+    align-items:start;
 }
 .output-library-card {
     display:flex;
     min-width:0;
+    align-self:start;
     flex-direction:column;
     border-color:rgba(129, 147, 178, .22);
     background:linear-gradient(155deg, rgba(24,34,52,.96), rgba(13,20,33,.98));
 }
 .output-library-card .library-cover {
+    height:186px;
+    min-height:0;
     aspect-ratio:16 / 8.4;
+    overflow:hidden;
     border-bottom:1px solid rgba(148, 163, 184, .14);
+}
+.output-library-card .library-cover .library-preview,
+.output-library-card .library-cover img {
+    width:100%;
+    min-width:0;
+    height:100% !important;
+    min-height:0;
+    object-fit:cover;
 }
 .output-library-card .library-cover::after {
     position:absolute;
@@ -1952,6 +1965,7 @@ tbody tr:hover {
 }
 .output-library-card .library-actions .btn {
     display:inline-flex;
+    width:100%;
     min-width:0;
     min-height:38px;
     justify-content:center;
@@ -1960,11 +1974,11 @@ tbody tr:hover {
     white-space:nowrap;
 }
 .output-library-card .library-actions .output-edit-result {
-    overflow:hidden;
+    overflow:visible;
     padding:0 8px;
     color:#d9e2f0;
-    font-size:11px;
-    text-overflow:ellipsis;
+    font-size:10px;
+    letter-spacing:-.01em;
 }
 .output-library-card .output-edit-result .icon {
     flex:0 0 auto;
@@ -1972,8 +1986,8 @@ tbody tr:hover {
 @media (max-width:440px) {
     .outputs-grid { grid-template-columns:minmax(0, 1fr); }
     .output-library-card .library-actions { grid-template-columns:70px 63px minmax(0, 1fr); gap:6px; }
-    .output-library-card .library-actions .btn { padding:0 7px; font-size:11px; }
-    .output-library-card .library-actions .output-edit-result { font-size:10px; }
+    .output-library-card .library-actions .btn { min-width:0; padding:0 7px; font-size:11px; }
+    .output-library-card .library-actions .output-edit-result { font-size:9.5px; }
 }
 
 /* Output-only blur editor. Coordinates remain in the original source pixels. */
