@@ -1882,3 +1882,25 @@ tbody tr:hover {
 .local-engine-indicator[data-state="permission_denied"] .local-engine-dot { background:#ef4444; }
 .local-engine-action { border:1px solid var(--border,#334155); border-radius:8px; padding:7px 10px; background:transparent; color:inherit; cursor:pointer; margin-right:5px; }
 .local-engine-action:hover { border-color:#8b5cf6; color:#c4b5fd; }
+
+/* Output-only blur editor. Coordinates remain in the original source pixels. */
+.output-editor { width:min(1120px, 97vw); max-height:94vh; overflow:auto; }
+.output-editor .modal-head { align-items:flex-start; gap:16px; border-bottom:1px solid var(--line); }
+.output-editor .muted { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.output-editor-body { padding:16px; display:grid; gap:13px; }
+.output-editor-help { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:11px; border:1px solid var(--line); border-radius:12px; background:rgba(15,23,42,.5); }
+.output-editor-help span { flex:1 1 260px; color:var(--muted); font-size:12px; }
+.output-editor-stage { position:relative; width:fit-content; max-width:100%; margin:0 auto; background:#02050a; line-height:0; overflow:hidden; border-radius:12px; border:1px solid var(--line); }
+.output-editor-stage video { width:auto; max-width:min(100%, 880px); max-height:56vh; height:auto; margin:0; }
+.output-editor-canvas { position:absolute; inset:0; cursor:crosshair; touch-action:none; }
+.output-editor-summary { display:flex; flex-wrap:wrap; gap:8px 16px; color:var(--muted); font-size:12px; }
+.output-editor-detail { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:4px; }
+.output-editor-detail strong { display:block; }
+.output-editor-detail p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+.output-editor-intervals { display:grid; gap:8px; }
+.output-editor-interval { display:grid; grid-template-columns:minmax(110px,1fr) minmax(110px,.8fr) minmax(110px,.8fr) auto; align-items:end; gap:8px; padding:10px; border:1px solid var(--line); border-radius:10px; background:rgba(15,23,42,.38); }
+.output-editor-interval > span { align-self:center; font-weight:750; }
+.output-editor-interval label { display:grid; gap:5px; color:var(--muted); font-size:11px; font-weight:700; }
+.output-editor-interval input { min-width:0; }
+.output-editor-actions { display:flex; justify-content:flex-end; gap:8px; padding-top:5px; }
+@media (max-width:650px) { .output-editor { width:100vw; height:100vh; max-height:none; border-radius:0; } .output-editor-stage video { max-height:45vh; } .output-editor-interval { grid-template-columns:1fr 1fr; } .output-editor-interval > span { grid-column:1/-1; } .output-editor-interval .btn { grid-column:1/-1; } .output-editor-detail { align-items:flex-start; flex-direction:column; } }

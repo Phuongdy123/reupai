@@ -50,9 +50,12 @@ from web.server import (
     DownloadRequest,
     PageRequest,
     ProcessRequest,
+    RenderEditRequest,
     SourceRequest,
     api_download,
     api_process,
+    api_output_edit,
+    api_output_rerender,
     api_process_status,
     api_process_stop,
     api_videos,
@@ -630,6 +633,16 @@ def local_request() -> Request:
 @app.post("/api/process")
 def process(body: ProcessRequest, _: bool = Depends(require_token)):
     return api_process(body, local_request())
+
+
+@app.get("/api/outputs/{video_id}/edit")
+def output_edit(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
+    return api_output_edit(video_id=video_id, channel=channel, mode=mode)
+
+
+@app.post("/api/outputs/{video_id}/rerender")
+def output_rerender(video_id: str, body: RenderEditRequest, _: bool = Depends(require_token)):
+    return api_output_rerender(video_id=video_id, body=body, request=local_request())
 
 
 @app.get("/api/jobs")

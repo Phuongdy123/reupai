@@ -632,6 +632,37 @@ def list_active_jobs(
         conn.close()
 
 
+def latest_completed_job(*, platform_video_id: str, channel_key: str, mode: str):
+    """Return the last usable job snapshot for a local render revision."""
+    ensure_job_schema()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT id, platform_video_id, channel_key, mode, status, source_path,
+                   output_path, config_json, request_url, completed_at, updated_at
+            FROM jobs
+            WHERE platform_video_id = ?
+              AND channel_key = ?
+              AND mode = ?
+              AND status = 'completed'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (str(platform_video_id), str(channel_key), str(mode)),
+        ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["config"] = json.loads(result.pop("config_json") or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            result["config"] = {}
+        return result
+    finally:
+        conn.close()
+
+
 def file_stats():
     ensure_job_schema()
     conn = get_connection()

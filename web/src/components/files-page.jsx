@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, Loading, Notice, Pager, PreviewDialog, VideoCover, dateText, outputPath, sourceHref, sourcePath } from "./library-ui";
+import { OutputEditor } from "./output-editor";
 
 const PAGE_SIZE = 12;
 export function FilesPage({ kind }) {
@@ -18,6 +19,7 @@ export function FilesPage({ kind }) {
   const [page, setPage] = useState(1);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [editor, setEditor] = useState(null);
   const isOutputs = kind === "outputs";
   const title = isOutputs ? "Thành phẩm" : "Video đã tải";
   const load = useCallback(async () => {
@@ -48,9 +50,10 @@ export function FilesPage({ kind }) {
       {loading && <Loading label="Đang đọc thư viện trên máy" />}
       {!loading && !items.length && <div className="empty-state">{isOutputs ? <>Chưa tìm thấy thành phẩm. Chạy Vietsub hoặc Voice từ <Link className="text-link" href="/sources">Nguồn video</Link> để tạo video hoàn tất.</> : <>Chưa có video tải về. Vào <Link className="text-link" href="/sources">Nguồn video</Link> để tải video đầu tiên.</>}</div>}
       {!loading && items.length > 0 && !filtered.length && <div className="empty-state">Không có video phù hợp bộ lọc. <button className="text-link" onClick={() => { setQuery(""); setMode(""); }}>Xóa bộ lọc</button></div>}
-      {!loading && filtered.length > 0 && <div className="library-grid">{filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className="library-card" key={`${item.video_id}-${item.mode || "source"}`}><VideoCover client={client} video={item} previewPath={normalized(item).file_path}>{isOutputs && <span className="mode-badge">{item.mode_label || (item.mode === "voiceover" ? "Vietsub + Voice" : "Vietsub")}</span>}</VideoCover><div className="library-body"><h3>{item.title || item.video_id}</h3><div className="library-meta"><span>{item.video_id}</span>{item.channel && <span>{item.channel}</span>}{item.size_text && <span>{item.size_text}</span>}{item.updated_at && <span>{dateText(item.updated_at)}</span>}</div><div className="library-actions"><button className="btn primary" onClick={() => openPreview(item)}><Icon name="play" size={16} />Xem</button><button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}`} onClick={() => download(item)}><Icon name="download" size={16} />{busy === `${item.video_id}-${item.mode || "source"}` ? "Đang tải…" : "Tải"}</button>{!isOutputs && <Link className="btn secondary" href={sourceHref(item)}><Icon name="spark" size={16} />Xử lý AI</Link>}</div></div></article>)}</div>}
+      {!loading && filtered.length > 0 && <div className="library-grid">{filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className="library-card" key={`${item.video_id}-${item.mode || "source"}`}><VideoCover client={client} video={item} previewPath={normalized(item).file_path}>{isOutputs && <span className="mode-badge">{item.mode_label || (item.mode === "voiceover" ? "Vietsub + Voice" : "Vietsub")}</span>}</VideoCover><div className="library-body"><h3>{item.title || item.video_id}</h3><div className="library-meta"><span>{item.video_id}</span>{item.channel && <span>{item.channel}</span>}{item.size_text && <span>{item.size_text}</span>}{item.updated_at && <span>{dateText(item.updated_at)}</span>}</div><div className="library-actions"><button className="btn primary" onClick={() => openPreview(item)}><Icon name="play" size={16} />Xem</button><button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}`} onClick={() => download(item)}><Icon name="download" size={16} />{busy === `${item.video_id}-${item.mode || "source"}` ? "Đang tải…" : "Tải"}</button>{isOutputs && <button className="btn secondary" onClick={() => setEditor(item)}><Icon name="settings" size={16} />Chỉnh vùng mờ</button>}{!isOutputs && <Link className="btn secondary" href={sourceHref(item)}><Icon name="spark" size={16} />Xử lý AI</Link>}</div></div></article>)}</div>}
       {!loading && <Pager page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />}
     </section>
     {preview && <PreviewDialog client={client} item={preview} onClose={() => setPreview(null)} onError={setError} />}
+    {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setNotice("Đã vào hàng đợi xuất lại. Theo dõi tiến độ ở Dashboard hoặc Lịch sử."); setEditor(null); }} />}
   </>;
 }

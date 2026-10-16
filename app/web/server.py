@@ -133,6 +133,7 @@ from services.job_db import (
     create_job,
     fail_job,
     file_stats,
+    latest_completed_job,
     list_active_jobs,
     mark_job_started,
     recover_interrupted_jobs,
@@ -466,6 +467,17 @@ class ProcessRequest(BaseModel):
     logo_size: Optional[float] = None
     logo_x: Optional[float] = None
     logo_y: Optional[float] = None
+    # A render revision reuses the already downloaded source, translated SRT
+    # and generated voice. It is only produced by the authenticated editor.
+    render_only: bool = False
+    rerender_music_path: Optional[str] = None
+
+
+class RenderEditRequest(BaseModel):
+    channel: str = "2d_animation"
+    mode: Literal["subtitle", "voiceover"] = "subtitle"
+    blur_region: Optional[dict[str, float]] = None
+    blur_intervals: list[dict[str, float]] = []
 
 
 # =========================================================
@@ -4849,6 +4861,96 @@ def api_process(
                 is not None
             ),
     }
+
+
+def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
+    """Read only the local artifacts required to revise a finished output."""
+    video_id = validate_video_id(video_id)
+    channel = validate_channel(channel)
+    if mode not in {"subtitle", "voiceover"}:
+        raise HTTPException(status_code=400, detail="Mode không hợp lệ.")
+
+    output = find_result_file(channel, video_id, mode)
+    if not output:
+        raise HTTPException(status_code=404, detail="Chưa có thành phẩm để chỉnh sửa.")
+
+    previous = latest_completed_job(
+        platform_video_id=video_id,
+        channel_key=channel,
+        mode=mode,
+    ) or {}
+    region_data = read_json_file(job_dir_for(channel, video_id) / "subtitle_region.json") or {}
+    blur = region_data.get("blur") if isinstance(region_data, dict) else None
+    config = previous.get("config") if isinstance(previous, dict) else {}
+    config = config if isinstance(config, dict) else {}
+    return {
+        "video_id": video_id,
+        "channel": channel,
+        "mode": mode,
+        "blur_region": blur if isinstance(blur, dict) else None,
+        "blur_intervals": [
+            item for item in (config.get("blur_intervals") or []) if isinstance(item, dict)
+        ],
+        "source_ready": bool(local_source_for_process(channel, video_id)),
+        "can_rerender": bool(previous),
+    }
+
+
+@app.get("/api/outputs/{video_id}/edit")
+def api_output_edit(video_id: str, channel: str = "2d_animation", mode: str = "subtitle"):
+    return _output_edit_snapshot(video_id, channel, mode)
+
+
+@app.post("/api/outputs/{video_id}/rerender")
+def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request):
+    """Queue an output-only revision without download, AI, or TTS stages."""
+    snapshot = _output_edit_snapshot(video_id, body.channel, body.mode)
+    if not snapshot["source_ready"]:
+        raise HTTPException(status_code=409, detail="Không tìm thấy video nguồn local để xuất lại.")
+    if not snapshot["can_rerender"]:
+        raise HTTPException(status_code=409, detail="Thiếu cấu hình của lần xuất trước; hãy xử lý lại video từ Nguồn video.")
+
+    previous = latest_completed_job(
+        platform_video_id=snapshot["video_id"],
+        channel_key=snapshot["channel"],
+        mode=snapshot["mode"],
+    )
+    previous_config = dict((previous or {}).get("config") or {})
+    # Never carry browser uploads into a revision request. Existing local
+    # assets are retained by the renderer; no file content goes through web.
+    previous_config.pop("logo_data", None)
+    previous_config.pop("music_data", None)
+    previous_config.pop("music_url", None)
+    # Reuse an already-downloaded local music track if the previous render
+    # had one. Its path is derived locally rather than supplied by the browser.
+    previous_music = next(
+        (path for path in job_dir_for(snapshot["channel"], snapshot["video_id"]).glob("background_*") if file_ok(path)),
+        None,
+    )
+    if previous_music:
+        previous_config["rerender_music_path"] = str(previous_music)
+    previous_config.update({
+        "url": (previous or {}).get("request_url") or (
+            f"https://www.bilibili.com/video/{snapshot['video_id']}/"
+            if snapshot["video_id"].startswith("BV")
+            else f"https://www.douyin.com/video/{snapshot['video_id']}"
+        ),
+        "video_id": snapshot["video_id"],
+        "channel": snapshot["channel"],
+        "mode": snapshot["mode"],
+        "render_only": True,
+        "preview_seconds": None,
+    })
+    # A missing main region deliberately means no main blur; empty intervals
+    # deliberately remove prior custom regions. This makes revisions precise.
+    if "blur_region" in body.model_fields_set:
+        previous_config["blur_region"] = body.blur_region
+        previous_config["blur_preset"] = None
+    if "blur_intervals" in body.model_fields_set:
+        previous_config["blur_intervals"] = body.blur_intervals
+        previous_config["custom_blur_region"] = None
+
+    return api_process(ProcessRequest(**previous_config), request)
 
 
 @app.post(

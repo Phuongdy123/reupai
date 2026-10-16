@@ -2565,6 +2565,78 @@ def render_subtitle_only(
 
 
 
+
+def rerender_existing_output(
+    *,
+    url: str,
+    job_dir: Path,
+    mode: str,
+    source_file: str | None,
+    output_path: Path,
+    ass_path: Path,
+    region_path: Path,
+    region_preview: Path,
+    vietnamese_srt: Path,
+    voice_path: Path,
+    config: dict,
+    original_volume: float,
+    voice_volume: float,
+):
+    """Render an edited result from existing local pipeline artifacts only."""
+    if not source_file:
+        raise FileNotFoundError("Khong tim thay video nguon local de xuat lai.")
+    source_video = get_source_video(url, job_dir, source_file, force=False)
+    if not vietnamese_srt.is_file():
+        raise FileNotFoundError("Khong tim thay phu de Viet da tao truoc do.")
+    if mode == "voiceover" and not file_ok(voice_path):
+        raise FileNotFoundError("Khong tim thay file voice da tao truoc do.")
+
+    # Keep the last selection if an API caller omits it. Never invoke OCR for
+    # an output-only revision unless there is no saved region at all.
+    if not isinstance(config.get("blur_region"), dict) and region_path.is_file():
+        try:
+            previous_region = json.loads(region_path.read_text(encoding="utf-8"))
+            if isinstance(previous_region.get("blur"), dict):
+                config = {**config, "blur_region": previous_region["blur"]}
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+
+    write_progress(job_dir, stage="render", percent=15, status="running", message="Dang chuan bi xuat lai thanh pham.", mode=mode)
+    region = resolve_subtitle_region(source_video, region_path, region_preview, config=config, no_subtitle=False, force=True)
+    intervals = [dict(item) for item in (config.get("blur_intervals") or []) if isinstance(item, dict)]
+    custom_only = config.get("custom_blur_region")
+    if isinstance(custom_only, dict) and not intervals:
+        intervals.append({**custom_only, "start": 0, "end": 86400})
+
+    temporary_output = output_path.with_name(f".{output_path.stem}.rerendering{output_path.suffix}")
+    temporary_output.unlink(missing_ok=True)
+    write_progress(job_dir, stage="render", percent=35, status="running", message="Dang xuat lai video voi vung mo da chinh.", mode=mode)
+    common = {
+        "preview_seconds": None,
+        "font_size": config.get("subtitle_font_size"),
+        "aspect_ratio": config.get("aspect_ratio"),
+        "logo_size": config.get("logo_size"),
+        "logo_x": config.get("logo_x"),
+        "logo_y": config.get("logo_y"),
+        "logo_mode": config.get("logo_mode", "default"),
+        "logo_text": config.get("logo_text"),
+        "logo_path": config.get("logo_path"),
+        "blur_intervals": intervals,
+        "music_path": config.get("music_path"),
+        "music_volume": float(config.get("music_volume", 0.12)),
+        "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
+        "force": True,
+    }
+    if mode == "voiceover":
+        render_voiceover(source_video, voice_path, vietnamese_srt, region_path, ass_path, temporary_output, region, original_volume=original_volume, voice_volume=voice_volume, **common)
+    else:
+        render_subtitle_only(source_video, vietnamese_srt, region_path, ass_path, temporary_output, region, **common)
+    if not file_ok(temporary_output):
+        raise RuntimeError("Khong tao duoc file thanh pham khi xuat lai.")
+    temporary_output.replace(output_path)
+    return source_video, region
+
+
 # =========================================================
 
 
@@ -2823,6 +2895,17 @@ def pipeline(
             ]
             if candidates:
                 music_path = candidates[0]
+    # Render revisions can reuse a local background track created by the
+    # original job. Only accept files inside this job directory; browser input
+    # never controls this path.
+    if music_path is None and config.get("render_only") and config.get("rerender_music_path"):
+        try:
+            cached_music = Path(str(config["rerender_music_path"])).resolve()
+            cached_music.relative_to(job_dir.resolve())
+            if valid_music_file(cached_music):
+                music_path = cached_music
+        except (OSError, ValueError):
+            pass
     config = {
         **config,
         "music_path": str(music_path) if music_path and valid_music_file(music_path) else None,
@@ -2935,6 +3018,48 @@ def pipeline(
 
 
 
+
+    if config.get("render_only"):
+        source_video, region = rerender_existing_output(
+            url=url,
+            job_dir=job_dir,
+            mode=mode,
+            source_file=source_file,
+            output_path=output_path,
+            ass_path=ass_path,
+            region_path=region_path,
+            region_preview=region_preview,
+            vietnamese_srt=vietnamese_srt,
+            voice_path=voice_path,
+            config=config,
+            original_volume=original_volume,
+            voice_volume=voice_volume,
+        )
+        existing = {}
+        try:
+            existing = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+        save_job_info(job_dir, {
+            **(existing if isinstance(existing, dict) else {}),
+            "job_id": job_id,
+            "url": url,
+            "channel": channel_key,
+            "mode": mode,
+            "source_video": rel(source_video),
+            "vietnamese_srt": rel(vietnamese_srt),
+            "subtitle_region": rel(region_path),
+            "ass": rel(ass_path),
+            "final_video": rel(output_path),
+            "status": "completed",
+            "render_revision": True,
+            "warnings": region.get("warnings", []),
+        })
+        write_progress(
+            job_dir, stage="completed", percent=100, status="completed",
+            message="Da xuat lai thanh pham voi vung mo da chinh.", mode=mode,
+        )
+        return
 
     print("\n========================================")
 
