@@ -1699,6 +1699,19 @@ function buildCard(
                     ${resultButtons}
                 </div>
 
+                <button
+                    class="process-details-btn"
+                    type="button"
+                    hidden
+                    title="Xem tiến trình xử lý"
+                >
+                    ${uiIcon('refresh', 14)}
+                    <span class="process-inline-label">Đang xử lý</span>
+                    <strong class="process-inline-percent">0%</strong>
+                </button>
+
+                <div class="result-actions dynamic-results"></div>
+
                 <details class="more-menu">
 
                     <summary
@@ -1802,7 +1815,7 @@ function buildCard(
             </div>
 
 
-            <div class="progress-wrap">
+            <div class="progress-wrap" aria-hidden="true">
 
                 <div class="progress-head">
 
@@ -1845,15 +1858,7 @@ function buildCard(
                 <div class="progress-footer">
                     <span class="progress-live-note">Cập nhật trực tiếp</span>
 
-                    <details class="process-details">
-                        <summary>
-                            Chi tiết
-                        </summary>
-
-                        <pre class="log"></pre>
-                    </details>
-
-                    <div class="result-actions dynamic-results"></div>
+                    <pre class="log"></pre>
                 </div>
 
             </div>
@@ -1988,6 +1993,19 @@ function buildCard(
     .onclick = async () => {
 
         await stopVideoProcess(
+            video,
+            card
+        );
+    };
+
+
+    card
+    .querySelector(
+        '.process-details-btn'
+    )
+    .onclick = () => {
+
+        openProcessDetailsPopup(
             video,
             card
         );
@@ -2931,6 +2949,198 @@ async function openProcessConfig(video, card, mode) {
 }
 
 
+let processingDetailsPopup = null;
+let processingDetailsPopupCard = null;
+
+
+function ensureProcessDetailsPopup() {
+
+    if (processingDetailsPopup) {
+        return processingDetailsPopup;
+    }
+
+    const popup = document.createElement('div');
+    popup.className = 'process-details-popup';
+    popup.hidden = true;
+    popup.innerHTML = `
+        <div class="process-details-backdrop"></div>
+        <section
+            class="process-details-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="processDetailsTitle"
+        >
+            <header class="process-details-header">
+                <div>
+                    <span class="process-details-eyebrow">
+                        <span class="process-details-dot"></span>
+                        TIẾN TRÌNH XỬ LÝ
+                    </span>
+                    <h2 id="processDetailsTitle"></h2>
+                    <p class="process-details-source"></p>
+                </div>
+                <button
+                    class="process-details-close modern-icon-btn"
+                    type="button"
+                    aria-label="Đóng chi tiết tiến trình"
+                    title="Đóng"
+                >
+                    ${uiIcon('close', 18)}
+                </button>
+            </header>
+
+            <div class="process-details-summary">
+                <div>
+                    <span class="process-details-status">Đang xử lý</span>
+                    <p class="process-details-stage">Đang chuẩn bị</p>
+                </div>
+                <strong class="process-details-percent">0%</strong>
+            </div>
+
+            <div class="process-details-track">
+                <div class="process-details-bar"></div>
+            </div>
+
+            <div class="process-details-log-wrap">
+                <div class="process-details-log-label">Nhật ký trực tiếp</div>
+                <pre class="process-details-log">Đang chờ dữ liệu tiến trình...</pre>
+            </div>
+
+            <footer class="process-details-footer">
+                <span>Tiến trình vẫn tiếp tục khi đóng cửa sổ này.</span>
+                <div>
+                    <button class="process-details-cancel secondary" type="button">
+                        Đóng
+                    </button>
+                    <button class="process-details-stop" type="button">
+                        ${uiIcon('stop', 15)} Dừng xử lý
+                    </button>
+                </div>
+            </footer>
+        </section>
+    `;
+
+    const closePopup = () => {
+        popup.hidden = true;
+        processingDetailsPopupCard = null;
+    };
+
+    popup.querySelector('.process-details-close').onclick = closePopup;
+    popup.querySelector('.process-details-cancel').onclick = closePopup;
+    popup.querySelector('.process-details-backdrop').onclick = closePopup;
+    popup.querySelector('.process-details-stop').onclick = () => {
+        processingDetailsPopupCard
+            ?.querySelector('.stop-process-btn')
+            ?.click();
+    };
+
+    popup.addEventListener('keydown', event => {
+        if (event.key === 'Escape') {
+            closePopup();
+        }
+    });
+
+    document.body.appendChild(popup);
+    processingDetailsPopup = popup;
+    return popup;
+}
+
+
+function syncProcessDetailsPopup(
+    card,
+    options = {}
+) {
+
+    if (
+        !processingDetailsPopup
+        || processingDetailsPopupCard !== card
+    ) {
+        return;
+    }
+
+    const popup = processingDetailsPopup;
+    const percent = options.percent
+        ?? card.querySelector('.progress-text')?.textContent
+        ?? '0%';
+    const stage = options.stage
+        ?? card.querySelector('.progress-stage')?.textContent
+        ?? 'Đang chuẩn bị';
+    const log = card.querySelector('.log')?.textContent?.trim();
+    const isError = Boolean(options.error);
+    const finished = Boolean(options.finished);
+    const stopped = Boolean(options.stopped);
+    const stopButton = card.querySelector('.stop-process-btn');
+
+    popup.querySelector('.process-details-percent').textContent = percent;
+    popup.querySelector('.process-details-stage').textContent = stage;
+    popup.querySelector('.process-details-status').textContent = isError
+        ? 'Đã xảy ra lỗi'
+        : stopped
+            ? 'Đã dừng'
+            : finished
+                ? 'Hoàn tất'
+                : 'Đang xử lý';
+    popup.querySelector('.process-details-log').textContent = log
+        || (isError ? stage : 'Đang chờ dữ liệu tiến trình...');
+    popup.querySelector('.process-details-bar').style.width = percent;
+    popup.classList.toggle('has-error', isError);
+    popup.classList.toggle('is-complete', finished || stopped);
+
+    const popupStop = popup.querySelector('.process-details-stop');
+    popupStop.hidden = Boolean(
+        isError
+        || finished
+        || stopped
+        || !stopButton
+        || stopButton.style.display === 'none'
+    );
+    popupStop.disabled = Boolean(stopButton?.disabled);
+}
+
+
+function openProcessDetailsPopup(
+    video,
+    card
+) {
+
+    const popup = ensureProcessDetailsPopup();
+    processingDetailsPopupCard = card;
+
+    popup.querySelector('#processDetailsTitle').textContent = (
+        video.title
+        || video.video_id
+    );
+    popup.querySelector('.process-details-source').textContent = (
+        `${video.video_id} · ${card.querySelector('.process-inline-label')?.textContent || 'Đang xử lý'}`
+    );
+    popup.hidden = false;
+    syncProcessDetailsPopup(card, {
+        error: card.classList.contains('has-process-error'),
+        finished: card.classList.contains('has-process-complete'),
+        stopped: card.classList.contains('has-process-stopped'),
+    });
+    popup.querySelector('.process-details-close').focus();
+}
+
+
+function updateInlineProcessStatus(
+    card,
+    percent,
+    label,
+    state = 'running'
+) {
+
+    const button = card.querySelector('.process-details-btn');
+    if (!button) return;
+
+    button.hidden = false;
+    button.querySelector('.process-inline-percent').textContent = percent;
+    button.querySelector('.process-inline-label').textContent = label;
+    button.classList.toggle('is-error', state === 'error');
+    button.classList.toggle('is-complete', state === 'complete');
+}
+
+
 async function processVideo(
     video,
     card,
@@ -3016,7 +3226,17 @@ async function processVideo(
         true;
 
     progressWrap.style.display =
-        'block';
+        'none';
+
+    card.classList.remove(
+        'has-process-error',
+        'has-process-complete',
+        'has-process-stopped'
+    );
+
+    card.classList.add(
+        'is-processing'
+    );
 
     logBox.textContent =
         '';
@@ -3042,6 +3262,18 @@ async function processVideo(
 
     stopButton.disabled =
         false;
+
+    updateInlineProcessStatus(
+        card,
+        '1%',
+        mode === 'subtitle'
+            ? 'Đang làm Vietsub'
+            : 'Đang tạo Voice'
+    );
+
+    syncProcessDetailsPopup(
+        card
+    );
 
     try {
 
@@ -3139,6 +3371,30 @@ async function processVideo(
 
         video.processing =
             false;
+
+        card.classList.remove(
+            'is-processing'
+        );
+
+        card.classList.add(
+            'has-process-error'
+        );
+
+        updateInlineProcessStatus(
+            card,
+            'Lỗi',
+            'Xem chi tiết lỗi',
+            'error'
+        );
+
+        syncProcessDetailsPopup(
+            card,
+            {
+                error: true,
+                stage: progressStage.textContent,
+                percent: '0%'
+            }
+        );
     }
 }
 
@@ -3186,6 +3442,19 @@ async function stopVideoProcess(
 
     stage.textContent =
         'Đang dừng...';
+
+    updateInlineProcessStatus(
+        card,
+        card.querySelector('.progress-text')?.textContent || '…',
+        'Đang dừng...'
+    );
+
+    syncProcessDetailsPopup(
+        card,
+        {
+            stage: 'Đang dừng...'
+        }
+    );
 
     try {
 
@@ -3337,6 +3606,14 @@ async function pollProcess(
                 || 'Đang xử lý'
             );
 
+        updateInlineProcessStatus(
+            card,
+            `${percent}%`,
+            data.message
+            || data.stage
+            || 'Đang xử lý'
+        );
+
         if (
             data.log_tail
             && data.log_tail.length
@@ -3350,6 +3627,10 @@ async function pollProcess(
             logBox.scrollTop =
                 logBox.scrollHeight;
         }
+
+        syncProcessDetailsPopup(
+            card
+        );
 
         if (
             data.status
@@ -3429,6 +3710,30 @@ async function pollProcess(
             voiceButton.disabled =
                 false;
 
+            card.classList.remove(
+                'is-processing'
+            );
+
+            card.classList.add(
+                'has-process-complete'
+            );
+
+            updateInlineProcessStatus(
+                card,
+                '100%',
+                'Đã hoàn tất',
+                'complete'
+            );
+
+            syncProcessDetailsPopup(
+                card,
+                {
+                    finished: true,
+                    percent: '100%',
+                    stage: progressStage.textContent
+                }
+            );
+
             return;
         }
 
@@ -3442,6 +3747,19 @@ async function pollProcess(
 
             stopButton.disabled =
                 true;
+
+            updateInlineProcessStatus(
+                card,
+                `${percent}%`,
+                'Đang dừng...'
+            );
+
+            syncProcessDetailsPopup(
+                card,
+                {
+                    stage: 'Đang dừng...'
+                }
+            );
 
             continue;
         }
@@ -3472,6 +3790,30 @@ async function pollProcess(
             voiceButton.disabled =
                 false;
 
+            card.classList.remove(
+                'is-processing'
+            );
+
+            card.classList.add(
+                'has-process-stopped'
+            );
+
+            updateInlineProcessStatus(
+                card,
+                `${percent}%`,
+                'Đã dừng',
+                'complete'
+            );
+
+            syncProcessDetailsPopup(
+                card,
+                {
+                    stopped: true,
+                    percent: `${percent}%`,
+                    stage: 'Đã dừng'
+                }
+            );
+
             return;
         }
 
@@ -3501,6 +3843,30 @@ async function pollProcess(
 
             voiceButton.disabled =
                 false;
+
+            card.classList.remove(
+                'is-processing'
+            );
+
+            card.classList.add(
+                'has-process-error'
+            );
+
+            updateInlineProcessStatus(
+                card,
+                'Lỗi',
+                'Xem chi tiết lỗi',
+                'error'
+            );
+
+            syncProcessDetailsPopup(
+                card,
+                {
+                    error: true,
+                    percent: `${percent}%`,
+                    stage: data.message || 'Pipeline thất bại.'
+                }
+            );
 
             throw new Error(
                 data.message
@@ -11152,8 +11518,20 @@ async function resumeActiveJobs() {
             if (progressWrap) {
 
                 progressWrap.style.display =
-                    'block';
+                    'none';
             }
+
+            card.classList.add(
+                'is-processing'
+            );
+
+            updateInlineProcessStatus(
+                card,
+                '…',
+                mode === 'subtitle'
+                    ? 'Đang làm Vietsub'
+                    : 'Đang tạo Voice'
+            );
 
             pollProcess(
                 video,
@@ -12418,6 +12796,344 @@ function injectV136ProcessingPanelPolish() {
 
 
 injectV136ProcessingPanelPolish();
+
+
+// =========================================================
+// V13.7 COMPACT PROCESSING STATUS + DETAILS POPUP
+// =========================================================
+
+function injectV137CompactProcessingPopup() {
+
+    if (document.getElementById('v137CompactProcessingPopup')) return;
+
+    const style = document.createElement('style');
+    style.id = 'v137CompactProcessingPopup';
+    style.textContent = `
+        /* Keep every source card at its normal height while a job runs. */
+        #videos .compact-video-card .progress-wrap {
+            display: none !important;
+        }
+
+        #videos .compact-video-card.is-processing {
+            border-color: rgba(251, 56, 80, .46) !important;
+            box-shadow: inset 3px 0 0 #ef1d3e, 0 12px 30px rgba(0, 0, 0, .16) !important;
+        }
+
+        #videos .process-details-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            max-width: 210px;
+            height: 34px;
+            padding: 0 9px;
+            border: 1px solid rgba(251, 56, 80, .37);
+            border-radius: 9px;
+            background: linear-gradient(135deg, rgba(251, 56, 80, .18), rgba(28, 36, 53, .82));
+            color: #ffdbe1;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 750;
+            line-height: 1;
+            transition: border-color .16s ease, background .16s ease, transform .16s ease;
+        }
+
+        #videos .process-details-btn[hidden] {
+            display: none !important;
+        }
+
+        #videos .process-details-btn:hover {
+            border-color: rgba(255, 126, 143, .82);
+            background: linear-gradient(135deg, rgba(251, 56, 80, .3), rgba(36, 43, 62, .94));
+            transform: translateY(-1px);
+        }
+
+        #videos .process-details-btn .ui-icon {
+            flex: 0 0 auto;
+            animation: process-status-spin 2.2s linear infinite;
+        }
+
+        #videos .process-details-btn .process-inline-label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #videos .process-details-btn .process-inline-percent {
+            flex: 0 0 auto;
+            margin-left: auto;
+            color: #fff;
+            font-size: 10px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        #videos .process-details-btn.is-error {
+            border-color: rgba(255, 145, 101, .48);
+            background: rgba(127, 50, 32, .24);
+            color: #ffc5aa;
+        }
+
+        #videos .process-details-btn.is-error .ui-icon,
+        #videos .process-details-btn.is-complete .ui-icon {
+            animation: none;
+        }
+
+        #videos .process-details-btn.is-complete {
+            border-color: rgba(62, 205, 147, .34);
+            background: rgba(17, 109, 76, .18);
+            color: #baf5d8;
+        }
+
+        .process-details-popup {
+            position: fixed;
+            z-index: 2147483000;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 18px;
+        }
+
+        .process-details-popup[hidden] {
+            display: none !important;
+        }
+
+        .process-details-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(2, 6, 14, .78);
+            backdrop-filter: blur(8px);
+        }
+
+        .process-details-panel {
+            position: relative;
+            z-index: 1;
+            width: min(640px, 100%);
+            max-height: min(760px, calc(100vh - 36px));
+            overflow: auto;
+            border: 1px solid rgba(139, 155, 180, .26);
+            border-radius: 16px;
+            background: linear-gradient(145deg, #182131 0%, #101724 48%, #0d131d 100%);
+            box-shadow: 0 28px 80px rgba(0, 0, 0, .58), inset 0 1px 0 rgba(255,255,255,.04);
+            color: #edf2fa;
+        }
+
+        .process-details-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 20px 22px 17px;
+            border-bottom: 1px solid rgba(148, 163, 184, .13);
+        }
+
+        .process-details-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: #ff9cab;
+            font-size: 10px;
+            font-weight: 850;
+            letter-spacing: .11em;
+        }
+
+        .process-details-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #ff4761;
+            box-shadow: 0 0 0 4px rgba(255,71,97,.13);
+            animation: process-status-pulse 1.5s ease-in-out infinite;
+        }
+
+        .process-details-header h2 {
+            margin: 8px 0 5px;
+            color: #f8fafc;
+            font-size: 18px;
+            line-height: 1.3;
+            font-weight: 780;
+            word-break: break-word;
+        }
+
+        .process-details-source {
+            margin: 0;
+            color: #91a0b7;
+            font-size: 12px;
+        }
+
+        .process-details-close {
+            flex: 0 0 auto;
+            width: 34px;
+            height: 34px;
+        }
+
+        .process-details-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 18px 22px 12px;
+        }
+
+        .process-details-status {
+            display: inline-flex;
+            align-items: center;
+            min-height: 23px;
+            padding: 0 9px;
+            border: 1px solid rgba(251,56,80,.3);
+            border-radius: 999px;
+            background: rgba(251,56,80,.1);
+            color: #ffabb8;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .process-details-stage {
+            margin: 8px 0 0;
+            color: #dde5f2;
+            font-size: 14px;
+            font-weight: 650;
+            line-height: 1.45;
+        }
+
+        .process-details-percent {
+            flex: 0 0 auto;
+            color: #fff;
+            font-size: 26px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .process-details-track {
+            height: 8px;
+            margin: 0 22px;
+            overflow: hidden;
+            border: 1px solid rgba(148,163,184,.13);
+            border-radius: 999px;
+            background: rgba(2, 6, 14, .72);
+        }
+
+        .process-details-bar {
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #e91a38, #ff6378 68%, #ff9ead);
+            box-shadow: 0 0 14px rgba(251, 56, 80, .38);
+            transition: width .42s ease;
+        }
+
+        .process-details-log-wrap {
+            margin: 20px 22px;
+        }
+
+        .process-details-log-label {
+            margin-bottom: 8px;
+            color: #8493a9;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+        }
+
+        .process-details-log {
+            min-height: 110px;
+            max-height: 245px;
+            margin: 0;
+            padding: 13px;
+            overflow: auto;
+            border: 1px solid rgba(148,163,184,.13);
+            border-radius: 10px;
+            background: rgba(2, 6, 14, .5);
+            color: #b5c2d6;
+            font: 11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .process-details-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 15px 22px;
+            border-top: 1px solid rgba(148,163,184,.13);
+            color: #8190a6;
+            font-size: 11px;
+        }
+
+        .process-details-footer > div {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+
+        .process-details-stop {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 34px;
+            padding: 0 11px;
+            border: 1px solid rgba(255, 126, 143, .42);
+            border-radius: 8px;
+            background: rgba(251,56,80,.15);
+            color: #ffc2cb;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 750;
+        }
+
+        .process-details-stop:hover:not(:disabled) {
+            background: rgba(251,56,80,.28);
+            color: #fff;
+        }
+
+        .process-details-stop:disabled {
+            cursor: wait;
+            opacity: .55;
+        }
+
+        .process-details-popup.has-error .process-details-status {
+            border-color: rgba(255,145,101,.36);
+            background: rgba(138,59,35,.2);
+            color: #ffc1a6;
+        }
+
+        .process-details-popup.has-error .process-details-bar {
+            background: linear-gradient(90deg, #c6693c, #ffad76);
+        }
+
+        .process-details-popup.is-complete .process-details-status {
+            border-color: rgba(62,205,147,.34);
+            background: rgba(17,109,76,.18);
+            color: #baf5d8;
+        }
+
+        .process-details-popup.is-complete .process-details-dot {
+            animation: none;
+            background: #44db9c;
+            box-shadow: 0 0 0 4px rgba(68,219,156,.12);
+        }
+
+        @keyframes process-status-spin { to { transform: rotate(360deg); } }
+        @keyframes process-status-pulse { 50% { opacity: .55; transform: scale(.8); } }
+
+        @media (max-width: 620px) {
+            #videos .process-details-btn { max-width: 155px; }
+            .process-details-popup { padding: 10px; }
+            .process-details-header,
+            .process-details-summary { padding-left: 16px; padding-right: 16px; }
+            .process-details-track { margin-left: 16px; margin-right: 16px; }
+            .process-details-log-wrap { margin: 16px; }
+            .process-details-footer { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+            .process-details-footer > div { width: 100%; justify-content: flex-end; }
+        }
+    `;
+
+    document.head.appendChild(style);
+}
+
+
+injectV137CompactProcessingPopup();
 
 
 
