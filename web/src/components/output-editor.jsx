@@ -72,6 +72,8 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const canvasRef = useRef(null);
   const dragRef = useRef(null);
   const [sourceUrl, setSourceUrl] = useState(null);
+  const [resultUrl, setResultUrl] = useState(null);
+  const [previewSource, setPreviewSource] = useState(false);
   const [meta, setMeta] = useState(null);
   const [region, setRegion] = useState(null);
   const [intervals, setIntervals] = useState([]);
@@ -111,18 +113,20 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   useEffect(() => { paint(); }, [paint]);
   useEffect(() => {
     let alive = true;
-    setLoading(true); setError(null); setNotice(null); setMeta(null); setRegion(null); setIntervals([]); setDraft(null); setActiveDetailId(null); setEditMode(null);
+    setLoading(true); setError(null); setNotice(null); setMeta(null); setRegion(null); setIntervals([]); setDraft(null); setActiveDetailId(null); setEditMode(null); setPreviewSource(false); setSourceUrl(null); setResultUrl(null);
     Promise.all([
       client.json(`/api/outputs/${encodeURIComponent(item.video_id)}/edit?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
+      client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
       client.mediaUrl(`/api/preview/source/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}`),
-    ]).then(([details, url]) => {
+    ]).then(([details, renderedUrl, rawSourceUrl]) => {
       if (!alive) return;
       setMeta(details);
       setRegion(cleanRect(details.blur_region));
       setIntervals((details.blur_intervals || []).map((entry) => ({ ...cleanRect(entry), start: Number(entry.start) || 0, end: Number(entry.end) || 0, id: crypto.randomUUID(), kind: entry.kind === "logo" ? "logo" : "detail" })).filter((entry) => entry.x !== undefined));
       setVoiceName(details.voice || "Trúc Ly");
       setTtsSpeed(Number(details.tts_speed) || 1.10);
-      setSourceUrl(url);
+      setResultUrl(renderedUrl);
+      setSourceUrl(rawSourceUrl);
     }).catch((requestError) => {
       if (alive) setError(requestError.message || "Không thể mở dữ liệu local để chỉnh sửa.");
     }).finally(() => { if (alive) setLoading(false); });
@@ -216,14 +220,32 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   };
 
   if (!mounted) return null;
+  const previewUrl = previewSource ? sourceUrl : resultUrl;
+  const beginEdit = (mode) => {
+    const enabling = editMode !== mode;
+    setEditMode(enabling ? mode : null);
+    setDraft(null);
+    if (enabling) {
+      // The rendered output may be cropped for a target aspect ratio.  Region
+      // coordinates must be picked on the original frame before rerendering.
+      setPreviewSource(true);
+      setNotice("Đang dùng video gốc để vùng đỏ khớp chính xác khi xuất lại.");
+    }
+  };
+  const finishEdit = () => {
+    setEditMode(null);
+    setDraft(null);
+    setPreviewSource(false);
+    setNotice("Đang xem thành phẩm hiện tại. Vùng đỏ vẫn được giữ lại để bạn kiểm tra.");
+  };
 
   const dialog = <div className="modal open output-editor-modal" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="modal-box output-editor" role="dialog" aria-modal="true" aria-label="Chỉnh vùng mờ video">
       <div className="modal-head"><div><strong className="modal-title">Chỉnh thành phẩm · {modeLabel(item.mode)}</strong><p className="muted">{item.title || item.video_id} · sửa vùng mờ chỉ xuất lại video{item.mode === "voiceover" ? "; đổi giọng hoặc tốc độ sẽ tạo lại TTS từ phụ đề Việt." : "."}</p></div><button className="btn secondary" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button></div>
-      {loading ? <Loading label="Đang mở video nguồn và cấu hình trước đó" /> : error && !sourceUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <div className="output-editor-body">
+      {loading ? <Loading label="Đang mở thành phẩm và cấu hình trước đó" /> : error && !previewUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <div className="output-editor-body">
         <ErrorMessage error={error} /><Notice>{notice}</Notice>
-        <div className="output-editor-help"><button className={`btn ${editMode === "subtitle" ? "primary" : "secondary"}`} onClick={() => { setEditMode(editMode === "subtitle" ? null : "subtitle"); setDraft(null); }}>Chỉnh vùng phụ đề</button><button className={`btn ${editMode === "interval" ? "primary" : "secondary"}`} onClick={() => { setEditMode(editMode === "interval" ? null : "interval"); }}>Chỉnh logo / chữ / chi tiết</button>{editMode && <button className="btn secondary" onClick={() => { setEditMode(null); setDraft(null); }}>Xong</button>}{editMode === "subtitle" && <button className="btn secondary" onClick={() => setRegion(null)}>Xóa vùng phụ đề</button>}<span>{editMode === "subtitle" ? "Kéo khung đỏ để di chuyển; kéo chấm ở góc để đổi kích thước." : editMode === "interval" ? "Bấm khung đỏ để chỉnh. Kéo vùng trống rồi lưu thành vùng logo hoặc vùng chi tiết." : "Các vùng đã lưu luôn hiện màu đỏ. Bấm một nút Chỉnh để thay đổi chúng."}</span></div>
-        <div className="output-editor-stage">{sourceUrl && <><video ref={videoRef} src={sourceUrl} controls playsInline crossOrigin="anonymous" onLoadedMetadata={syncCanvas} onCanPlay={syncCanvas} onResize={syncCanvas} onError={() => setError("Không thể mở video nguồn local. Hãy kiểm tra Local Engine rồi thử lại.")} /><canvas ref={canvasRef} className={`output-editor-canvas${editMode ? " editable" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} /></>}</div>
+        <div className="output-editor-help"><button className={`btn ${!previewSource ? "primary" : "secondary"}`} onClick={() => { setPreviewSource(false); setEditMode(null); setDraft(null); }}>Thành phẩm hiện tại</button><button className={`btn ${previewSource ? "primary" : "secondary"}`} onClick={() => { setPreviewSource(true); }}>Video gốc</button><button className={`btn ${editMode === "subtitle" ? "primary" : "secondary"}`} onClick={() => beginEdit("subtitle")}>Chỉnh vùng phụ đề</button><button className={`btn ${editMode === "interval" ? "primary" : "secondary"}`} onClick={() => beginEdit("interval")}>Chỉnh logo / chữ / chi tiết</button>{editMode && <button className="btn secondary" onClick={finishEdit}>Xong</button>}{editMode === "subtitle" && <button className="btn secondary" onClick={() => setRegion(null)}>Xóa vùng phụ đề</button>}<span>{editMode === "subtitle" ? "Đang dùng video gốc: kéo khung đỏ để di chuyển; kéo chấm ở góc để đổi kích thước." : editMode === "interval" ? "Đang dùng video gốc: bấm khung đỏ để chỉnh, hoặc kéo vùng trống để tạo vùng mới." : previewSource ? "Đang xem video gốc. Bấm Thành phẩm hiện tại để xem kết quả đã render." : "Đang xem thành phẩm hiện tại. Các vùng đã lưu hiện màu đỏ; bấm Chỉnh để thay đổi chính xác trên video gốc."}</span></div>
+        <div className="output-editor-stage">{previewUrl && <><video key={previewSource ? "source" : "result"} ref={videoRef} src={previewUrl} controls playsInline crossOrigin="anonymous" onLoadedMetadata={syncCanvas} onCanPlay={syncCanvas} onResize={syncCanvas} onError={() => setError("Không thể mở video xem trước từ Local Engine. Hãy thử lại.")} /><canvas ref={canvasRef} className={`output-editor-canvas${editMode ? " editable" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} /></>}</div>
         <div className="output-editor-summary"><span>Vùng phụ đề: {region ? `${region.x}, ${region.y} · ${region.width} × ${region.height}px` : "chưa chọn"}</span>{dimensions && <span>Video gốc: {dimensions.width} × {dimensions.height}px</span>}</div>
         <div className="output-editor-detail"><div><strong>Logo, chữ và chi tiết</strong><p>Chọn “Chỉnh logo / chữ / chi tiết”, khoanh trực tiếp trên video rồi lưu vùng. Mỗi vùng đã lưu luôn hiển thị khung đỏ.</p></div><div className="output-editor-detail-actions"><button className="btn secondary" onClick={() => addInterval("detail")} disabled={!draft}><Icon name="plus" size={16} />Lưu vùng theo đoạn</button><button className="btn secondary" onClick={() => addInterval("logo")} disabled={!draft}><Icon name="plus" size={16} />Lưu vùng logo / chữ</button></div></div>
         {draft && <div className="notice-banner">Vùng mới đã chọn. Lưu thành “theo đoạn” hoặc “logo / chữ”.</div>}
