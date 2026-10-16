@@ -470,6 +470,7 @@ class ProcessRequest(BaseModel):
     # A render revision reuses the already downloaded source, translated SRT
     # and generated voice. It is only produced by the authenticated editor.
     render_only: bool = False
+    regenerate_voice: bool = False
     rerender_music_path: Optional[str] = None
 
 
@@ -478,6 +479,10 @@ class RenderEditRequest(BaseModel):
     mode: Literal["subtitle", "voiceover"] = "subtitle"
     blur_region: Optional[dict[str, float]] = None
     blur_intervals: list[dict[str, float]] = []
+    # Voice changes are available only for an existing voiceover.  The worker
+    # regenerates local TTS clips, then renders from the saved source/SRT.
+    voice: Optional[str] = None
+    tts_speed: Optional[float] = None
 
 
 # =========================================================
@@ -4893,6 +4898,8 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
         "blur_intervals": [
             item for item in (config.get("blur_intervals") or []) if isinstance(item, dict)
         ],
+        "voice": config.get("voice") or "Trúc Ly",
+        "tts_speed": float(config.get("tts_speed") or 1.10),
         "source_ready": bool(local_source_for_process(channel, video_id)),
         "can_rerender": bool(previous),
     }
@@ -4951,6 +4958,22 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
     if "blur_intervals" in body.model_fields_set:
         previous_config["blur_intervals"] = body.blur_intervals
         previous_config["custom_blur_region"] = None
+    voice_changed = False
+    if "voice" in body.model_fields_set:
+        if snapshot["mode"] != "voiceover":
+            raise HTTPException(status_code=400, detail="Chỉ thành phẩm Voice mới thay được giọng.")
+        previous_config["voice"] = (body.voice or "Trúc Ly").strip() or "Trúc Ly"
+        voice_changed = True
+    if "tts_speed" in body.model_fields_set:
+        if snapshot["mode"] != "voiceover":
+            raise HTTPException(status_code=400, detail="Chỉ thành phẩm Voice mới chỉnh được tốc độ giọng.")
+        speed = float(body.tts_speed or 0)
+        if not 0.5 <= speed <= 1.6:
+            raise HTTPException(status_code=400, detail="Tốc độ giọng phải từ 0.50x đến 1.60x.")
+        previous_config["tts_speed"] = speed
+        voice_changed = True
+    if voice_changed:
+        previous_config["regenerate_voice"] = True
 
     return api_process(ProcessRequest(**previous_config), request)
 

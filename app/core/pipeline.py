@@ -2591,6 +2591,24 @@ def rerender_existing_output(
     if mode == "voiceover" and not file_ok(voice_path):
         raise FileNotFoundError("Khong tim thay file voice da tao truoc do.")
 
+    # A revision normally reuses voice.wav.  When the editor changed its
+    # speaker or pace, regenerate TTS locally from the existing Vietnamese
+    # subtitle and keep every other pipeline stage untouched.
+    if mode == "voiceover" and config.get("regenerate_voice"):
+        write_progress(job_dir, stage="tts", percent=24, status="running", message="Dang tao lai giong Viet da chon.", mode=mode)
+        create_voice(
+            source_video,
+            vietnamese_srt,
+            voice_path,
+            job_dir / "tts",
+            job_dir / "tts_manifest.json",
+            force=True,
+            voice_name=config.get("voice"),
+            speed=config.get("tts_speed"),
+        )
+        if not file_ok(voice_path):
+            raise RuntimeError("Khong tao duoc file voice moi.")
+
     # Keep the last selection if an API caller omits it. Never invoke OCR for
     # an output-only revision unless there is no saved region at all.
     if not isinstance(config.get("blur_region"), dict) and region_path.is_file():
