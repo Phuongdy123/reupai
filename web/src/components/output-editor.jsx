@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./icon";
 import { ErrorMessage, Loading, Notice, modeLabel } from "./library-ui";
 
@@ -41,6 +42,9 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
@@ -58,7 +62,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     setLoading(true); setError(null); setNotice(null); setMeta(null); setRegion(null); setIntervals([]); setDraft(null);
     Promise.all([
       client.json(`/api/outputs/${encodeURIComponent(item.video_id)}/edit?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
-      client.mediaUrl(`/api/preview/source/${encodeURIComponent(item.video_id)}`),
+      client.mediaUrl(`/api/preview/source/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}`),
     ]).then(([details, url]) => {
       if (!alive) return;
       setMeta(details);
@@ -131,13 +135,15 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     finally { setSubmitting(false); }
   };
 
-  return <div className="modal open" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
+  if (!mounted) return null;
+
+  const dialog = <div className="modal open output-editor-modal" role="presentation" onClick={(event) => { if (event.target === event.currentTarget && !submitting) onClose(); }}>
     <section className="modal-box output-editor" role="dialog" aria-modal="true" aria-label="Chỉnh vùng mờ video">
       <div className="modal-head"><div><strong className="modal-title">Chỉnh vùng mờ · {modeLabel(item.mode)}</strong><p className="muted">{item.title || item.video_id} · chỉ xuất lại video, không tải hay chạy AI lại.</p></div><button className="btn secondary" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button></div>
       {loading ? <Loading label="Đang mở video nguồn và cấu hình trước đó" /> : error && !sourceUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <div className="output-editor-body">
         <ErrorMessage error={error} /><Notice>{notice}</Notice>
         <div className="output-editor-help"><button className={`btn ${tool === "subtitle" ? "primary" : "secondary"}`} onClick={() => setTool("subtitle")}>1. Kéo vùng phụ đề</button><button className={`btn ${tool === "detail" ? "primary" : "secondary"}`} onClick={() => setTool("detail")}>2. Vùng chi tiết</button><span>{tool === "subtitle" ? "Kéo trực tiếp để đặt lại vùng che phụ đề gốc." : "Kéo để khoanh chi tiết cần làm mờ, sau đó thêm khoảng thời gian."}</span></div>
-        <div className="output-editor-stage">{sourceUrl && <video ref={videoRef} src={sourceUrl} controls playsInline onLoadedMetadata={syncCanvas} onResize={syncCanvas} />}{dimensions && <canvas ref={canvasRef} className="output-editor-canvas" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} />}</div>
+        <div className="output-editor-stage">{sourceUrl && <video ref={videoRef} src={sourceUrl} controls playsInline onLoadedMetadata={syncCanvas} onResize={syncCanvas} onError={() => setError("Không thể mở video nguồn local. Hãy kiểm tra Local Engine rồi thử lại.")} />}{dimensions && <canvas ref={canvasRef} className="output-editor-canvas" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} />}</div>
         <div className="output-editor-summary"><span>Vùng phụ đề: {region ? `${region.x}, ${region.y} · ${region.width} × ${region.height}px` : "chưa chọn"}</span>{dimensions && <span>Video gốc: {dimensions.width} × {dimensions.height}px</span>}</div>
         <div className="output-editor-detail"><div><strong>Vùng mờ chi tiết</strong><p>Ví dụ che logo, chữ hoặc thông tin chỉ xuất hiện trong một đoạn.</p></div><button className="btn secondary" onClick={addInterval} disabled={!draft}><Icon name="plus" size={16} />Thêm vùng đang chọn</button></div>
         {draft && <div className="notice-banner">Vùng mới đã chọn. Bấm “Thêm vùng đang chọn” để đặt khoảng thời gian.</div>}
@@ -146,4 +152,6 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       </div>}
     </section>
   </div>;
+
+  return createPortal(dialog, document.body);
 }

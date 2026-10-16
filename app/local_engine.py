@@ -597,8 +597,8 @@ def cover(url: str, _: bool = Depends(require_token)):
 
 
 @app.get("/api/preview/source/{video_id}")
-def source_preview(video_id: str, _: bool = Depends(require_token)):
-    return preview_source_video(video_id=video_id)
+def source_preview(video_id: str, channel: str = "2d_animation", _: bool = Depends(require_token)):
+    return preview_source_video(video_id=video_id, channel=channel)
 
 
 @app.get("/library/source/{video_id}")
@@ -709,7 +709,10 @@ def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
     elif path == "/api/cover":
         response = api_cover(url=query.get("url", [""])[0])
     elif path.startswith("/api/preview/source/"):
-        response = preview_source_video(video_id=path.rsplit("/", 1)[-1])
+        response = preview_source_video(
+            video_id=path.rsplit("/", 1)[-1],
+            channel=query.get("channel", ["2d_animation"])[0],
+        )
     elif path.startswith("/library/source/"):
         response = library_source(video_id=path.rsplit("/", 1)[-1])
     elif path.startswith(("/api/stream/", "/api/result/")):

@@ -3452,6 +3452,7 @@ def library_source(
 )
 def preview_source_video(
     video_id: str,
+    channel: str = "2d_animation",
 ):
     """Serve a downloaded source inline for lightweight library previews."""
 
@@ -3461,11 +3462,12 @@ def preview_source_video(
         )
     )
 
-    path = (
-        find_downloaded_video(
-            DOWNLOAD_ROOT
-            / video_id
-        )
+    # Prefer the source that belongs to this channel's local job.  The
+    # compatibility fallback inside local_source_for_process preserves older
+    # downloads that still live in DOWNLOAD_ROOT.
+    path = local_source_for_process(
+        validate_channel(channel),
+        video_id,
     )
 
     if not path:

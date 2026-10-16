@@ -1885,6 +1885,7 @@ tbody tr:hover {
 
 /* Output-only blur editor. Coordinates remain in the original source pixels. */
 .output-editor { width:min(1120px, 97vw); max-height:94vh; overflow:auto; }
+.output-editor-modal { z-index:10001; }
 .output-editor .modal-head { align-items:flex-start; gap:16px; border-bottom:1px solid var(--line); }
 .output-editor .muted { margin:5px 0 0; color:var(--muted); font-size:12px; }
 .output-editor-body { padding:16px; display:grid; gap:13px; }
