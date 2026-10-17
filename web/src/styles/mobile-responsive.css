@@ -1,0 +1,232 @@
+/* Final mobile layer. Kept last so every workspace page uses the same small-screen rules. */
+@media (max-width: 760px) {
+    html { -webkit-text-size-adjust: 100%; }
+
+    body.theme-xports {
+        min-width: 320px;
+        overflow-x: hidden;
+    }
+
+    .theme-xports .app-shell,
+    .theme-xports .main,
+    .theme-xports .page-content,
+    .theme-xports .panel,
+    .theme-xports .library-card,
+    .theme-xports .modal-box {
+        min-width: 0;
+    }
+
+    /* Keep navigation reachable without spending half the viewport on it. */
+    .theme-xports .sidebar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        padding: 8px 11px 9px;
+        background: rgba(11, 15, 23, .97);
+        backdrop-filter: blur(14px);
+    }
+
+    .theme-xports .brand {
+        min-height: 42px;
+        padding: 0 3px 7px;
+    }
+
+    .theme-xports .brand-mark {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+
+    .theme-xports .brand-copy small { display: none; }
+
+    .theme-xports .nav {
+        gap: 7px;
+        padding: 2px 0 5px;
+        scroll-padding-inline: 4px;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .theme-xports .nav-item {
+        min-height: 40px;
+        padding-inline: 10px;
+        scroll-snap-align: start;
+        white-space: nowrap;
+    }
+
+    .theme-xports .main { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+
+    .theme-xports .topbar {
+        align-items: flex-start;
+        min-height: 0;
+        padding: 18px 0 16px;
+    }
+
+    .theme-xports .topbar > div:first-child { min-width: 0; }
+    .theme-xports .topbar h1 { font-size: clamp(23px, 8vw, 29px); line-height: 1; }
+    .theme-xports .topbar p { max-width: 100%; line-height: 1.45; }
+
+    /* Engine state stays visible, including reconnect and error states. */
+    .theme-xports .topbar-user.engine-status-control {
+        display: flex;
+        width: 100%;
+        min-width: 0;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+        padding-top: 2px;
+    }
+
+    .theme-xports .local-engine-indicator {
+        min-width: 0;
+        margin-right: auto;
+    }
+
+    .theme-xports #localEngineLabel {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .theme-xports .local-engine-action {
+        min-height: 36px;
+        margin-right: 0;
+        padding-inline: 10px;
+        white-space: nowrap;
+    }
+
+    .theme-xports .panel { padding: 14px; }
+    .theme-xports .panel-head,
+    .theme-xports .tracked-view-header,
+    .theme-xports .library-intro {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 9px;
+    }
+
+    .theme-xports .panel-head > *,
+    .theme-xports .tracked-view-header > * { max-width: 100%; }
+
+    .theme-xports .control-bar,
+    .theme-xports .source-bar,
+    .theme-xports .v13-toolbar,
+    .theme-xports .tracked-view-tools {
+        width: 100%;
+    }
+
+    .theme-xports .control-bar > *,
+    .theme-xports .source-bar > *,
+    .theme-xports .tracked-view-tools > *,
+    .theme-xports .control-bar input,
+    .theme-xports .control-bar select {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .theme-xports .tracked-view-tools {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .theme-xports .library-grid,
+    .theme-xports .outputs-grid,
+    .theme-xports .dashboard-grid,
+    .theme-xports .settings-grid,
+    .theme-xports .follow-source-thumbs {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+
+    .theme-xports .library-card,
+    .theme-xports .output-library-card { width: 100%; }
+
+    .theme-xports .output-library-card .library-cover {
+        height: clamp(160px, 52vw, 210px);
+    }
+
+    .theme-xports .output-library-card .library-body { padding: 13px; }
+
+    .theme-xports .output-library-card .library-actions {
+        grid-template-columns: 72px 64px minmax(0, 1fr);
+    }
+
+    .theme-xports .output-library-card .library-actions .btn {
+        min-height: 40px;
+        padding-inline: 7px;
+    }
+
+    .theme-xports .output-library-card .library-actions .output-edit-result {
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .theme-xports .stat-card { min-height: 102px; }
+
+    .theme-xports .live-job-head,
+    .theme-xports .live-job-stage,
+    .theme-xports .setting-row,
+    .theme-xports .output-editor-detail {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .theme-xports .live-job-head > .btn,
+    .theme-xports .live-job-stage > .btn,
+    .theme-xports .output-editor-detail-actions {
+        width: 100%;
+    }
+
+    .theme-xports .output-editor-detail-actions { justify-content: stretch; }
+    .theme-xports .output-editor-detail-actions .btn { flex: 1 1 140px; }
+
+    .theme-xports .setting-row { gap: 6px; }
+    .theme-xports .setting-row strong,
+    .theme-xports .setting-row code { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+
+    .theme-xports .table-wrap {
+        width: auto;
+        margin-inline: -14px;
+        border-radius: 0;
+    }
+
+    .theme-xports .table-wrap table { min-width: 640px; }
+
+    .theme-xports .modal-overlay { padding: 8px; }
+    .theme-xports .modal-box { width: 100%; max-height: calc(100dvh - 16px); }
+    .theme-xports .modal-head { align-items: flex-start; gap: 10px; padding: 14px; }
+    .theme-xports .modal-head h2 { font-size: 17px; }
+
+    .theme-xports .output-editor {
+        width: calc(100vw - 8px);
+        height: calc(100dvh - 8px);
+        max-height: none;
+        border-radius: 12px;
+    }
+
+    .theme-xports .output-editor-body { padding: 12px; }
+    .theme-xports .output-editor-help { align-items: stretch; }
+    .theme-xports .output-editor-help .btn { flex: 1 1 130px; }
+    .theme-xports .output-editor-stage video { max-height: 42dvh; }
+    .theme-xports .output-editor-actions { position: sticky; bottom: -1px; padding: 10px 0 max(5px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #101621 30%); }
+    .theme-xports .output-editor-actions .btn { flex: 1 1 130px; }
+}
+
+@media (max-width: 430px) {
+    .theme-xports .main { padding-inline: 10px; }
+    .theme-xports .page-content { padding-top: 12px; }
+    .theme-xports .topbar-kicker { font-size: 9px; }
+    .theme-xports .topbar h1 { font-size: 23px; }
+    .theme-xports .topbar p { font-size: 10px; }
+    .theme-xports .local-engine-action { padding-inline: 8px; font-size: 11px; }
+    .theme-xports .engine-retry { width: 36px; padding-inline: 0; }
+    .theme-xports .panel { padding: 12px; }
+    .theme-xports .stats-grid { gap: 8px; }
+    .theme-xports .stat-card { padding: 11px; }
+    .theme-xports .output-library-card .library-actions { grid-template-columns: 68px 58px minmax(0, 1fr); gap: 5px; }
+    .theme-xports .output-library-card .library-actions .btn { font-size: 10px; }
+    .theme-xports .output-library-card .library-actions .output-edit-result { font-size: 9px; }
+    .theme-xports .output-editor-voice,
+    .theme-xports .output-editor-interval { grid-template-columns: 1fr; }
+    .theme-xports .output-editor-voice > div,
+    .theme-xports .output-editor-interval .btn { grid-column: auto; }
+}
