@@ -123,6 +123,13 @@
         min-width: 0 !important;
     }
 
+    /* iOS zooms small form controls on focus; retain a stable editing view. */
+    .theme-xports input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+    .theme-xports select,
+    .theme-xports textarea {
+        font-size: 16px;
+    }
+
     .theme-xports .tracked-view-tools {
         align-items: stretch;
         flex-direction: column;
@@ -138,6 +145,37 @@
 
     .theme-xports .library-card,
     .theme-xports .output-library-card { width: 100%; }
+
+    .theme-xports .library-page > .panel > .library-actions,
+    .theme-xports .series-page > .panel > .library-actions,
+    .theme-xports .collection-toolbar form,
+    .theme-xports .collection-select-row,
+    .theme-xports .source-actions,
+    .theme-xports .selection-actions,
+    .theme-xports .card-buttons,
+    .theme-xports .settings-actions {
+        align-items: stretch;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .theme-xports .library-page > .panel > .library-actions > .btn,
+    .theme-xports .series-page > .panel > .library-actions > .btn,
+    .theme-xports .collection-toolbar form > .btn,
+    .theme-xports .collection-select-row > .btn,
+    .theme-xports .source-actions > .btn,
+    .theme-xports .selection-actions > .btn,
+    .theme-xports .settings-actions > .btn {
+        flex: 1 1 145px;
+    }
+
+    .theme-xports .library-page > .panel > .library-actions select,
+    .theme-xports .series-page > .panel > .library-actions select,
+    .theme-xports .collection-toolbar select,
+    .theme-xports .collection-toolbar input {
+        flex: 1 1 100%;
+        width: 100%;
+    }
 
     .theme-xports .output-library-card .library-cover {
         height: clamp(160px, 52vw, 210px);
@@ -165,6 +203,8 @@
     .theme-xports .live-job-head,
     .theme-xports .live-job-stage,
     .theme-xports .setting-row,
+    .theme-xports .setting-line,
+    .theme-xports .series-card,
     .theme-xports .output-editor-detail {
         align-items: flex-start;
         flex-direction: column;
@@ -181,7 +221,23 @@
 
     .theme-xports .setting-row { gap: 6px; }
     .theme-xports .setting-row strong,
-    .theme-xports .setting-row code { max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+    .theme-xports .setting-row code,
+    .theme-xports .setting-line strong,
+    .theme-xports .setting-line code {
+        max-width: 100%;
+        overflow: visible;
+        overflow-wrap: anywhere;
+        text-align: left;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .theme-xports .settings-grid-next { grid-template-columns: minmax(0, 1fr); }
+    .theme-xports .settings-card,
+    .theme-xports .info-settings { padding: 15px; }
+    .theme-xports .series-detail-head { align-items: stretch; }
+    .theme-xports .series-detail-head select { width: 100%; }
+    .theme-xports .state-panel { min-height: 220px; padding: 22px 16px; }
 
     .theme-xports .table-wrap {
         width: auto;
@@ -209,6 +265,15 @@
     .theme-xports .output-editor-stage video { max-height: 42dvh; }
     .theme-xports .output-editor-actions { position: sticky; bottom: -1px; padding: 10px 0 max(5px, env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #101621 30%); }
     .theme-xports .output-editor-actions .btn { flex: 1 1 130px; }
+
+    .theme-xports #processConfigDialog .process-config-head,
+    .theme-xports #processConfigDialog .process-config-actions {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .theme-xports #processConfigDialog .process-config-actions .btn { flex: 1 1 130px; }
+    .theme-xports #processConfigDialog .process-preview-tools .btn { flex: 1 1 130px; }
 }
 
 @media (max-width: 430px) {
@@ -229,4 +294,11 @@
     .theme-xports .output-editor-interval { grid-template-columns: 1fr; }
     .theme-xports .output-editor-voice > div,
     .theme-xports .output-editor-interval .btn { grid-column: auto; }
+    .theme-xports .library-page > .panel > .library-actions > .btn,
+    .theme-xports .series-page > .panel > .library-actions > .btn,
+    .theme-xports .collection-toolbar form > .btn,
+    .theme-xports .collection-select-row > .btn,
+    .theme-xports .source-actions > .btn,
+    .theme-xports .selection-actions > .btn,
+    .theme-xports .settings-actions > .btn { flex-basis: 100%; }
 }
