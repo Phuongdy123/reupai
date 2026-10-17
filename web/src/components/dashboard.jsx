@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useEngine } from "./engine-provider";
 import { Icon } from "./icon";
 import { ACTIVE_JOBS, EngineGate, ErrorMessage, HistoryTable, JOB_LABELS, Loading, jobVideoId, modeLabel, numberText, progressValue, stageLabel } from "./library-ui";
@@ -12,25 +12,35 @@ export function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [error, setError] = useState(null);
   const [stopping, setStopping] = useState(null);
+  const jobsRequest = useRef(false);
+  const dashboardRequest = useRef(false);
   const loadJobs = useCallback(async () => {
-    if (status !== "connected") return;
+    if (status !== "connected" || jobsRequest.current) return;
+    jobsRequest.current = true;
     try { const result = await client.json("/api/jobs", { cache: "no-store" }); setJobs(result.jobs || []); }
     catch (requestError) { setError(requestError.message || "Không thể đọc tiến độ xử lý."); }
+    finally { jobsRequest.current = false; }
   }, [client, status]);
   const load = useCallback(async () => {
-    if (status !== "connected") return;
+    if (status !== "connected" || dashboardRequest.current) return;
+    dashboardRequest.current = true;
     setError(null);
     try {
       const [result, active] = await Promise.all([client.json("/api/library/dashboard", { cache: "no-store" }), client.json("/api/jobs", { cache: "no-store" })]);
       setData(result); setJobs(active.jobs || []);
     } catch (requestError) { setError(requestError.message || "Không thể tải Dashboard."); }
+    finally { dashboardRequest.current = false; }
   }, [client, status]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (status !== "connected") return undefined;
-    const jobTimer = window.setInterval(loadJobs, 2000);
-    const dataTimer = window.setInterval(load, 10000);
-    return () => { window.clearInterval(jobTimer); window.clearInterval(dataTimer); };
+    const pollJobs = () => { if (document.visibilityState === "visible") loadJobs(); };
+    const pollDashboard = () => { if (document.visibilityState === "visible") load(); };
+    const onVisible = () => { if (document.visibilityState === "visible") { load(); loadJobs(); } };
+    const jobTimer = window.setInterval(pollJobs, 2000);
+    const dataTimer = window.setInterval(pollDashboard, 10000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(jobTimer); window.clearInterval(dataTimer); document.removeEventListener("visibilitychange", onVisible); };
   }, [load, loadJobs, status]);
   const stopJob = async (job) => {
     const id = jobVideoId(job);

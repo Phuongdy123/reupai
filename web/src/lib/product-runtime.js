@@ -13,10 +13,17 @@ export async function mountProductRuntime(host, client, startRuntime) {
   let runtime;
 
   const stateKeys = { "reup.sources.v13": "sources_v13", "reup.process.presets.v2": "process_presets_v2" };
-  await Promise.all(Object.entries(stateKeys).map(async ([key, stateKey]) => {
+  // Saved view state is optional. A temporary failure here must not prevent
+  // the source workspace from loading and processing videos.
+  const restoredStates = await Promise.allSettled(Object.entries(stateKeys).map(async ([key, stateKey]) => {
     const data = await client.json(`/api/library/ui-state/${stateKey}`, { signal: controller.signal });
-    if (data.value != null) storage.set(key, JSON.stringify(data.value));
+    return [key, data.value];
   }));
+  restoredStates.forEach((result) => {
+    if (result.status !== "fulfilled") return;
+    const [key, value] = result.value;
+    if (value != null) storage.set(key, JSON.stringify(value));
+  });
   if (!host.isConnected) { controller.abort(); return () => {}; }
 
   const listen = (target, type, handler, options) => {

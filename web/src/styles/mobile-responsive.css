@@ -2,10 +2,7 @@
 @media (max-width: 760px) {
     html { -webkit-text-size-adjust: 100%; }
 
-    body.theme-xports {
-        min-width: 320px;
-        overflow-x: hidden;
-    }
+    body.theme-xports { overflow-x: hidden; }
 
     .theme-xports .app-shell,
     .theme-xports .main,
@@ -146,8 +143,7 @@
     .theme-xports .library-card,
     .theme-xports .output-library-card { width: 100%; }
 
-    .theme-xports .library-page > .panel > .library-actions,
-    .theme-xports .series-page > .panel > .library-actions,
+    .theme-xports .panel > .library-actions,
     .theme-xports .collection-toolbar form,
     .theme-xports .collection-select-row,
     .theme-xports .source-actions,
@@ -159,8 +155,7 @@
         width: 100%;
     }
 
-    .theme-xports .library-page > .panel > .library-actions > .btn,
-    .theme-xports .series-page > .panel > .library-actions > .btn,
+    .theme-xports .panel > .library-actions > .btn,
     .theme-xports .collection-toolbar form > .btn,
     .theme-xports .collection-select-row > .btn,
     .theme-xports .source-actions > .btn,
@@ -169,8 +164,7 @@
         flex: 1 1 145px;
     }
 
-    .theme-xports .library-page > .panel > .library-actions select,
-    .theme-xports .series-page > .panel > .library-actions select,
+    .theme-xports .panel > .library-actions select,
     .theme-xports .collection-toolbar select,
     .theme-xports .collection-toolbar input {
         flex: 1 1 100%;
@@ -247,10 +241,36 @@
 
     .theme-xports .table-wrap table { min-width: 640px; }
 
-    .theme-xports .modal-overlay { padding: 8px; }
-    .theme-xports .modal-box { width: 100%; max-height: calc(100dvh - 16px); }
+    .theme-xports .modal {
+        padding: 8px;
+        padding-top: max(8px, env(safe-area-inset-top));
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .theme-xports .modal-box {
+        display: flex;
+        width: 100%;
+        max-height: calc(100vh - 16px);
+        max-height: calc(100dvh - 16px);
+        flex-direction: column;
+    }
+
+    .theme-xports .modal-box > video { max-height: min(62dvh, calc(100dvh - 205px)); }
+    .theme-xports .modal-box > .library-body { min-width: 0; flex: 1 1 auto; overflow-y: auto; }
     .theme-xports .modal-head { align-items: flex-start; gap: 10px; padding: 14px; }
     .theme-xports .modal-head h2 { font-size: 17px; }
+    .theme-xports .modal-head strong { min-width: 0; overflow-wrap: anywhere; }
+    .theme-xports .modal-head > .btn { flex: 0 0 auto; }
+
+    .theme-xports .error-banner,
+    .theme-xports .notice-banner {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .theme-xports .error-banner > span { min-width: 0; }
+    .theme-xports .error-banner > button { min-height: 36px; margin-left: auto; }
 
     .theme-xports .output-editor {
         width: calc(100vw - 8px);
@@ -274,6 +294,24 @@
 
     .theme-xports #processConfigDialog .process-config-actions .btn { flex: 1 1 130px; }
     .theme-xports #processConfigDialog .process-preview-tools .btn { flex: 1 1 130px; }
+
+    body.theme-xports #processConfigDialog {
+        height: calc(100vh - 16px);
+        height: calc(100dvh - 16px);
+        max-height: calc(100vh - 16px);
+        max-height: calc(100dvh - 16px);
+    }
+
+    .theme-xports .library-preview-dialog {
+        width: calc(100vw - 16px);
+        max-height: calc(100dvh - 16px);
+    }
+
+    /* Compact source cards keep touch targets usable without forcing horizontal scroll. */
+    .theme-xports #videos .compact-actions button,
+    .theme-xports #videos .compact-actions .more-menu > summary {
+        min-height: 36px !important;
+    }
 }
 
 @media (max-width: 430px) {
@@ -294,11 +332,34 @@
     .theme-xports .output-editor-interval { grid-template-columns: 1fr; }
     .theme-xports .output-editor-voice > div,
     .theme-xports .output-editor-interval .btn { grid-column: auto; }
-    .theme-xports .library-page > .panel > .library-actions > .btn,
-    .theme-xports .series-page > .panel > .library-actions > .btn,
+    .theme-xports .panel > .library-actions > .btn,
     .theme-xports .collection-toolbar form > .btn,
     .theme-xports .collection-select-row > .btn,
     .theme-xports .source-actions > .btn,
     .theme-xports .selection-actions > .btn,
     .theme-xports .settings-actions > .btn { flex-basis: 100%; }
+}
+
+@media (max-width: 390px) {
+    .theme-xports .topbar-user.engine-status-control { gap: 7px; }
+    .theme-xports .local-engine-indicator { flex: 1 1 100%; }
+    .theme-xports .local-engine-action { flex: 1 1 auto; }
+
+    .theme-xports #videos > .compact-video-card {
+        grid-template-columns: 24px 92px minmax(0, 1fr) !important;
+        gap: 7px !important;
+        padding: 8px !important;
+    }
+
+    .theme-xports #videos .compact-cover {
+        width: 92px !important;
+        min-width: 92px !important;
+        max-width: 92px !important;
+        height: 72px !important;
+        min-height: 72px !important;
+        max-height: 72px !important;
+    }
+
+    .theme-xports #videos .action-primary,
+    .theme-xports #videos .action-secondary { min-width: 58px !important; padding-inline: 7px !important; }
 }

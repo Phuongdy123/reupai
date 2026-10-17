@@ -19,10 +19,19 @@ export function EngineProvider({ children }) {
     const unsubscribe = localEngineClient.onChange(setConnection);
     window.reupEngineClient = localEngineClient;
     const poll = async () => {
-      if (localEngineClient.status !== "authorizing") await manager.check();
-      if (active) timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 5000);
+      if (!active) return;
+      if (document.visibilityState === "visible" && localEngineClient.status !== "authorizing") await manager.check();
+      if (active) {
+        const visible = document.visibilityState === "visible";
+        timer = window.setTimeout(poll, visible ? (localEngineClient.status === "connected" ? 10000 : 5000) : 60000);
+      }
     };
-    const reconnect = () => { if (document.visibilityState === "visible" && localEngineClient.status !== "authorizing") manager.check(); };
+    const reconnect = () => {
+      if (document.visibilityState !== "visible" || localEngineClient.status === "authorizing") return;
+      window.clearTimeout(timer);
+      manager.check();
+      timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 5000);
+    };
     poll();
     window.addEventListener("online", reconnect);
     document.addEventListener("visibilitychange", reconnect);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icon";
 import { sendFeedback } from "./feedback-provider";
 
@@ -75,9 +75,25 @@ export function Pager({ page, total, pageSize, onChange }) {
   return <nav className="bottom-pages" aria-label="Phân trang"><button className="bottom-page-btn" disabled={page === 1} onClick={() => onChange(page - 1)}>Trước</button>{visible.map((n, i) => <span key={n}>{i > 0 && n - visible[i - 1] > 1 && <span className="bottom-page-dots">…</span>}<button className={`bottom-page-btn ${page === n ? "active" : ""}`} aria-current={page === n ? "page" : undefined} onClick={() => onChange(n)}>{n}</button></span>)}<button className="bottom-page-btn" disabled={page === pages} onClick={() => onChange(page + 1)}>Sau</button></nav>;
 }
 export function VideoCover({ client, video, children, previewPath }) {
+  const coverRef = useRef(null);
   const [url, setUrl] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
   useEffect(() => {
+    const node = coverRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") { setShouldLoad(true); return undefined; }
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setShouldLoad(true);
+      observer.disconnect();
+    }, { rootMargin: "320px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!shouldLoad) return undefined;
     const controller = new AbortController();
     let alive = true;
     let blobUrl;
@@ -103,8 +119,8 @@ export function VideoCover({ client, video, children, previewPath }) {
     };
     loadCover();
     return () => { alive = false; controller.abort(); if (blobUrl) URL.revokeObjectURL(blobUrl); };
-  }, [client, video.cover_url, previewPath]);
-  return <div className="library-cover">{url ? <img src={url} alt={video.title || video.video_id} loading="lazy" /> : previewUrl ? <video className="library-preview" crossOrigin="anonymous" src={previewUrl} muted playsInline preload="metadata" aria-label={`Xem trước ${video.title || video.video_id}`} onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(.1, event.currentTarget.duration || 0); }} /> : <div className="no-cover"><Icon name="play" size={30} /></div>}{children}</div>;
+  }, [client, shouldLoad, video.cover_url, previewPath]);
+  return <div className="library-cover" ref={coverRef}>{url ? <img src={url} alt={video.title || video.video_id} loading="lazy" /> : previewUrl ? <video className="library-preview" crossOrigin="anonymous" src={previewUrl} muted playsInline preload="metadata" aria-label={`Xem trước ${video.title || video.video_id}`} onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(.1, event.currentTarget.duration || 0); }} /> : <div className="no-cover"><Icon name="play" size={30} /></div>}{children}</div>;
 }
 export function PreviewDialog({ client, item, onClose, onError }) {
   const [url, setUrl] = useState(null);
