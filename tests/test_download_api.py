@@ -7,8 +7,10 @@ import time
 import unittest
 from unittest.mock import patch
 
+from fastapi.responses import Response
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+import local_engine
 from web import server
 
 
@@ -64,4 +66,28 @@ class DownloadApiTests(unittest.TestCase):
 
         self.assertEqual(maximum, 1)
         self.assertFalse(server.DOWNLOAD_VIDEO_LOCKS)
+
+    def test_download_ticket_is_single_use_and_sets_attachment_header(self):
+        ticket = "test-download-ticket"
+        local_engine._browser_sessions["session"] = {
+            "client_origin": "https://www.reupai.cloud",
+            "expires_at": time.time() + 60,
+        }
+        self.addCleanup(local_engine._browser_sessions.pop, "session", None)
+        local_engine._media_tickets[ticket] = {
+            "session": "session",
+            "origin": "https://www.reupai.cloud",
+            "path": "/api/files/downloads/example.mp4",
+            "download": True,
+            "filename": "video test.mp4",
+            "expires_at": time.time() + 60,
+        }
+        self.addCleanup(local_engine._media_tickets.pop, ticket, None)
+        with patch.object(local_engine, "_serve_local_file", return_value=Response()):
+            response = local_engine.ticket_media(ticket)
+        self.assertEqual(
+            response.headers["content-disposition"],
+            "attachment; filename*=UTF-8''video%20test.mp4",
+        )
+        self.assertNotIn(ticket, local_engine._media_tickets)
 

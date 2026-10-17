@@ -14,7 +14,7 @@ import time
 import hashlib
 import json
 from pathlib import Path
-from urllib.parse import urlsplit, parse_qs, unquote
+from urllib.parse import quote, urlsplit, parse_qs, unquote
 from types import SimpleNamespace
 from typing import Annotated
 
@@ -690,17 +690,27 @@ def create_media_ticket(payload: dict[str, str], authorization: Annotated[str | 
     parsed = urlsplit(path)
     if parsed.scheme or parsed.netloc or not path.startswith(("/api/files/", "/api/cover?", "/api/preview/source/", "/api/stream/", "/api/result/", "/library/source/")):
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
+    download = str(payload.get("download", "")).lower() in {"1", "true", "yes"}
+    requested_name = str(payload.get("filename", "")).replace("\\", "/").rsplit("/", 1)[-1].replace("\r", "").replace("\n", "").strip()
+    filename = requested_name or "reupai-media"
     ticket = secrets.token_urlsafe(32)
-    _media_tickets[ticket] = {"session": token, "origin": origin.rstrip("/"), "path": path, "expires_at": time.time() + MEDIA_TICKET_TTL_SECONDS}
-    return {"url": f"/api/media/{ticket}", "expires_in": MEDIA_TICKET_TTL_SECONDS}
+    _media_tickets[ticket] = {"session": token, "origin": origin.rstrip("/"), "path": path, "download": download, "filename": filename, "expires_at": time.time() + MEDIA_TICKET_TTL_SECONDS}
+    return {"url": f"/api/media/{ticket}", "expires_in": MEDIA_TICKET_TTL_SECONDS, "download": download}
 
 
 @app.get("/api/media/{ticket}")
 def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
     _cleanup_auth_state()
     record = _media_tickets.get(ticket)
-    if not record or not origin or origin.rstrip("/") != record.get("origin") or origin.rstrip("/") not in ALLOWED_ORIGINS:
+    origin_is_valid = bool(origin and origin.rstrip("/") == record.get("origin") and origin.rstrip("/") in ALLOWED_ORIGINS) if record else False
+    # Downloads are browser navigations, which do not always include Origin.
+    # The opaque, short-lived ticket was already created through an authorized
+    # session, so permit this one navigation while retaining origin checks for
+    # previews and all other embedded media.
+    if not record or (not origin_is_valid and not record.get("download")):
         raise HTTPException(status_code=401, detail="Media ticket không hợp lệ hoặc đã hết hạn.")
+    if record.get("download"):
+        _media_tickets.pop(ticket, None)
     parsed = urlsplit(str(record["path"]))
     path = unquote(parsed.path)
     query = parse_qs(parsed.query)
@@ -721,6 +731,8 @@ def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
     else:
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
     response.headers["Cache-Control"] = "private, no-store"
+    if record.get("download"):
+        response.headers["Content-Disposition"] = "attachment; filename*=UTF-8''" + quote(str(record.get("filename") or "reupai-media"), safe="")
     return response
 
 

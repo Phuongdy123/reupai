@@ -171,7 +171,7 @@ export class LocalEngineClient {
     const cached = this.mediaTickets.get(resource);
     if (cached && cached.expires > now) return cached.url;
     if (this.mediaTicketRequests.has(resource)) return this.mediaTicketRequests.get(resource);
-    const request = this.json("/api/media/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: resource }) }).then((data) => {
+    const request = this.createMediaTicket(resource).then((data) => {
       const url = `${this.baseUrl}${data.url}`;
       this.mediaTickets.set(resource, { url, expires: Date.now() + Math.max(0, data.expires_in - 30) * 1000 });
       while (this.mediaTickets.size > 256) this.mediaTickets.delete(this.mediaTickets.keys().next().value);
@@ -182,8 +182,25 @@ export class LocalEngineClient {
     finally { this.mediaTicketRequests.delete(resource); }
   }
 
+  async createMediaTicket(resource, options = {}) {
+    return this.json("/api/media/tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: resource, ...options }),
+    });
+  }
+
   async downloadFile(path, filename = "video.mp4") {
     const resource = String(path || "").startsWith("/") ? path : `/api/files/${String(path || "").split("/").map(encodeURIComponent).join("/")}`;
+    const ticket = await this.createMediaTicket(resource, { download: "1", filename });
+    if (ticket.download) {
+      const anchor = document.createElement("a");
+      anchor.href = `${this.baseUrl}${ticket.url}`; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      return;
+    }
+    // Engines released before streaming download tickets keep their existing
+    // endpoint response. Preserve that path until every local installation is
+    // upgraded instead of breaking downloads from an older executable.
     const response = await this.request(resource, { signal: AbortSignal.timeout(120000) });
     if (!response.ok) throw new Error(`Không thể tải file (HTTP ${response.status}).`);
     const blob = await response.blob();
