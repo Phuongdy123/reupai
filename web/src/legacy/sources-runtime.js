@@ -2184,7 +2184,10 @@ async function downloadVideo(
 
 function processConfigDefaults() {
     // Mỗi job bắt đầu sạch theo flow mặc định, không lấy cấu hình cũ.
-    return {};
+    return {
+        // Logo chỉ được chèn khi người dùng chủ động chọn trong phần nâng cao.
+        logo_mode: 'none',
+    };
 }
 
 
@@ -2341,10 +2344,10 @@ function ensureProcessConfigDialog() {
                 <summary>Logo chèn lên video</summary>
                 <label>Kiểu logo
                     <select id="processLogoMode">
+                        <option value="none">Không chèn logo</option>
                         <option value="default">Logo mặc định</option>
                         <option value="custom">Logo mới (đường dẫn file)</option>
                         <option value="text">Chèn chữ thay logo</option>
-                        <option value="none">Không chèn logo</option>
                     </select>
                 </label>
                 <label id="processLogoPathField">Đường dẫn logo mới
@@ -2364,7 +2367,7 @@ function ensureProcessConfigDialog() {
                 <button type="button" class="btn secondary process-section-save" id="saveLogoSelection">${uiIcon('save', 16)} Lưu lựa chọn logo</button>
             </details>
 
-            <div class="process-config-note">Logo mặc định và luồng xử lý cũ vẫn được giữ nguyên nếu bạn không chỉnh nâng cao.</div>
+            <div class="process-config-note">Mặc định chỉ làm mờ phụ đề. Chọn logo hoặc chữ ở trên khi bạn muốn chèn vào video.</div>
             <div class="process-config-actions">
                 <button type="button" class="btn secondary" id="cancelProcessConfig">Hủy</button>
                 <button type="submit" class="btn primary" id="runProcessConfig">Bắt đầu xử lý</button>
@@ -2484,7 +2487,7 @@ async function openProcessConfig(video, card, mode) {
         dialog.querySelector('#processLogoFileField').style.display = mode === 'custom' ? '' : 'none';
         dialog.querySelector('#processLogoTextField').style.display = mode === 'text' ? '' : 'none';
     };
-    set('processLogoMode', defaults.logo_mode || 'default');
+    set('processLogoMode', defaults.logo_mode || 'none');
     set('processLogoPath', defaults.logo_path || '');
     set('processLogoText', defaults.logo_text || '');
     logoMode.onchange = updateLogoFields;
@@ -2591,6 +2594,15 @@ async function openProcessConfig(video, card, mode) {
     pickButtons.forEach(button => {
         button.onclick = () => {
             pickMode = button.dataset.pickMode || 'blur';
+            // Vùng logo là một lựa chọn chủ động: chỉ lúc đó mới bật logo
+            // mặc định cho job này. Các job không chọn logo vẫn không chèn gì.
+            if (
+                pickMode === 'logo'
+                && logoMode.value === 'none'
+            ) {
+                logoMode.value = 'default';
+                logoMode.dispatchEvent(new Event('change'));
+            }
             pickButtons.forEach(item => item.classList.toggle('active', item === button));
             syncSelectionFromFields();
         };
@@ -2678,7 +2690,7 @@ async function openProcessConfig(video, card, mode) {
             'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
             'processLogoSize', 'processLogoX', 'processLogoY', 'processLogoPath', 'processLogoText']
             .forEach(id => set(id, ''));
-        set('processLogoMode', 'default');
+        set('processLogoMode', 'none');
         intervalRoot.innerHTML = '';
         dialog.querySelector('#processLogoFile').value = '';
         dialog._logoData = null;
@@ -2936,7 +2948,7 @@ async function openProcessConfig(video, card, mode) {
                 }
                 : null,
             blur_intervals,
-            logo_mode: value('processLogoMode') || 'default',
+            logo_mode: value('processLogoMode') || 'none',
             logo_path: value('processLogoPath') || null,
             logo_text: value('processLogoText') || null,
             logo_data: logoData,

@@ -2333,7 +2333,7 @@ def render_voiceover(
 
     logo_y=None,
 
-    logo_mode="default",
+    logo_mode="none",
 
     logo_text=None,
 
@@ -2397,7 +2397,7 @@ def render_voiceover(
     renderer.LOGO_SIZE_OVERRIDE = logo_size
     renderer.LOGO_X_OVERRIDE = logo_x
     renderer.LOGO_Y_OVERRIDE = logo_y
-    renderer.LOGO_MODE = logo_mode or "default"
+    renderer.LOGO_MODE = logo_mode or "none"
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
@@ -2477,7 +2477,7 @@ def render_subtitle_only(
 
     logo_y=None,
 
-    logo_mode="default",
+    logo_mode="none",
 
     logo_text=None,
 
@@ -2533,7 +2533,7 @@ def render_subtitle_only(
     renderer.LOGO_SIZE_OVERRIDE = logo_size
     renderer.LOGO_X_OVERRIDE = logo_x
     renderer.LOGO_Y_OVERRIDE = logo_y
-    renderer.LOGO_MODE = logo_mode or "default"
+    renderer.LOGO_MODE = logo_mode or "none"
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
@@ -2636,7 +2636,7 @@ def rerender_existing_output(
         "logo_size": config.get("logo_size"),
         "logo_x": config.get("logo_x"),
         "logo_y": config.get("logo_y"),
-        "logo_mode": config.get("logo_mode", "default"),
+        "logo_mode": config.get("logo_mode", "none"),
         "logo_text": config.get("logo_text"),
         "logo_path": config.get("logo_path"),
         "blur_intervals": intervals,
@@ -3759,7 +3759,7 @@ def pipeline(
 
                 logo_y=config.get("logo_y"),
 
-                logo_mode=config.get("logo_mode", "default"),
+                logo_mode=config.get("logo_mode", "none"),
 
                 logo_text=config.get("logo_text"),
 
@@ -3826,7 +3826,7 @@ def pipeline(
 
                 logo_y=config.get("logo_y"),
 
-                logo_mode=config.get("logo_mode", "default"),
+                logo_mode=config.get("logo_mode", "none"),
 
                 logo_text=config.get("logo_text"),
 

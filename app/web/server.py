@@ -454,7 +454,7 @@ class ProcessRequest(BaseModel):
     blur_intervals: list[dict[str, Any]] = []
     custom_blur_region: Optional[dict[str, float]] = None
     auto_brand_blur: bool = False
-    logo_mode: str = "default"
+    logo_mode: str = "none"
     logo_text: Optional[str] = None
     logo_data: Optional[str] = None
     logo_filename: Optional[str] = None
