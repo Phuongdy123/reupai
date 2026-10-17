@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Literal, Optional
@@ -404,6 +405,8 @@ app.mount(
 PROCESS_STATE = {}
 PROCESS_LOCK = threading.Lock()
 SOURCE_SYNC_LOCK = threading.Lock()
+DOWNLOAD_VIDEO_LOCKS = {}
+DOWNLOAD_VIDEO_LOCKS_LOCK = threading.Lock()
 SOURCE_SYNC_CACHE_TTL_SECONDS = 60
 DOWNLOAD_SLOTS = threading.BoundedSemaphore(
     max_parallel_downloads()
@@ -411,6 +414,27 @@ DOWNLOAD_SLOTS = threading.BoundedSemaphore(
 PIPELINE_SLOTS = threading.BoundedSemaphore(
     max_parallel_pipelines()
 )
+
+
+@contextmanager
+def download_video_lock(video_id: str):
+    """Serialize duplicate requests for one source without blocking other downloads."""
+    with DOWNLOAD_VIDEO_LOCKS_LOCK:
+        lock, waiters = DOWNLOAD_VIDEO_LOCKS.get(video_id, (threading.Lock(), 0))
+        DOWNLOAD_VIDEO_LOCKS[video_id] = (lock, waiters + 1)
+
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+        with DOWNLOAD_VIDEO_LOCKS_LOCK:
+            current = DOWNLOAD_VIDEO_LOCKS.get(video_id)
+            if current and current[0] is lock:
+                if current[1] <= 1:
+                    DOWNLOAD_VIDEO_LOCKS.pop(video_id, None)
+                else:
+                    DOWNLOAD_VIDEO_LOCKS[video_id] = (lock, current[1] - 1)
 
 
 # =========================================================
@@ -4502,6 +4526,7 @@ def api_videos_page(
 )
 def api_download(
     body: DownloadRequest,
+    local_only: bool = False,
 ):
 
     video_id = (
@@ -4538,6 +4563,20 @@ def api_download(
         exist_ok=True,
     )
 
+    def download_response(path: Path, downloaded: bool):
+        if local_only:
+            return {
+                "ok": True,
+                "video_id": video_id,
+                "downloaded": downloaded,
+                "already_downloaded": not downloaded,
+            }
+        return FileResponse(
+            path=str(path),
+            media_type="video/mp4",
+            filename=f"{video_id}_source.mp4",
+        )
+
     existing = (
         find_valid_downloaded_video(
             folder
@@ -4551,43 +4590,39 @@ def api_download(
             existing,
         )
 
-        return FileResponse(
-            path=str(
-                existing
-            ),
-            media_type=
-                "video/mp4",
-            filename=
-                (
-                    f"{video_id}"
-                    "_source.mp4"
-                ),
-        )
+        return download_response(existing, downloaded=False)
 
     output_template = str(folder / "source.pending.%(ext)s")
+    downloaded_now = False
 
     try:
-        with DOWNLOAD_SLOTS:
-            # Recheck after acquiring a slot so duplicate requests for the
-            # same video do not start a second downloader process.
+        with download_video_lock(video_id):
+            # A per-video lock covers the check and the staging file. Other
+            # videos still use the configured DOWNLOAD_SLOTS concurrency.
             existing = find_valid_downloaded_video(folder)
             if not existing:
-                # Remove only known invalid/staging files inside this video's
-                # own download folder. A valid source is never touched.
-                for stale in folder.glob("source.pending.*"):
-                    if stale.is_file():
-                        stale.unlink(missing_ok=True)
-                for suffix in (".mp4", ".mkv", ".webm", ".mov"):
-                    invalid = folder / f"source{suffix}"
-                    if invalid.exists() and not media_file_ok(invalid):
-                        invalid.unlink(missing_ok=True)
-                        invalid.with_name(f".{invalid.name}.probe.json").unlink(missing_ok=True)
-                run_platform_download(
-                    body.url,
-                    output_template,
-                    platform,
-                )
-                finalize_staged_download(folder)
+                with DOWNLOAD_SLOTS:
+                    # Recheck after waiting for a global slot. This also
+                    # handles a source completed by an older engine request.
+                    existing = find_valid_downloaded_video(folder)
+                    if not existing:
+                        # Remove only known invalid/staging files inside this video's
+                        # own download folder. A valid source is never touched.
+                        for stale in folder.glob("source.pending.*"):
+                            if stale.is_file():
+                                stale.unlink(missing_ok=True)
+                        for suffix in (".mp4", ".mkv", ".webm", ".mov"):
+                            invalid = folder / f"source{suffix}"
+                            if invalid.exists() and not media_file_ok(invalid):
+                                invalid.unlink(missing_ok=True)
+                                invalid.with_name(f".{invalid.name}.probe.json").unlink(missing_ok=True)
+                        run_platform_download(
+                            body.url,
+                            output_template,
+                            platform,
+                        )
+                        finalize_staged_download(folder)
+                        downloaded_now = True
 
     except Exception as error:
 
@@ -4622,18 +4657,7 @@ def api_download(
         video_path,
     )
 
-    return FileResponse(
-        path=str(
-            video_path
-        ),
-        media_type=
-            "video/mp4",
-        filename=
-            (
-                f"{video_id}"
-                "_source.mp4"
-            ),
-    )
+    return download_response(video_path, downloaded=downloaded_now)
 
 
 # =========================================================

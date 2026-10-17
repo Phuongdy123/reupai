@@ -23,6 +23,7 @@ export class LocalEngineClient {
     this.listeners = new Set();
     this.connection = { status: "disconnected", error: null };
     this.mediaTickets = new Map();
+    this.mediaTicketRequests = new Map();
     this.refreshingSession = null;
     this.checkingConnection = null;
   }
@@ -104,11 +105,13 @@ export class LocalEngineClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_origin: window.location.origin, grant: this.grant }),
+      signal: AbortSignal.timeout(8000),
     });
     if (response.ok) {
       const data = await response.json();
       this.setSessionToken(data.session_token);
       this.mediaTickets.clear();
+      this.mediaTicketRequests.clear();
       return true;
     }
     if (response.status === 401 || response.status === 403) {
@@ -142,7 +145,7 @@ export class LocalEngineClient {
       this.emit("connected");
       return true;
     } catch (error) {
-      if (error.name === "TypeError" || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
+      if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
       else this.emit("error", error);
       return false;
     }
@@ -163,12 +166,20 @@ export class LocalEngineClient {
 
   async mediaUrl(path) {
     const resource = String(path || "").startsWith("/") ? path : `/api/files/${String(path || "").split("/").map(encodeURIComponent).join("/")}`;
+    const now = Date.now();
+    for (const [key, ticket] of this.mediaTickets) if (ticket.expires <= now) this.mediaTickets.delete(key);
     const cached = this.mediaTickets.get(resource);
-    if (cached && cached.expires > Date.now()) return cached.url;
-    const data = await this.json("/api/media/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: resource }) });
-    const url = `${this.baseUrl}${data.url}`;
-    this.mediaTickets.set(resource, { url, expires: Date.now() + (data.expires_in - 30) * 1000 });
-    return url;
+    if (cached && cached.expires > now) return cached.url;
+    if (this.mediaTicketRequests.has(resource)) return this.mediaTicketRequests.get(resource);
+    const request = this.json("/api/media/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: resource }) }).then((data) => {
+      const url = `${this.baseUrl}${data.url}`;
+      this.mediaTickets.set(resource, { url, expires: Date.now() + Math.max(0, data.expires_in - 30) * 1000 });
+      while (this.mediaTickets.size > 256) this.mediaTickets.delete(this.mediaTickets.keys().next().value);
+      return url;
+    });
+    this.mediaTicketRequests.set(resource, request);
+    try { return await request; }
+    finally { this.mediaTicketRequests.delete(resource); }
   }
 
   async downloadFile(path, filename = "video.mp4") {
@@ -218,6 +229,7 @@ export class LocalEngineClient {
       this.setSessionToken(null);
       this.setGrant(null);
       this.mediaTickets.clear();
+      this.mediaTicketRequests.clear();
       this.emit("authorization_required");
     }
   }

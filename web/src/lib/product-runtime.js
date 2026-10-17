@@ -93,6 +93,22 @@ export async function mountProductRuntime(host, client, startRuntime) {
   };
 
   const mediaJobs = new WeakMap();
+  const loadCover = (element, path) => {
+    client.mediaUrl(path).then((url) => {
+      if (!disposed && element.isConnected && mediaJobs.get(element) === path) element.src = url;
+    }).catch(() => {
+      if (!disposed) element.style.display = "none";
+    });
+  };
+  const coverObserver = typeof nativeWindow.IntersectionObserver === "function" ? new nativeWindow.IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const element = entry.target;
+      const path = mediaJobs.get(element);
+      coverObserver.unobserve(element);
+      if (!disposed && path && element.isConnected) loadCover(element, path);
+    }
+  }, { rootMargin: "320px 0px" }) : null;
   const adapt = (node) => {
     if (!(node instanceof Element)) return;
     const elements = [node, ...node.querySelectorAll("*")];
@@ -107,7 +123,8 @@ export async function mountProductRuntime(host, client, startRuntime) {
       if (path && mediaJobs.get(element) !== path) {
         mediaJobs.set(element, path);
         element.crossOrigin = "anonymous";
-        client.mediaUrl(path).then((url) => { if (!disposed && element.isConnected && mediaJobs.get(element) === path) element.src = url; }).catch(() => { if (!disposed) element.style.display = "none"; });
+        if (coverObserver) coverObserver.observe(element);
+        else loadCover(element, path);
       }
     }
   };
@@ -129,6 +146,7 @@ export async function mountProductRuntime(host, client, startRuntime) {
     disposed = true;
     controller.abort();
     observer.disconnect();
+    coverObserver?.disconnect();
     subscriptions.forEach((unsubscribe) => unsubscribe());
     timers.forEach((id) => nativeWindow.clearTimeout(id));
     intervals.forEach((id) => nativeWindow.clearInterval(id));
@@ -137,7 +155,7 @@ export async function mountProductRuntime(host, client, startRuntime) {
     host.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
   };
   try {
-    runtime = startRuntime({ document: scopedDocument, window: scopedWindow, localStorage, setTimeout: timed, clearTimeout: clearTimed, setInterval: (handler, delay) => { const id = nativeWindow.setInterval(() => { if (!disposed) handler(); }, delay); intervals.add(id); return id; }, clearInterval: (id) => { nativeWindow.clearInterval(id); intervals.delete(id); }, fetch: facade.request, history: nativeWindow.history });
+    runtime = startRuntime({ document: scopedDocument, window: scopedWindow, localStorage, setTimeout: timed, clearTimeout: clearTimed, setInterval: (handler, delay) => { const id = nativeWindow.setInterval(() => { if (!disposed && nativeDocument.visibilityState === "visible") handler(); }, delay); intervals.add(id); return id; }, clearInterval: (id) => { nativeWindow.clearInterval(id); intervals.delete(id); }, fetch: facade.request, history: nativeWindow.history });
     adapt(host);
     Promise.resolve(runtime.ready).then(() => {
       if (!disposed) host.dispatchEvent(new CustomEvent("product-runtime:ready"));

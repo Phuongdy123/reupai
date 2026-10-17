@@ -617,8 +617,8 @@ def result_stream(video_id: str, channel: str = "2d_animation", mode: str = "sub
 
 
 @app.post("/api/download")
-def download(body: DownloadRequest, _: bool = Depends(require_token)):
-    return api_download(body)
+def download(body: DownloadRequest, local_only: bool = False, _: bool = Depends(require_token)):
+    return api_download(body, local_only=local_only)
 
 
 def local_request() -> Request:

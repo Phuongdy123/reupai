@@ -31,9 +31,9 @@ export function LibraryPage({ kind }) {
   const [saving, setSaving] = useState(false);
   const title = kind === "favorites" ? "Video yêu thích" : kind === "collections" ? "Collections" : "Lịch sử job";
 
-  const load = useCallback(async (collectionId = selectedCollection) => {
+  const load = useCallback(async (collectionId = selectedCollection, { silent = false } = {}) => {
     if (status !== "connected") return;
-    setLoading(true); setError(null);
+    if (!silent) { setLoading(true); setError(null); }
     try {
       if (kind === "history") {
         const data = await client.json("/api/library/history?limit=200", { cache: "no-store" });
@@ -54,14 +54,16 @@ export function LibraryPage({ kind }) {
         }
       }
     } catch (requestError) { setError(requestError.message || "Không thể tải dữ liệu local."); }
-    finally { setLoading(false); }
+    finally { if (!silent) setLoading(false); }
   }, [client, kind, selectedCollection, status]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); setSelected(new Set()); }, [kind, selectedCollection, query, filter]);
   useEffect(() => {
     if (kind !== "history" || status !== "connected") return undefined;
-    const timer = window.setInterval(() => load(), 10000);
-    return () => window.clearInterval(timer);
+    const refresh = () => { if (document.visibilityState === "visible") load(undefined, { silent: true }); };
+    const timer = window.setInterval(refresh, 10000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [kind, load, status]);
   const localItems = useMemo(() => kind === "history" ? items : items.map((video) => withLocalFiles(video, downloads, outputs)), [items, downloads, outputs, kind]);
   const filtered = useMemo(() => localItems.filter((item) => {
@@ -123,7 +125,12 @@ export function LibraryPage({ kind }) {
     setBusyId(video.video_id, true); setError(null);
     try {
       if (sourceFile) await client.downloadFile(sourcePath(sourceFile), `${video.video_id}-source.mp4`);
-      else { await client.json("/api/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: video.video_id, url: video.url }) }); setNotice("Đã tải video về máy."); await load(); }
+      else {
+        const response = await client.request("/api/download?local_only=true", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: video.video_id, url: video.url }) });
+        if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.detail || `Không thể tải video (HTTP ${response.status}).`); }
+        try { await response.body?.cancel(); } catch (_) { /* The source is already stored by the Local Engine. */ }
+        setNotice("Đã tải video về máy."); await load();
+      }
     } catch (requestError) { setError(requestError.message || "Không thể tải video."); }
     finally { setBusyId(video.video_id, false); }
   };

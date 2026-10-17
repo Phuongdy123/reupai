@@ -817,32 +817,6 @@ function renderVideoLoadingState() {
 }
 
 
-async function waitForVideoThumbnails(videos) {
-
-    const covers = videos
-        .map(video => video.cover_url)
-        .filter(Boolean)
-        .slice(0, PAGE_SIZE);
-
-    await Promise.all(covers.map(url => new Promise(resolve => {
-        const image = new Image();
-        let settled = false;
-        const finish = () => {
-            if (settled) {
-                return;
-            }
-            settled = true;
-            resolve();
-        };
-        image.onload = finish;
-        image.onerror = finish;
-        window.setTimeout(finish, 2500);
-        image.crossOrigin = 'anonymous';
-        window.reupEngineClient.mediaUrl(coverUrl(url)).then(media => { image.src = media; }).catch(finish);
-    })));
-}
-
-
 async function loadPage(
     page,
     force = false
@@ -1039,7 +1013,6 @@ async function loadPage(
             ...videos
         ];
 
-        await waitForVideoThumbnails(videos);
         renderVideos();
 
         updateSourceInfo(
@@ -1188,7 +1161,6 @@ async function loadVideos(refresh = false) {
             sourceTotal = 1;
             totalPages = 1;
             remoteHasMore = false;
-            await waitForVideoThumbnails(currentVideos);
             renderVideos();
             updateSourceInfo('Đã nhận diện 1 video');
             updateViewLabel('Video lẻ');
@@ -1299,7 +1271,6 @@ async function loadVideos(refresh = false) {
         lastLoadedSourceUrl = sourceUrl;
         lastLoadedInputMode = inputMode;
 
-        await waitForVideoThumbnails(pageOne);
         renderVideos();
 
         let extra = data.warning || '';

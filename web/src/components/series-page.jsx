@@ -73,7 +73,9 @@ export function SeriesPage() {
     try {
       if (sourceFile) await client.downloadFile(sourcePath(sourceFile), `${video.video_id}-source.mp4`);
       else {
-        await client.json("/api/download", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: video.video_id, url: video.url }) });
+        const response = await client.request("/api/download?local_only=true", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ video_id: video.video_id, url: video.url }) });
+        if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.detail || `Không thể tải video (HTTP ${response.status}).`); }
+        try { await response.body?.cancel(); } catch (_) { /* The source is already stored by the Local Engine. */ }
         const files = await client.json("/api/library/downloads"); setDownloads(files.videos || []); await loadEpisodes(); setNotice("Đã tải video về máy.");
       }
     } catch (requestError) { setError(requestError.message || "Không thể tải video."); throw requestError; }
