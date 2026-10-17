@@ -30,6 +30,8 @@ import subprocess
 
 import sys
 
+from urllib.parse import urlparse
+
 
 
 from datetime import datetime
@@ -334,6 +336,82 @@ def stable_fingerprint(payload) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def normalize_music_url(value) -> str:
+    """Validate a remote background-music URL before giving it to yt-dlp."""
+    url = str(value or "").strip()
+    if not url:
+        return ""
+    if len(url) > 4096:
+        raise ValueError("Link nhạc quá dài.")
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Link nhạc phải bắt đầu bằng http:// hoặc https://.")
+    return url
+
+
+def resolve_music_url_track(job_dir: Path, music_url: str, is_valid_file) -> Path:
+    """Return a validated cached/downloaded audio track for one remote URL."""
+    url = normalize_music_url(music_url)
+    music_key = stable_fingerprint({"url": url})[:16]
+    candidates = [
+        candidate
+        for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
+        if is_valid_file(candidate)
+    ]
+    if candidates:
+        return candidates[0]
+
+    for stale in job_dir.glob(f"background_music_{music_key}.*"):
+        try:
+            stale.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    music_template = str(job_dir / f"background_music_{music_key}.%(ext)s")
+    from services.engine_runtime import python_module_command
+    music_command = python_module_command(
+        "yt_dlp",
+        "--no-playlist", "--no-warnings",
+        "-x", "--audio-format", "m4a",
+        "-o", music_template, url,
+    )
+    try:
+        result = subprocess.run(
+            music_command,
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            timeout=600,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("Tải nhạc quá 10 phút. Hãy thử link khác hoặc tải tệp nhạc từ máy.") from error
+    except OSError as error:
+        raise RuntimeError("Không thể khởi chạy trình tải nhạc của Local Engine.") from error
+
+    if result.returncode != 0:
+        detail = " ".join((result.stderr or result.stdout or "").splitlines()[-2:]).strip()
+        suffix = f" ({detail[:280]})" if detail else ""
+        raise RuntimeError(
+            "Không tải được nhạc từ liên kết. Hãy kiểm tra link có công khai, "
+            "hoặc dùng tệp audio/video trên máy." + suffix
+        )
+
+    candidates = [
+        candidate
+        for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
+        if is_valid_file(candidate)
+    ]
+    if not candidates:
+        raise RuntimeError(
+            "Link đã tải xong nhưng không tìm thấy stream âm thanh hợp lệ. "
+            "Hãy dùng link audio/video khác."
+        )
+    return candidates[0]
 
 
 def file_fingerprint(path: Path) -> str:
@@ -2876,43 +2954,17 @@ def pipeline(
         except Exception as error:
             raise RuntimeError(f"Audio/video tải lên không hợp lệ: {error}") from error
 
-    music_url = str(config.get("music_url") or "").strip()
+    music_url = normalize_music_url(config.get("music_url"))
     if music_url and music_path is None:
-        # A fixed background_music.m4a reused audio from an earlier URL. The
-        # URL fingerprint makes the cache identity explicit while retaining
-        # valid audio when the same link is selected again.
-        music_key = stable_fingerprint({"url": music_url})[:16]
-        music_path = next(
-            (
-                candidate
-                for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
-                if valid_music_file(candidate)
-            ),
-            job_dir / f"background_music_{music_key}.m4a",
+        write_progress(
+            job_dir,
+            stage="music",
+            percent=2,
+            status="running",
+            message="Đang tải và kiểm tra nhạc nền.",
+            mode=mode,
         )
-        if not valid_music_file(music_path):
-            for stale in job_dir.glob(f"background_music_{music_key}.*"):
-                if stale.exists():
-                    try:
-                        stale.unlink()
-                    except OSError:
-                        pass
-            music_template = str(job_dir / f"background_music_{music_key}.%(ext)s")
-            from services.engine_runtime import python_module_command
-            music_command = python_module_command(
-                "yt_dlp",
-                "--no-playlist", "--no-warnings",
-                "-x", "--audio-format", "m4a",
-                "-o", music_template, music_url,
-            )
-            subprocess.run(music_command, cwd=str(PROJECT_ROOT), check=True)
-            candidates = [
-                candidate
-                for candidate in sorted(job_dir.glob(f"background_music_{music_key}.*"))
-                if valid_music_file(candidate)
-            ]
-            if candidates:
-                music_path = candidates[0]
+        music_path = resolve_music_url_track(job_dir, music_url, valid_music_file)
     # Render revisions can reuse a local background track created by the
     # original job. Only accept files inside this job directory; browser input
     # never controls this path.
@@ -2924,9 +2976,14 @@ def pipeline(
                 music_path = cached_music
         except (OSError, ValueError):
             pass
+    try:
+        music_volume = max(0.0, min(1.0, float(config.get("music_volume", 0.12))))
+    except (TypeError, ValueError):
+        music_volume = 0.12
     config = {
         **config,
         "music_path": str(music_path) if music_path and valid_music_file(music_path) else None,
+        "music_volume": music_volume,
     }
 
 

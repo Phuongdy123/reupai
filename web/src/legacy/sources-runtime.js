@@ -2285,22 +2285,30 @@ function ensureProcessConfigDialog() {
                         <option value="tiktok">TikTok · 9:16</option>
                     </select>
                 </label>
-                <label>Link nhạc / video có nhạc
-                    <input id="processMusicUrl" type="url" placeholder="Dán link audio hoặc video">
-                </label>
-                <label>Hoặc chọn audio/video trên máy
-                    <input id="processMusicFile" type="file" accept="audio/*,video/*">
-                </label>
-                <label>Âm lượng nhạc
-                    <input id="processMusicVolume" type="range" min="0" max="1" step="0.05" value="0.12">
-                    <output data-for="processMusicVolume">12%</output>
-                </label>
                 <label class="process-check-option">
                     <input id="processAutoBrandBlur" type="checkbox">
                     Tự động làm mờ ID/chữ watermark
                     <small>Chỉ bật khi video có watermark ở góc trên.</small>
                 </label>
             </div>
+
+            <details class="process-config-advanced" id="processMusicSection">
+                <summary>Nhạc nền</summary>
+                <p>Dán link audio/video công khai hoặc chọn một tệp trên máy. Nhạc sẽ lặp vừa đủ chiều dài video và được trộn cùng tiếng gốc hoặc Voice.</p>
+                <div class="process-config-grid">
+                    <label>Link nhạc / video có nhạc
+                        <input id="processMusicUrl" type="url" inputmode="url" placeholder="https://...">
+                    </label>
+                    <label>Hoặc chọn audio/video trên máy
+                        <input id="processMusicFile" type="file" accept="audio/*,video/*">
+                    </label>
+                    <label>Âm lượng nhạc
+                        <input id="processMusicVolume" type="range" min="0" max="1" step="0.05" value="0.12">
+                        <output data-for="processMusicVolume">12%</output>
+                    </label>
+                </div>
+                <small id="processMusicHint">Không chọn nhạc: video giữ nguyên âm thanh hiện có.</small>
+            </details>
 
             <details class="process-config-advanced">
                 <summary>Vùng mờ sub</summary>
@@ -2450,7 +2458,32 @@ async function openProcessConfig(video, card, mode) {
     set('processMusicUrl', defaults.music_url || '');
     set('processMusicVolume', defaults.music_volume ?? 0.12);
     const musicFileInput = dialog.querySelector('#processMusicFile');
-    if (musicFileInput) musicFileInput.value = '';
+    const musicUrlInput = dialog.querySelector('#processMusicUrl');
+    const musicHint = dialog.querySelector('#processMusicHint');
+    const syncMusicChoice = () => {
+        const hasFile = !!musicFileInput?.files?.[0];
+        const hasUrl = !!musicUrlInput?.value?.trim();
+        if (musicHint) musicHint.textContent = hasFile
+            ? `Dùng tệp: ${musicFileInput.files[0].name}.`
+            : hasUrl
+                ? 'Local Engine sẽ tải, kiểm tra audio và lưu cache theo link này.'
+                : 'Không chọn nhạc: video giữ nguyên âm thanh hiện có.';
+    };
+    if (musicFileInput) {
+        musicFileInput.value = '';
+        musicFileInput.onchange = () => {
+            if (musicFileInput.files?.[0] && musicUrlInput) musicUrlInput.value = '';
+            syncMusicChoice();
+        };
+    }
+    if (musicUrlInput) {
+        musicUrlInput.oninput = () => {
+            musicUrlInput.setCustomValidity('');
+            if (musicUrlInput.value.trim() && musicFileInput) musicFileInput.value = '';
+            syncMusicChoice();
+        };
+    }
+    syncMusicChoice();
     set('processLogoSize', defaults.logo_size ?? '');
     set('processLogoX', defaults.logo_x ?? '');
     set('processLogoY', defaults.logo_y ?? '');
@@ -2911,6 +2944,12 @@ async function openProcessConfig(video, card, mode) {
             dialog._logoData = logoData;
             dialog._logoFilename = logoFile.name;
         }
+        const musicUrl = value('processMusicUrl').trim();
+        if (musicUrl && !/^https?:\/\/\S+$/i.test(musicUrl)) {
+            musicUrlInput?.setCustomValidity('Link nhạc phải bắt đầu bằng http:// hoặc https://.');
+            musicUrlInput?.reportValidity();
+            return;
+        }
         const musicFile = dialog.querySelector('#processMusicFile')?.files?.[0];
         let musicData = null;
         if (musicFile) {
@@ -2928,7 +2967,7 @@ async function openProcessConfig(video, card, mode) {
             voice_volume: Number(value('processVoiceVolume') || 1),
             tts_speed: Number(value('processTtsSpeed') || 1.10),
             voice: value('processVoice'),
-            music_url: value('processMusicUrl') || null,
+            music_url: musicUrl || null,
             music_data: musicData,
             music_filename: musicFile?.name || null,
             music_volume: Number(value('processMusicVolume') || 0.12),
