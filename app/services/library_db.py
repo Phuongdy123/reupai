@@ -1622,6 +1622,8 @@ def list_library_videos(
     series_key=None,
     query=None,
     limit=500,
+    include_local_state=True,
+    include_favorite=True,
 ):
 
     sync_source_videos()
@@ -1631,7 +1633,19 @@ def list_library_videos(
     try:
         joins = []
         filters = []
-        parameters = [int(user_id)]
+        parameters = []
+        select_favorite = "0 AS _favorite"
+
+        if include_favorite or favorite:
+            select_favorite = (
+                "CASE WHEN favorite_item.id IS NULL THEN 0 ELSE 1 END AS _favorite"
+            )
+            joins.append(
+                "LEFT JOIN favorites AS favorite_item "
+                "ON favorite_item.user_id = ? "
+                "AND favorite_item.platform_video_id = video.platform_video_id"
+            )
+            parameters.append(int(user_id))
 
         if collection_id is not None:
             owned = (
@@ -1675,11 +1689,8 @@ def list_library_videos(
             f"""
             SELECT
                 video.*,
-                CASE WHEN favorite_item.id IS NULL THEN 0 ELSE 1 END AS _favorite
+                {select_favorite}
             FROM library_videos AS video
-            LEFT JOIN favorites AS favorite_item
-                ON favorite_item.user_id = ?
-                AND favorite_item.platform_video_id = video.platform_video_id
             {' '.join(joins)}
             {where}
             ORDER BY
@@ -1775,17 +1786,18 @@ def list_library_videos(
             item
         )
 
-    states = local_video_states(
-        [
-            (
-                item["video_id"],
-                item.get("channel_key"),
-            )
-            for item in result
-        ]
-    )
-    for item in result:
-        item.update(states.get(item["video_id"], {}))
+    if include_local_state:
+        states = local_video_states(
+            [
+                (
+                    item["video_id"],
+                    item.get("channel_key"),
+                )
+                for item in result
+            ]
+        )
+        for item in result:
+            item.update(states.get(item["video_id"], {}))
 
     result.sort(
         key=lambda item: (
@@ -1961,6 +1973,8 @@ def list_series(
         list_library_videos(
             user_id,
             limit=2000,
+            include_local_state=False,
+            include_favorite=False,
         )
     )
 

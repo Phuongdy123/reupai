@@ -108,6 +108,23 @@ class LibraryVideoListTests(unittest.TestCase):
         self.assertFalse(states["second"]["processing"])
         self.assertEqual(states["second"]["db_status"], "completed")
 
+    def test_series_listing_can_skip_local_status_and_favorite_lookups(self):
+        self._upsert("episode-one", published_at="2026-01-01T00:00:00")
+
+        with patch.object(library_db, "sync_source_videos"), patch.object(
+            library_db,
+            "local_video_states",
+        ) as local_states:
+            videos = library_db.list_library_videos(
+                7,
+                include_local_state=False,
+                include_favorite=False,
+            )
+
+        self.assertEqual([video["video_id"] for video in videos], ["episode-one"])
+        self.assertFalse(videos[0]["favorite"])
+        local_states.assert_not_called()
+
     def test_source_sync_uses_one_shared_transaction(self):
         conn = self._connection()
         try:
