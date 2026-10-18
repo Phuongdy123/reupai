@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, addVideosToCollection, createLocalFileIndex, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
@@ -13,6 +13,7 @@ export function LibraryPage({ kind }) {
   const [downloads, setDownloads] = useState([]);
   const [outputs, setOutputs] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState("");
+  const selectedCollectionRef = useRef("");
   const [newName, setNewName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,8 @@ export function LibraryPage({ kind }) {
   const [saving, setSaving] = useState(false);
   const title = kind === "favorites" ? "Video yêu thích" : kind === "collections" ? "Collections" : "Lịch sử job";
 
-  const load = useCallback(async (collectionId = selectedCollection, { silent = false } = {}) => {
+  useEffect(() => { selectedCollectionRef.current = selectedCollection; }, [selectedCollection]);
+  const load = useCallback(async (collectionId = undefined, { silent = false } = {}) => {
     if (status !== "connected") return;
     if (!silent) { setLoading(true); setError(null); }
     try {
@@ -43,7 +45,8 @@ export function LibraryPage({ kind }) {
         const list = listData.collections || [];
         setCollections(list); setDownloads(downloaded.videos || []); setOutputs(rendered.outputs || []);
         if (kind === "collections") {
-          const activeId = list.some((item) => String(item.id) === String(collectionId)) ? String(collectionId) : list[0] ? String(list[0].id) : "";
+          const requestedId = collectionId === undefined ? selectedCollectionRef.current : collectionId;
+          const activeId = list.some((item) => String(item.id) === String(requestedId)) ? String(requestedId) : list[0] ? String(list[0].id) : "";
           setSelectedCollection(activeId);
           if (!activeId) { setItems([]); return; }
           const result = await client.json(`/api/library/videos?collection_id=${encodeURIComponent(activeId)}&limit=2000`);
@@ -55,7 +58,7 @@ export function LibraryPage({ kind }) {
       }
     } catch (requestError) { setError(requestError.message || "Không thể tải dữ liệu local."); }
     finally { if (!silent) setLoading(false); }
-  }, [client, kind, selectedCollection, status]);
+  }, [client, kind, status]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { setPage(1); setSelected(new Set()); }, [kind, selectedCollection, query, filter]);
   useEffect(() => {
@@ -146,7 +149,7 @@ export function LibraryPage({ kind }) {
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <>
     <ErrorMessage error={error} retry={() => load()} /><Notice>{notice}</Notice>
-    {kind === "collections" && <section className="panel"><div className="panel-head"><div><h2>Collections</h2><p>Tạo và quản lý các nhóm video trên máy.</p></div></div><form className="control-bar" onSubmit={createCollection} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><input aria-label="Tên Collection mới" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Tên Collection mới" required style={{ flex: "1 1 180px" }} /><input aria-label="Mô tả Collection" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Mô tả (không bắt buộc)" style={{ flex: "1 1 180px" }} /><button className="btn primary" disabled={saving} type="submit">Tạo Collection</button></form><div className="control-bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}><select aria-label="Chọn Collection" value={selectedCollection} onChange={(event) => setSelectedCollection(event.target.value)} style={{ flex: 1 }}><option value="">Chọn Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.video_count || 0} video</option>)}</select><button className="btn secondary" disabled={!selectedCollection || saving} onClick={openPicker}>Thêm video</button><button className="btn danger" disabled={!selectedCollection || saving} onClick={deleteCollection}>Xóa Collection</button></div></section>}
+    {kind === "collections" && <section className="panel"><div className="panel-head"><div><h2>Collections</h2><p>Tạo và quản lý các nhóm video trên máy.</p></div></div><form className="control-bar" onSubmit={createCollection} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><input aria-label="Tên Collection mới" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Tên Collection mới" required style={{ flex: "1 1 180px" }} /><input aria-label="Mô tả Collection" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Mô tả (không bắt buộc)" style={{ flex: "1 1 180px" }} /><button className="btn primary" disabled={saving} type="submit">Tạo Collection</button></form><div className="control-bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}><select aria-label="Chọn Collection" value={selectedCollection} onChange={(event) => { const value = event.target.value; setSelectedCollection(value); load(value); }} style={{ flex: 1 }}><option value="">Chọn Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.video_count || 0} video</option>)}</select><button className="btn secondary" disabled={!selectedCollection || saving} onClick={openPicker}>Thêm video</button><button className="btn danger" disabled={!selectedCollection || saving} onClick={deleteCollection}>Xóa Collection</button></div></section>}
     <section className="panel"><div className="panel-head"><div><h2>{kind === "collections" ? activeCollection?.name || "Video trong Collection" : title}</h2><p>{kind === "history" ? "Tối đa 200 job gần nhất trong SQLite." : `${items.length} video${activeCollection?.description ? ` · ${activeCollection.description}` : ""}`}</p></div><button className="btn secondary" disabled={loading} onClick={() => load()}><Icon name="refresh" size={16} />Làm mới</button></div>
       <div className="control-bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm video, ID hoặc tên nguồn..." aria-label="Tìm trong thư viện" style={{ flex: "1 1 220px" }} /><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Lọc trạng thái"><option value="">Tất cả trạng thái</option>{kind === "history" ? <><option value="completed">Hoàn tất</option><option value="failed">Lỗi</option><option value="interrupted">Bị gián đoạn</option><option value="cancelled">Đã dừng</option><option value="queued">Đang chờ</option><option value="processing">Đang xử lý</option></> : <><option value="downloaded">Đã tải</option><option value="not-downloaded">Chưa tải</option><option value="subtitle">Có Vietsub</option><option value="voiceover">Có Voice</option><option value="processing">Đang xử lý</option></>}</select></div>
       {kind !== "history" && filtered.length > 0 && <div className="library-actions" style={{ marginBottom: 18 }}><button className="btn secondary" onClick={() => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((item) => item.video_id)))}>{selected.size === filtered.length ? "Bỏ chọn" : "Chọn tất cả"}</button><span className="status">{selected.size} đã chọn</span><select value={targetCollection} onChange={(event) => setTargetCollection(event.target.value)} aria-label="Collection để thêm video"><option value="">Thêm vào Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="btn secondary" disabled={!targetCollection || !selected.size || saving} onClick={() => addVideos(items.filter((item) => selected.has(item.video_id)), targetCollection)}>Thêm đã chọn</button></div>}
