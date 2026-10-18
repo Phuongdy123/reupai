@@ -67,6 +67,25 @@ class DownloadApiTests(unittest.TestCase):
         self.assertEqual(maximum, 1)
         self.assertFalse(server.DOWNLOAD_VIDEO_LOCKS)
 
+    def test_library_scan_cache_returns_copies_and_can_be_invalidated(self):
+        server.invalidate_library_scan_cache("test")
+        self.addCleanup(server.invalidate_library_scan_cache, "test")
+        calls = 0
+
+        def loader():
+            nonlocal calls
+            calls += 1
+            return [{"video_id": "one"}]
+
+        first = server._cached_library_scan("test", loader)
+        first[0]["video_id"] = "changed"
+        second = server._cached_library_scan("test", loader)
+        self.assertEqual(calls, 1)
+        self.assertEqual(second[0]["video_id"], "one")
+        server.invalidate_library_scan_cache("test")
+        server._cached_library_scan("test", loader)
+        self.assertEqual(calls, 2)
+
     def test_download_ticket_is_single_use_and_sets_attachment_header(self):
         ticket = "test-download-ticket"
         local_engine._browser_sessions["session"] = {

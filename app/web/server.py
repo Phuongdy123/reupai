@@ -407,6 +407,9 @@ PROCESS_LOCK = threading.Lock()
 SOURCE_SYNC_LOCK = threading.Lock()
 DOWNLOAD_VIDEO_LOCKS = {}
 DOWNLOAD_VIDEO_LOCKS_LOCK = threading.Lock()
+LIBRARY_SCAN_CACHE = {}
+LIBRARY_SCAN_CACHE_LOCK = threading.Lock()
+LIBRARY_SCAN_CACHE_TTL_SECONDS = 3
 SOURCE_SYNC_CACHE_TTL_SECONDS = 60
 DOWNLOAD_SLOTS = threading.BoundedSemaphore(
     max_parallel_downloads()
@@ -2662,7 +2665,7 @@ def video_metadata_map():
     return result
 
 
-def scan_downloaded_library():
+def _scan_downloaded_library():
     metadata = (
         video_metadata_map()
     )
@@ -2756,7 +2759,7 @@ def scan_downloaded_library():
     return items
 
 
-def scan_outputs_library():
+def _scan_outputs_library():
     metadata = (
         video_metadata_map()
     )
@@ -2887,6 +2890,39 @@ def scan_outputs_library():
     )
 
     return items
+
+
+def _cached_library_scan(name: str, loader):
+    """Avoid repeated full filesystem walks from simultaneous page requests."""
+    now = time.monotonic()
+    with LIBRARY_SCAN_CACHE_LOCK:
+        cached = LIBRARY_SCAN_CACHE.get(name)
+        if cached and cached[0] > now:
+            return [dict(item) for item in cached[1]]
+        items = loader()
+        snapshot = [dict(item) for item in items]
+        LIBRARY_SCAN_CACHE[name] = (
+            now + LIBRARY_SCAN_CACHE_TTL_SECONDS,
+            snapshot,
+        )
+        return [dict(item) for item in snapshot]
+
+
+def invalidate_library_scan_cache(*names: str):
+    with LIBRARY_SCAN_CACHE_LOCK:
+        if names:
+            for name in names:
+                LIBRARY_SCAN_CACHE.pop(name, None)
+        else:
+            LIBRARY_SCAN_CACHE.clear()
+
+
+def scan_downloaded_library():
+    return _cached_library_scan("downloads", _scan_downloaded_library)
+
+
+def scan_outputs_library():
+    return _cached_library_scan("outputs", _scan_outputs_library)
 
 
 def load_job_history(
@@ -4589,6 +4625,7 @@ def api_download(
             video_id,
             existing,
         )
+        invalidate_library_scan_cache("downloads")
 
         return download_response(existing, downloaded=False)
 
@@ -4656,6 +4693,7 @@ def api_download(
         video_id,
         video_path,
     )
+    invalidate_library_scan_cache("downloads")
 
     return download_response(video_path, downloaded=downloaded_now)
 

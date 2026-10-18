@@ -63,6 +63,7 @@ from web.server import (
     load_job_history,
     scan_downloaded_library,
     scan_outputs_library,
+    invalidate_library_scan_cache,
     dashboard_data,
     api_cover,
     api_result,
@@ -558,12 +559,16 @@ def library_history(limit: int = 100, _: bool = Depends(require_token)):
 
 
 @app.get("/api/library/downloads")
-def library_downloads(_: bool = Depends(require_token)):
+def library_downloads(refresh: bool = False, _: bool = Depends(require_token)):
+    if refresh:
+        invalidate_library_scan_cache("downloads")
     return {"videos": [_with_file_path(item) for item in scan_downloaded_library()]}
 
 
 @app.get("/api/library/outputs")
-def library_outputs(_: bool = Depends(require_token)):
+def library_outputs(refresh: bool = False, _: bool = Depends(require_token)):
+    if refresh:
+        invalidate_library_scan_cache("outputs")
     return {"outputs": [_with_file_path(item) for item in scan_outputs_library()]}
 
 
