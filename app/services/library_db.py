@@ -208,9 +208,13 @@ def upsert_video(
     like_count=0,
     comment_count=0,
     share_count=0,
+    _connection=None,
 ):
 
-    ensure_schema()
+    owns_connection = _connection is None
+
+    if owns_connection:
+        ensure_schema()
 
     video_id = str(
         video_id
@@ -221,7 +225,7 @@ def upsert_video(
             "video_id rong."
         )
 
-    conn = get_connection()
+    conn = _connection if _connection is not None else get_connection()
 
     try:
 
@@ -379,10 +383,12 @@ def upsert_video(
                 ),
             )
 
-        conn.commit()
+        if owns_connection:
+            conn.commit()
 
     finally:
-        conn.close()
+        if owns_connection:
+            conn.close()
 
 
 def upsert_video_dict(
@@ -500,110 +506,144 @@ def sync_source_videos():
     conn = get_connection()
 
     try:
+        stamp = now()
 
-        rows = (
-            conn.execute(
-                """
-                SELECT
-                    sv.*,
-                    s.platform AS source_platform,
-                    s.name AS source_name,
-                    s.channel_key AS source_channel
-                FROM source_videos sv
-                JOIN sources s
-                    ON s.id = sv.source_id
-                ORDER BY sv.id DESC
-                """
+        # One database upsert handles the entire source catalog. This keeps
+        # the legacy "only replace known non-empty values" behavior while
+        # avoiding two SQL calls per source video every time the library opens.
+        conn.execute(
+            """
+            INSERT INTO library_videos (
+                platform_video_id,
+                platform,
+                url,
+                title,
+                cover_url,
+                source_id,
+                source_name,
+                source_type,
+                channel_key,
+                published_at,
+                play_count,
+                like_count,
+                comment_count,
+                share_count,
+                created_at,
+                updated_at
             )
-            .fetchall()
+            SELECT
+                sv.platform_video_id,
+                COALESCE(NULLIF(s.platform, ''), 'unknown'),
+                COALESCE(sv.url, ''),
+                COALESCE(sv.title, ''),
+                COALESCE(sv.cover_url, ''),
+                sv.source_id,
+                s.name,
+                'source',
+                s.channel_key,
+                sv.published_at,
+                COALESCE(sv.play_count, 0),
+                COALESCE(sv.like_count, 0),
+                COALESCE(sv.comment_count, 0),
+                COALESCE(sv.share_count, 0),
+                ?,
+                ?
+            FROM source_videos AS sv
+            JOIN sources AS s
+                ON s.id = sv.source_id
+            WHERE 1 = 1
+            ORDER BY sv.id DESC
+            ON CONFLICT(platform_video_id) DO UPDATE SET
+                platform = COALESCE(
+                    NULLIF(excluded.platform, ''),
+                    library_videos.platform,
+                    'unknown'
+                ),
+                url = COALESCE(NULLIF(excluded.url, ''), library_videos.url, ''),
+                title = COALESCE(NULLIF(excluded.title, ''), library_videos.title, ''),
+                cover_url = COALESCE(
+                    NULLIF(excluded.cover_url, ''),
+                    library_videos.cover_url,
+                    ''
+                ),
+                source_id = COALESCE(excluded.source_id, library_videos.source_id),
+                source_name = COALESCE(
+                    NULLIF(excluded.source_name, ''),
+                    library_videos.source_name
+                ),
+                source_type = 'source',
+                channel_key = COALESCE(
+                    NULLIF(excluded.channel_key, ''),
+                    library_videos.channel_key
+                ),
+                published_at = COALESCE(excluded.published_at, library_videos.published_at),
+                play_count = CASE
+                    WHEN excluded.play_count != 0 THEN excluded.play_count
+                    ELSE library_videos.play_count
+                END,
+                like_count = CASE
+                    WHEN excluded.like_count != 0 THEN excluded.like_count
+                    ELSE library_videos.like_count
+                END,
+                comment_count = CASE
+                    WHEN excluded.comment_count != 0 THEN excluded.comment_count
+                    ELSE library_videos.comment_count
+                END,
+                share_count = CASE
+                    WHEN excluded.share_count != 0 THEN excluded.share_count
+                    ELSE library_videos.share_count
+                END,
+                updated_at = excluded.updated_at
+            WHERE
+                library_videos.platform IS NOT COALESCE(
+                    NULLIF(excluded.platform, ''), library_videos.platform, 'unknown'
+                )
+                OR library_videos.url IS NOT COALESCE(
+                    NULLIF(excluded.url, ''), library_videos.url, ''
+                )
+                OR library_videos.title IS NOT COALESCE(
+                    NULLIF(excluded.title, ''), library_videos.title, ''
+                )
+                OR library_videos.cover_url IS NOT COALESCE(
+                    NULLIF(excluded.cover_url, ''), library_videos.cover_url, ''
+                )
+                OR library_videos.source_id IS NOT COALESCE(
+                    excluded.source_id, library_videos.source_id
+                )
+                OR library_videos.source_name IS NOT COALESCE(
+                    NULLIF(excluded.source_name, ''), library_videos.source_name
+                )
+                OR library_videos.source_type IS NOT 'source'
+                OR library_videos.channel_key IS NOT COALESCE(
+                    NULLIF(excluded.channel_key, ''), library_videos.channel_key
+                )
+                OR library_videos.published_at IS NOT COALESCE(
+                    excluded.published_at, library_videos.published_at
+                )
+                OR library_videos.play_count IS NOT CASE
+                    WHEN excluded.play_count != 0 THEN excluded.play_count
+                    ELSE library_videos.play_count
+                END
+                OR library_videos.like_count IS NOT CASE
+                    WHEN excluded.like_count != 0 THEN excluded.like_count
+                    ELSE library_videos.like_count
+                END
+                OR library_videos.comment_count IS NOT CASE
+                    WHEN excluded.comment_count != 0 THEN excluded.comment_count
+                    ELSE library_videos.comment_count
+                END
+                OR library_videos.share_count IS NOT CASE
+                    WHEN excluded.share_count != 0 THEN excluded.share_count
+                    ELSE library_videos.share_count
+                END
+            """,
+            (stamp, stamp),
         )
+
+        conn.commit()
 
     finally:
         conn.close()
-
-    for row in rows:
-
-        item = dict(
-            row
-        )
-
-        upsert_video(
-            video_id=
-                item[
-                    "platform_video_id"
-                ],
-
-            platform=
-                item.get(
-                    "source_platform"
-                )
-                or "unknown",
-
-            url=
-                item.get(
-                    "url"
-                )
-                or "",
-
-            title=
-                item.get(
-                    "title"
-                )
-                or "",
-
-            cover_url=
-                item.get(
-                    "cover_url"
-                )
-                or "",
-
-            source_id=
-                item.get(
-                    "source_id"
-                ),
-
-            source_name=
-                item.get(
-                    "source_name"
-                ),
-
-            source_type=
-                "source",
-
-            channel_key=
-                item.get(
-                    "source_channel"
-                ),
-
-            published_at=
-                item.get(
-                    "published_at"
-                ),
-
-            play_count=
-                item.get(
-                    "play_count"
-                )
-                or 0,
-
-            like_count=
-                item.get(
-                    "like_count"
-                )
-                or 0,
-
-            comment_count=
-                item.get(
-                    "comment_count"
-                )
-                or 0,
-
-            share_count=
-                item.get(
-                    "share_count"
-                )
-                or 0,
-        )
 
 
 # =========================================================
@@ -867,174 +907,118 @@ def detect_series(
 # LOCAL STATUS
 # =========================================================
 
+def _latest_job_statuses(video_ids):
+    """Fetch latest job state in a few SQLite queries, never one per card."""
+    ids = list(dict.fromkeys(str(video_id) for video_id in video_ids if str(video_id)))
+    if not ids:
+        return {}
+
+    conn = get_connection()
+    try:
+        tables = {
+            row["name"]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "jobs" not in tables:
+            return {}
+
+        result = {}
+        # SQLite commonly limits one statement to 999 parameters. Keep room
+        # for future predicates and make long library pages safe.
+        for start in range(0, len(ids), 800):
+            batch = ids[start:start + 800]
+            placeholders = ",".join("?" for _ in batch)
+            rows = conn.execute(
+                f"""
+                SELECT jobs.platform_video_id, jobs.status
+                FROM jobs
+                JOIN (
+                    SELECT platform_video_id, MAX(id) AS latest_id
+                    FROM jobs
+                    WHERE platform_video_id IN ({placeholders})
+                    GROUP BY platform_video_id
+                ) latest ON latest.latest_id = jobs.id
+                """,
+                batch,
+            ).fetchall()
+            result.update({row["platform_video_id"]: row["status"] for row in rows})
+        return result
+    finally:
+        conn.close()
+
+
+def _channel_candidates(channel_key):
+    channels = []
+    if channel_key:
+        channels.append(channel_key)
+    for name in ("2d_animation", "3d_animation", "comedy"):
+        if name not in channels:
+            channels.append(name)
+    return channels
+
+
+def local_video_states(video_specs):
+    """Resolve file and job state for many cards without N SQLite connections."""
+    specs = {}
+    for video_id, channel_key in video_specs:
+        value = str(video_id or "").strip()
+        if value:
+            specs[value] = channel_key
+
+    job_statuses = _latest_job_statuses(specs)
+    states = {}
+    for video_id, channel_key in specs.items():
+        source_folder = DOWNLOAD_ROOT / video_id
+        downloaded = any(
+            (source_folder / f"source.{suffix}").is_file()
+            and (source_folder / f"source.{suffix}").stat().st_size > 0
+            for suffix in ("mp4", "mkv", "webm", "mov")
+        )
+
+        has_subtitle = False
+        has_voice = False
+        resolved_channel = channel_key or "2d_animation"
+        for channel in _channel_candidates(channel_key):
+            job_dir = CHANNELS_ROOT / channel / "jobs" / video_id
+            if (job_dir / "final_sub.mp4").is_file():
+                has_subtitle = True
+                resolved_channel = channel
+            if (job_dir / "final_voice.mp4").is_file():
+                has_voice = True
+                resolved_channel = channel
+            if has_subtitle and has_voice:
+                break
+
+        db_status = job_statuses.get(video_id)
+        states[video_id] = {
+            "downloaded": downloaded,
+            "has_subtitle_result": has_subtitle,
+            "has_voice_result": has_voice,
+            "processing": db_status in {"queued", "processing", "running"},
+            "db_status": db_status,
+            "channel_key": resolved_channel,
+        }
+    return states
+
+
 def local_video_state(
     video_id,
     channel_key=None,
 ):
-
-    video_id = str(
-        video_id
+    value = str(video_id or "").strip()
+    return local_video_states([(value, channel_key)]).get(
+        value,
+        {
+            "downloaded": False,
+            "has_subtitle_result": False,
+            "has_voice_result": False,
+            "processing": False,
+            "db_status": None,
+            "channel_key": channel_key or "2d_animation",
+        },
     )
-
-    downloaded = False
-
-    source_folder = (
-        DOWNLOAD_ROOT
-        / video_id
-    )
-
-    for suffix in (
-        "mp4",
-        "mkv",
-        "webm",
-        "mov",
-    ):
-
-        path = (
-            source_folder
-            / f"source.{suffix}"
-        )
-
-        if (
-            path.exists()
-            and path.is_file()
-            and path.stat().st_size > 0
-        ):
-            downloaded = True
-            break
-
-    channels = []
-
-    if channel_key:
-        channels.append(
-            channel_key
-        )
-
-    for name in (
-        "2d_animation",
-        "3d_animation",
-        "comedy",
-    ):
-
-        if name not in channels:
-            channels.append(
-                name
-            )
-
-    has_subtitle = False
-    has_voice = False
-    resolved_channel = (
-        channel_key
-        or "2d_animation"
-    )
-
-    for channel in channels:
-
-        job_dir = (
-            CHANNELS_ROOT
-            / channel
-            / "jobs"
-            / video_id
-        )
-
-        if (
-            job_dir
-            / "final_sub.mp4"
-        ).exists():
-
-            has_subtitle = True
-            resolved_channel = channel
-
-        if (
-            job_dir
-            / "final_voice.mp4"
-        ).exists():
-
-            has_voice = True
-            resolved_channel = channel
-
-        if (
-            has_subtitle
-            and has_voice
-        ):
-            break
-
-    processing = False
-    db_status = None
-
-    conn = get_connection()
-
-    try:
-
-        # Neu jobs table chua duoc migrate thi bo qua.
-        tables = {
-            row["name"]
-            for row in conn.execute(
-                """
-                SELECT name
-                FROM sqlite_master
-                WHERE type = 'table'
-                """
-            ).fetchall()
-        }
-
-        if "jobs" in tables:
-
-            row = (
-                conn.execute(
-                    """
-                    SELECT status
-                    FROM jobs
-                    WHERE platform_video_id = ?
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """,
-                    (
-                        video_id,
-                    ),
-                )
-                .fetchone()
-            )
-
-            if row:
-
-                db_status = (
-                    row[
-                        "status"
-                    ]
-                )
-
-                processing = (
-                    db_status
-                    in {
-                        "queued",
-                        "processing",
-                        "running",
-                    }
-                )
-
-    finally:
-        conn.close()
-
-    return {
-        "downloaded":
-            downloaded,
-
-        "has_subtitle_result":
-            has_subtitle,
-
-        "has_voice_result":
-            has_voice,
-
-        "processing":
-            processing,
-
-        "db_status":
-            db_status,
-
-        "channel_key":
-            resolved_channel,
-    }
 
 
 # =========================================================
@@ -1645,62 +1629,11 @@ def list_library_videos(
     conn = get_connection()
 
     try:
-
-        rows = (
-            conn.execute(
-                """
-                SELECT *
-                FROM library_videos
-                ORDER BY
-                    COALESCE(
-                        published_at,
-                        updated_at
-                    ) DESC,
-                    updated_at DESC
-                LIMIT ?
-                """,
-                (
-                    max(
-                        1,
-                        min(
-                            int(
-                                limit
-                            ),
-                            2000,
-                        ),
-                    ),
-                ),
-            )
-            .fetchall()
-        )
-
-        favorite_rows = (
-            conn.execute(
-                """
-                SELECT platform_video_id
-                FROM favorites
-                WHERE user_id = ?
-                """,
-                (
-                    int(
-                        user_id
-                    ),
-                ),
-            )
-            .fetchall()
-        )
-
-        favorite_ids = {
-            row[
-                "platform_video_id"
-            ]
-            for row in favorite_rows
-        }
-
-        collection_video_ids = None
+        joins = []
+        filters = []
+        parameters = [int(user_id)]
 
         if collection_id is not None:
-
             owned = (
                 conn.execute(
                     """
@@ -1724,29 +1657,41 @@ def list_library_videos(
             if not owned:
                 return []
 
-            member_rows = (
-                conn.execute(
-                    """
-                    SELECT platform_video_id
-                    FROM collection_videos
-                    WHERE collection_id = ?
-                    """,
-                    (
-                        int(
-                            collection_id
-                        ),
-                    ),
-                )
-                .fetchall()
+            joins.append(
+                "JOIN collection_videos AS collection_item "
+                "ON collection_item.platform_video_id = video.platform_video_id "
+                "AND collection_item.collection_id = ?"
             )
+            parameters.append(int(collection_id))
 
-            collection_video_ids = {
-                row[
-                    "platform_video_id"
-                ]
-                for row
-                in member_rows
-            }
+        if favorite:
+            filters.append("favorite_item.id IS NOT NULL")
+        if source_id is not None:
+            filters.append("video.source_id = ?")
+            parameters.append(int(source_id))
+
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
+        rows = conn.execute(
+            f"""
+            SELECT
+                video.*,
+                CASE WHEN favorite_item.id IS NULL THEN 0 ELSE 1 END AS _favorite
+            FROM library_videos AS video
+            LEFT JOIN favorites AS favorite_item
+                ON favorite_item.user_id = ?
+                AND favorite_item.platform_video_id = video.platform_video_id
+            {' '.join(joins)}
+            {where}
+            ORDER BY
+                COALESCE(video.published_at, video.updated_at) DESC,
+                video.updated_at DESC
+            LIMIT ?
+            """,
+            (
+                *parameters,
+                max(1, min(int(limit), 2000)),
+            ),
+        ).fetchall()
 
     finally:
         conn.close()
@@ -1773,36 +1718,6 @@ def list_library_videos(
                 "platform_video_id"
             ]
         )
-
-        if (
-            favorite
-            and video_id
-            not in favorite_ids
-        ):
-            continue
-
-        if (
-            collection_video_ids
-            is not None
-            and video_id
-            not in collection_video_ids
-        ):
-            continue
-
-        if (
-            source_id
-            is not None
-            and int(
-                item.get(
-                    "source_id"
-                )
-                or 0
-            )
-            != int(
-                source_id
-            )
-        ):
-            continue
 
         series = detect_series(
             item.get(
@@ -1850,27 +1765,27 @@ def list_library_videos(
 
         item[
             "favorite"
-        ] = (
-            video_id
-            in favorite_ids
-        )
+        ] = bool(item.pop("_favorite", False))
 
         item.update(
             series
         )
 
-        item.update(
-            local_video_state(
-                video_id,
-                item.get(
-                    "channel_key"
-                ),
-            )
-        )
-
         result.append(
             item
         )
+
+    states = local_video_states(
+        [
+            (
+                item["video_id"],
+                item.get("channel_key"),
+            )
+            for item in result
+        ]
+    )
+    for item in result:
+        item.update(states.get(item["video_id"], {}))
 
     result.sort(
         key=lambda item: (
