@@ -41,11 +41,25 @@ export function sourceHref(video, mode = "subtitle") {
   const query = new URLSearchParams({ video: video.video_id || video.platform_video_id, mode });
   return `/sources?${query}`;
 }
-export function withLocalFiles(video, downloads, outputs) {
+export function createLocalFileIndex(downloads = [], outputs = []) {
+  const sources = new Map();
+  const rendered = new Map();
+  for (const item of downloads) {
+    if (item?.video_id && !sources.has(item.video_id)) sources.set(item.video_id, item);
+  }
+  for (const item of outputs) {
+    const id = item?.video_id;
+    if (!id || !item?.mode) continue;
+    const key = `${id}:${item.mode}`;
+    if (!rendered.has(key)) rendered.set(key, item);
+  }
+  return { sources, rendered };
+}
+export function withLocalFiles(video, localFiles) {
   const id = video.video_id || video.platform_video_id;
-  const source = downloads.find((item) => item.video_id === id);
-  const subtitle = outputs.find((item) => item.video_id === id && item.mode === "subtitle");
-  const voice = outputs.find((item) => item.video_id === id && item.mode === "voiceover");
+  const source = localFiles.sources.get(id);
+  const subtitle = localFiles.rendered.get(`${id}:subtitle`);
+  const voice = localFiles.rendered.get(`${id}:voiceover`);
   return { ...video, downloaded: Boolean(source) || Boolean(video.downloaded), has_subtitle_result: Boolean(subtitle), has_voice_result: Boolean(voice), subtitle_output: subtitle, voice_output: voice };
 }
 export function EngineGate({ status, connect, check, title }) {

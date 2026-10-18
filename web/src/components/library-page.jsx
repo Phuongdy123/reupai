@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
-import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
+import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, createLocalFileIndex, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
 
 const PAGE_SIZE = 12;
 export function LibraryPage({ kind }) {
@@ -65,7 +65,8 @@ export function LibraryPage({ kind }) {
     document.addEventListener("visibilitychange", refresh);
     return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
   }, [kind, load, status]);
-  const localItems = useMemo(() => kind === "history" ? items : items.map((video) => withLocalFiles(video, downloads, outputs)), [items, downloads, outputs, kind]);
+  const localFiles = useMemo(() => createLocalFileIndex(downloads, outputs), [downloads, outputs]);
+  const localItems = useMemo(() => kind === "history" ? items : items.map((video) => withLocalFiles(video, localFiles)), [items, localFiles, kind]);
   const filtered = useMemo(() => localItems.filter((item) => {
     const text = `${item.title || ""} ${item.video_id || item.platform_video_id || ""} ${item.source_name || item.channel_key || ""}`.toLocaleLowerCase();
     if (query.trim() && !text.includes(query.trim().toLocaleLowerCase())) return false;

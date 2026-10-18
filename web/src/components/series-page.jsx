@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
-import { EngineGate, ErrorMessage, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, sourcePath, videoBody, withLocalFiles } from "./library-ui";
+import { EngineGate, ErrorMessage, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, createLocalFileIndex, sourcePath, videoBody, withLocalFiles } from "./library-ui";
 
 const PAGE_SIZE = 12;
 function fromSource(video, source) {
@@ -59,7 +59,8 @@ export function SeriesPage() {
   useEffect(() => { loadEpisodes(); }, [loadEpisodes]);
   useEffect(() => { setPage(1); setSelectedVideos(new Set()); }, [query, filter, sourceKey, selected]);
   const visibleSeries = useMemo(() => series.filter((item) => (!sourceKey || (item.sources || []).some((source) => source.key === sourceKey)) && (!query.trim() || `${item.name} ${item.source_label}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))), [series, sourceKey, query]);
-  const localVideos = useMemo(() => videos.map((video) => withLocalFiles(video, downloads, outputs)), [videos, downloads, outputs]);
+  const localFiles = useMemo(() => createLocalFileIndex(downloads, outputs), [downloads, outputs]);
+  const localVideos = useMemo(() => videos.map((video) => withLocalFiles(video, localFiles)), [videos, localFiles]);
   const filteredVideos = useMemo(() => localVideos.filter((video) => (!query.trim() || `${video.title} ${video.video_id} ${video.episode_number || ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) && (!filter || (filter === "downloaded" ? video.downloaded : filter === "not-downloaded" ? !video.downloaded : filter === "subtitle" ? video.has_subtitle_result : filter === "voiceover" ? video.has_voice_result : video.processing))), [localVideos, query, filter]);
   const setBusyId = (id, value) => setBusy((previous) => { const next = new Set(previous); if (value) next.add(id); else next.delete(id); return next; });
   const toggleFavorite = async (video) => {
