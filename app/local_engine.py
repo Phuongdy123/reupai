@@ -74,12 +74,14 @@ from web.server import (
 from services.library_api import (
     CollectionCreateBody,
     CollectionVideoBody,
+    CollectionVideosBody,
     DirectVideoBody,
     FavoriteBody,
     SavedSourceBody,
     SavedSourcePatchBody,
     UiStateBody,
     api_add_collection_video,
+    api_add_collection_videos,
     api_collections,
     api_create_collection,
     api_delete_collection,
@@ -495,6 +497,11 @@ def delete_collection(collection_id: int, _: bool = Depends(require_token)):
 @app.post("/api/library/collections/{collection_id}/videos")
 def add_collection_video(collection_id: int, body: CollectionVideoBody, _: bool = Depends(require_token)):
     return api_add_collection_video(collection_id, body, local_library_request())
+
+
+@app.post("/api/library/collections/{collection_id}/videos/batch")
+def add_collection_videos(collection_id: int, body: CollectionVideosBody, _: bool = Depends(require_token)):
+    return api_add_collection_videos(collection_id, body, local_library_request())
 
 
 @app.delete("/api/library/collections/{collection_id}/videos/{video_id}")

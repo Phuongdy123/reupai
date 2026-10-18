@@ -22,6 +22,7 @@ from services.source_db import (
 
 from services.library_db import (
     add_video_to_collection,
+    add_videos_to_collection,
     create_collection,
     delete_collection,
     library_meta,
@@ -76,6 +77,10 @@ class CollectionCreateBody(BaseModel):
 
 class CollectionVideoBody(VideoBody):
     pass
+
+
+class CollectionVideosBody(BaseModel):
+    videos: list[CollectionVideoBody]
 
 
 class SavedSourceBody(BaseModel):
@@ -1155,6 +1160,61 @@ def api_add_collection_video(
     return {
         "ok":
             True,
+    }
+
+
+@router.post(
+    "/collections/{collection_id}/videos/batch",
+)
+def api_add_collection_videos(
+    collection_id: int,
+    body: CollectionVideosBody,
+    request: Request,
+):
+
+    videos = body.videos
+    if not videos:
+        raise HTTPException(
+            status_code=400,
+            detail="Chọn ít nhất một video.",
+        )
+    if len(videos) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Mỗi lần chỉ thêm tối đa 200 video.",
+        )
+
+    user_id = (
+        user_id_from_request(
+            request
+        )
+    )
+
+    for video in videos:
+        upsert_video_dict(
+            video.model_dump(),
+            source_type=(
+                "source"
+                if video.source_id
+                else "direct"
+            ),
+        )
+
+    try:
+        accepted = add_videos_to_collection(
+            user_id,
+            collection_id,
+            [video.video_id for video in videos],
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error),
+        )
+
+    return {
+        "ok": True,
+        "accepted": accepted,
     }
 
 

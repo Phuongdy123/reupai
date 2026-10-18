@@ -1412,6 +1412,34 @@ def add_video_to_collection(
     video_id,
 ):
 
+    add_videos_to_collection(
+        user_id,
+        collection_id,
+        [
+            video_id,
+        ],
+    )
+
+
+def add_videos_to_collection(
+    user_id,
+    collection_id,
+    video_ids,
+):
+
+    # Keep one transaction for multi-select actions.  A large collection used
+    # to open and commit SQLite once for every selected video.
+    normalized_ids = list(
+        dict.fromkeys(
+            str(video_id).strip()
+            for video_id in video_ids
+            if str(video_id).strip()
+        )
+    )
+
+    if not normalized_ids:
+        return 0
+
     ensure_schema()
 
     conn = get_connection()
@@ -1443,7 +1471,9 @@ def add_video_to_collection(
                 "Danh muc khong ton tai."
             )
 
-        conn.execute(
+        stamp = now()
+
+        conn.executemany(
             """
             INSERT OR IGNORE
             INTO collection_videos (
@@ -1453,15 +1483,16 @@ def add_video_to_collection(
             )
             VALUES (?, ?, ?)
             """,
-            (
-                int(
-                    collection_id
-                ),
-                str(
-                    video_id
-                ),
-                now(),
-            ),
+            [
+                (
+                    int(
+                        collection_id
+                    ),
+                    video_id,
+                    stamp,
+                )
+                for video_id in normalized_ids
+            ],
         )
 
         conn.execute(
@@ -1471,7 +1502,7 @@ def add_video_to_collection(
             WHERE id = ?
             """,
             (
-                now(),
+                stamp,
                 int(
                     collection_id
                 ),
@@ -1479,6 +1510,10 @@ def add_video_to_collection(
         )
 
         conn.commit()
+
+        return len(
+            normalized_ids
+        )
 
     finally:
         conn.close()

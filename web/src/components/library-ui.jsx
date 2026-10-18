@@ -7,6 +7,7 @@ import { sendFeedback } from "./feedback-provider";
 
 export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", interrupted: "Bị gián đoạn", cancelled: "Đã dừng", stopped: "Đã dừng" };
 export const ACTIVE_JOBS = new Set(["queued", "processing", "running", "stopping"]);
+const collectionBatchSupport = new WeakMap();
 export const numberText = (value) => Number(value || 0).toLocaleString("vi-VN");
 export const progressValue = (value) => Math.round(Math.max(0, Math.min(100, Number(value) || 0)));
 export const jobVideoId = (job) => job.platform_video_id || job.video_id || "";
@@ -61,6 +62,24 @@ export function withLocalFiles(video, localFiles) {
   const subtitle = localFiles.rendered.get(`${id}:subtitle`);
   const voice = localFiles.rendered.get(`${id}:voiceover`);
   return { ...video, downloaded: Boolean(source) || Boolean(video.downloaded), has_subtitle_result: Boolean(subtitle), has_voice_result: Boolean(voice), subtitle_output: subtitle, voice_output: voice };
+}
+export async function addVideosToCollection(client, collectionId, videos) {
+  const batches = [];
+  for (let start = 0; start < videos.length; start += 200) batches.push(videos.slice(start, start + 200));
+  for (const batch of batches) {
+    const options = { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videos: batch.map(videoBody) }) };
+    if (collectionBatchSupport.get(client) !== false) try {
+      await client.json(`/api/library/collections/${collectionId}/videos/batch`, options);
+      collectionBatchSupport.set(client, true);
+      continue;
+    } catch (error) {
+      // Older installed engines predate the batch endpoint. Keep Collection
+      // actions working during a gradual desktop upgrade.
+      if (error.status !== 404) throw error;
+      collectionBatchSupport.set(client, false);
+    }
+    for (const video of batch) await client.json(`/api/library/collections/${collectionId}/videos`, { ...options, body: JSON.stringify(videoBody(video)) });
+  }
 }
 export function EngineGate({ status, connect, check, title }) {
   const needsAuth = ["authorization_required", "permission_denied"].includes(status);

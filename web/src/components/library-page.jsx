@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
-import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, createLocalFileIndex, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
+import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, addVideosToCollection, createLocalFileIndex, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
 
 const PAGE_SIZE = 12;
 export function LibraryPage({ kind }) {
@@ -111,14 +111,14 @@ export function LibraryPage({ kind }) {
     if (!collectionId || !list.length) return;
     setSaving(true); setError(null);
     try {
-      for (const video of list) await client.json(`/api/library/collections/${collectionId}/videos`, { method: "POST", body: JSON.stringify(videoBody(video)), headers: { "Content-Type": "application/json" } });
+      await addVideosToCollection(client, collectionId, list);
       setNotice(`Đã thêm ${list.length} video vào Collection.`); setPicker(null); setPickerSelected(new Set()); setSelected(new Set()); await load();
     } catch (requestError) { setError(requestError.message || "Không thể thêm video vào Collection."); }
     finally { setSaving(false); }
   };
   const openPicker = async () => {
     setSaving(true); setError(null); setPickerQuery(""); setPickerSelected(new Set());
-    try { const result = await client.json("/api/library/videos?limit=2000"); setPicker((result.videos || []).filter((video) => !items.some((item) => item.video_id === video.video_id))); }
+    try { const result = await client.json("/api/library/videos?limit=2000"); const existingIds = new Set(items.map((item) => item.video_id)); setPicker((result.videos || []).filter((video) => !existingIds.has(video.video_id))); }
     catch (requestError) { setError(requestError.message || "Không thể đọc danh sách video."); }
     finally { setSaving(false); }
   };
@@ -152,7 +152,7 @@ export function LibraryPage({ kind }) {
       {kind !== "history" && filtered.length > 0 && <div className="library-actions" style={{ marginBottom: 18 }}><button className="btn secondary" onClick={() => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((item) => item.video_id)))}>{selected.size === filtered.length ? "Bỏ chọn" : "Chọn tất cả"}</button><span className="status">{selected.size} đã chọn</span><select value={targetCollection} onChange={(event) => setTargetCollection(event.target.value)} aria-label="Collection để thêm video"><option value="">Thêm vào Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="btn secondary" disabled={!targetCollection || !selected.size || saving} onClick={() => addVideos(items.filter((item) => selected.has(item.video_id)), targetCollection)}>Thêm đã chọn</button></div>}
       {loading && <Loading />}
       {!loading && !filtered.length && <div className="empty-state">{items.length ? "Không có dữ liệu phù hợp bộ lọc." : kind === "favorites" ? "Chưa có video yêu thích. Đánh dấu trái tim ở Nguồn video để lưu vào đây." : kind === "history" ? "Chưa có job nào trong bảng jobs." : "Collection chưa có video. Bấm “Thêm video” để chọn từ thư viện."}</div>}
-      {!loading && filtered.length > 0 && (kind === "history" ? <HistoryTable items={filtered} onStop={stopJob} stopping={[...busy][0]} /> : <div className="library-grid">{visible.map((video) => <LibraryVideoCard key={video.video_id} client={client} video={video} selected={selected.has(video.video_id)} onSelect={toggleSelection} onFavorite={toggleFavorite} onDownload={download} onPreview={setPreview} onRemove={kind === "collections" ? removeVideo : null} busy={busy.has(video.video_id)} sourceFile={downloads.find((item) => item.video_id === video.video_id)} />)}</div>)}
+      {!loading && filtered.length > 0 && (kind === "history" ? <HistoryTable items={filtered} onStop={stopJob} stopping={[...busy][0]} /> : <div className="library-grid">{visible.map((video) => <LibraryVideoCard key={video.video_id} client={client} video={video} selected={selected.has(video.video_id)} onSelect={toggleSelection} onFavorite={toggleFavorite} onDownload={download} onPreview={setPreview} onRemove={kind === "collections" ? removeVideo : null} busy={busy.has(video.video_id)} sourceFile={localFiles.sources.get(video.video_id || video.platform_video_id)} />)}</div>)}
       {!loading && kind !== "history" && <Pager page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />}
     </section>
     {picker && <div className="modal open" onClick={(event) => { if (event.target === event.currentTarget && !saving) setPicker(null); }}><section className="modal-box" role="dialog" aria-modal="true" aria-label="Thêm video vào Collection"><div className="modal-head"><strong>Thêm video vào {activeCollection?.name}</strong><button className="btn secondary" disabled={saving} onClick={() => setPicker(null)}>×</button></div><div className="library-body"><input value={pickerQuery} onChange={(event) => setPickerQuery(event.target.value)} placeholder="Tìm tên hoặc ID video" aria-label="Tìm video để thêm" /><div className="table-wrap" style={{ maxHeight: "50vh", overflow: "auto", marginBlock: 14 }}>{picker.length ? <table><thead><tr><th>Chọn</th><th>Video</th><th>ID</th></tr></thead><tbody>{picker.filter((video) => `${video.title} ${video.video_id}`.toLocaleLowerCase().includes(pickerQuery.toLocaleLowerCase())).map((video) => <tr key={video.video_id}><td><input type="checkbox" aria-label={`Thêm ${video.title || video.video_id}`} checked={pickerSelected.has(video.video_id)} onChange={() => setPickerSelected((previous) => { const next = new Set(previous); if (next.has(video.video_id)) next.delete(video.video_id); else next.add(video.video_id); return next; })} /></td><td>{video.title || video.video_id}</td><td>{video.video_id}</td></tr>)}</tbody></table> : <div className="empty-state">Chưa có video khác để thêm. Đồng bộ video từ Nguồn video trước.</div>}</div><button className="btn primary" disabled={!pickerSelected.size || saving} onClick={() => addVideos(picker.filter((video) => pickerSelected.has(video.video_id)), selectedCollection)}>{saving ? "Đang thêm…" : `Thêm ${pickerSelected.size} video`}</button></div></section></div>}
