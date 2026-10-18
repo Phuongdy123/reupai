@@ -8,6 +8,44 @@ import { sendFeedback } from "./feedback-provider";
 export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", interrupted: "Bị gián đoạn", cancelled: "Đã dừng", stopped: "Đã dừng" };
 export const ACTIVE_JOBS = new Set(["queued", "processing", "running", "stopping"]);
 const collectionBatchSupport = new WeakMap();
+const coverCache = new Map();
+const coverRequests = new Map();
+const COVER_CACHE_MAX_BYTES = 20 * 1024 * 1024;
+const COVER_CACHE_ITEM_MAX_BYTES = 2 * 1024 * 1024;
+let coverCacheBytes = 0;
+
+function rememberCover(url, blob) {
+  if (!blob.size || blob.size > COVER_CACHE_ITEM_MAX_BYTES) return;
+  const previous = coverCache.get(url);
+  if (previous) coverCacheBytes -= previous.blob.size;
+  coverCache.delete(url);
+  coverCache.set(url, { blob });
+  coverCacheBytes += blob.size;
+  while (coverCacheBytes > COVER_CACHE_MAX_BYTES && coverCache.size) {
+    const [oldestUrl, oldest] = coverCache.entries().next().value;
+    coverCache.delete(oldestUrl);
+    coverCacheBytes -= oldest.blob.size;
+  }
+}
+
+function coverBlob(client, url) {
+  const cached = coverCache.get(url);
+  if (cached) {
+    // Reinsert the entry to preserve a small LRU cache as users browse pages.
+    coverCache.delete(url); coverCache.set(url, cached);
+    return Promise.resolve(cached.blob);
+  }
+  if (coverRequests.has(url)) return coverRequests.get(url);
+  const request = client.request(`/api/cover?url=${encodeURIComponent(url)}`).then(async (response) => {
+    if (!response.ok) throw new Error(`Không thể tải thumbnail (HTTP ${response.status}).`);
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/")) throw new Error("Thumbnail trả về không phải ảnh.");
+    rememberCover(url, blob);
+    return blob;
+  });
+  coverRequests.set(url, request);
+  return request.finally(() => coverRequests.delete(url));
+}
 export const numberText = (value) => Number(value || 0).toLocaleString("vi-VN");
 export const progressValue = (value) => Math.round(Math.max(0, Math.min(100, Number(value) || 0)));
 export const jobVideoId = (job) => job.platform_video_id || job.video_id || "";
@@ -134,15 +172,10 @@ export function VideoCover({ client, video, children, previewPath }) {
     const loadCover = async () => {
       if (video.cover_url) {
         try {
-          const response = await client.request(`/api/cover?url=${encodeURIComponent(video.cover_url)}`, { signal: controller.signal });
-          if (response.ok) {
-            const blob = await response.blob();
-            if (blob.type.startsWith("image/")) {
-              blobUrl = URL.createObjectURL(blob);
-              if (alive) setUrl(blobUrl); else URL.revokeObjectURL(blobUrl);
-              return;
-            }
-          }
+          const blob = await coverBlob(client, video.cover_url);
+          blobUrl = URL.createObjectURL(blob);
+          if (alive) setUrl(blobUrl); else URL.revokeObjectURL(blobUrl);
+          return;
         } catch (_) { /* A local video frame is used when the remote cover is unavailable. */ }
       }
       if (previewPath && alive) {
