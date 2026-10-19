@@ -9,7 +9,8 @@ from dotenv import dotenv_values, load_dotenv
 from google import genai
 from runtime_paths import get_config_dir
 from google.genai import types
-from services.gemini_oauth import get_credentials
+import requests
+from services.gemini_oauth import get_credentials, get_project_id
 
 
 # =========================================================
@@ -64,13 +65,65 @@ if not os.getenv("GEMINI_API_KEY"):
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
+OAUTH_PROJECT_ID = get_project_id() if OAUTH_CREDENTIALS else None
 
 if not API_KEY and not OAUTH_CREDENTIALS:
     raise ValueError(
         "Chưa kết nối Google cho Gemini. Mở Cài đặt Local Engine, chọn Kết nối Google rồi thử lại."
     )
 
-client = genai.Client(api_key=API_KEY) if API_KEY else genai.Client(credentials=OAUTH_CREDENTIALS)
+# google-genai 2.x only applies ``credentials=`` to its Vertex AI transport.
+# ReupAI uses Gemini Developer API OAuth, whose REST API takes an OAuth bearer
+# token plus the quota project. Keep the SDK for API-key installs and call the
+# documented REST endpoint for OAuth installs.
+client = genai.Client(api_key=API_KEY) if API_KEY else None
+
+
+def _oauth_generate_content(model_name: str, prompt: str) -> str:
+    """Generate content through Gemini Developer API with local OAuth token."""
+    credentials = get_credentials()
+    if not credentials or not credentials.token:
+        raise ValueError(
+            "Phiên đăng nhập Google đã hết hạn. Mở Cài đặt Local Engine và kết nối Google lại."
+        )
+    project_id = OAUTH_PROJECT_ID or get_project_id()
+    if not project_id:
+        raise ValueError(
+            "Không xác định được Google Cloud project cho OAuth. Hãy cập nhật Local Engine do ReupAI phát hành."
+        )
+
+    response = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
+        headers={
+            "Authorization": f"Bearer {credentials.token}",
+            "x-goog-user-project": project_id,
+            "Content-Type": "application/json",
+        },
+        json={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.15,
+                "responseMimeType": "application/json",
+            },
+        },
+        timeout=90,
+    )
+    if not response.ok:
+        try:
+            details = response.json().get("error", {}).get("message", "")
+        except ValueError:
+            details = ""
+        suffix = f": {details}" if details else ""
+        raise RuntimeError(f"Gemini OAuth trả lỗi HTTP {response.status_code}{suffix}")
+
+    try:
+        parts = response.json()["candidates"][0]["content"]["parts"]
+        text = "".join(str(part.get("text", "")) for part in parts).strip()
+    except (IndexError, KeyError, TypeError, ValueError) as error:
+        raise RuntimeError("Gemini OAuth trả về dữ liệu không hợp lệ.") from error
+    if not text:
+        raise RuntimeError("Gemini OAuth trả về nội dung rỗng.")
+    return text
 
 
 # =========================================================
@@ -865,31 +918,26 @@ def translate_batch(
                     f"{MAX_RETRIES}"
                 )
 
-                response = (
-                    client.models.generate_content(
-                        model=
-                            model_name,
-
-                        contents=
-                            prompt,
-
-                        config=
-                            types.GenerateContentConfig(
-                                temperature=0.15,
-
-                                response_mime_type=
-                                    "application/json"
-                            )
-                    )
+                response_text = (
+                    _oauth_generate_content(model_name, prompt)
+                    if OAUTH_CREDENTIALS
+                    else client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.15,
+                            response_mime_type="application/json",
+                        ),
+                    ).text
                 )
 
-                if not response.text:
+                if not response_text:
                     raise ValueError(
                         "Gemini tra ve rong."
                     )
 
                 raw_text = (
-                    response.text
+                    response_text
                     .strip()
                 )
 

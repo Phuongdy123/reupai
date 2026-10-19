@@ -86,6 +86,24 @@ def _client_config() -> dict[str, Any] | None:
     }
 
 
+def get_project_id() -> str | None:
+    """Return the Google Cloud project that owns this desktop OAuth client.
+
+    OAuth calls to the Gemini Developer API must identify the project used for
+    quota. Desktop client JSON includes this value, and the environment fallback
+    keeps development and managed installations configurable without exposing a
+    token or an API key.
+    """
+    client_config = _client_config() or {}
+    installed = client_config.get("installed")
+    if isinstance(installed, dict):
+        project_id = str(installed.get("project_id") or "").strip()
+        if project_id:
+            return project_id
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+    return project_id or None
+
+
 def _dpapi_encrypt(value: bytes) -> bytes:
     if os.name != "nt":
         return value
