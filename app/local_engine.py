@@ -187,6 +187,30 @@ def _mint_browser_session(origin: str) -> str:
     return session_token
 
 
+def _issue_browser_authorization(origin: str) -> dict[str, object]:
+    """Persist one origin grant and issue a session without exposing LOCAL_TOKEN."""
+    grant = secrets.token_urlsafe(48)
+    grants = _load_authorization_grants()
+    grants[origin] = {
+        "fingerprint": _grant_fingerprint(grant),
+        "installation": _installation_fingerprint(),
+        "created_at": str(int(time.time())),
+    }
+    _save_authorization_grants(grants)
+
+    # A fresh user-initiated connection replaces only sessions for this site.
+    for token, session in list(_browser_sessions.items()):
+        if session.get("client_origin") == origin:
+            _browser_sessions.pop(token, None)
+
+    return {
+        "session_token": _mint_browser_session(origin),
+        "grant": grant,
+        "expires_in": SESSION_TTL_SECONDS,
+        "engine": "ReupAI",
+    }
+
+
 app = FastAPI(title="ReupAI Local Engine", version=ENGINE_VERSION)
 app.add_middleware(
     CORSMiddleware,
@@ -301,30 +325,32 @@ def approve_authorization(
     origin = _validate_origin(client_origin)
     if not redirect_uri.startswith(origin + "/"):
         raise HTTPException(status_code=400, detail="Callback phải thuộc client origin.")
+    authorization = _issue_browser_authorization(origin)
     code = secrets.token_urlsafe(32)
-    grant = secrets.token_urlsafe(48)
-    grants = _load_authorization_grants()
-    grants[origin] = {
-        "fingerprint": _grant_fingerprint(grant),
-        "installation": _installation_fingerprint(),
-        "created_at": str(int(time.time())),
-    }
-    _save_authorization_grants(grants)
-    # Re-authorizing an origin invalidates any older browser sessions for it.
-    for token, session in list(_browser_sessions.items()):
-        if session.get("client_origin") == origin:
-            _browser_sessions.pop(token, None)
     _authorization_codes[code] = {
         "client_origin": origin,
         "redirect_uri": redirect_uri,
         "expires_at": time.time() + AUTH_CODE_TTL_SECONDS,
-        "grant": grant,
+        "grant": authorization["grant"],
     }
     separator = "&" if "?" in redirect_uri else "?"
     location = f"{redirect_uri}{separator}code={code}"
     if state:
         location += f"&state={state}"
     return RedirectResponse(url=location, status_code=303)
+
+
+@app.post("/api/authorize/connect")
+def connect_authorization(
+    payload: dict[str, str],
+    origin: Annotated[str | None, Header()] = None,
+):
+    """Authorize a user-initiated one-click connection from an allowed web origin."""
+    _cleanup_auth_state()
+    client_origin = _validate_origin(str(payload.get("client_origin", "")))
+    if not origin or origin.rstrip("/") != client_origin:
+        raise HTTPException(status_code=403, detail="Yêu cầu cấp quyền không thuộc trang ReupAI hợp lệ.")
+    return _issue_browser_authorization(client_origin)
 
 
 @app.post("/api/authorize/token")

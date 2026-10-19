@@ -30,7 +30,7 @@ export class LocalEngineClient {
 
   get engineUrl() { return this.baseUrl; }
   get status() { return this.connection.status; }
-  connect() { return this.beginAuthorization(); }
+  connect() { return this.authorizeDirectly(); }
 
   get sessionToken() { return isBrowser() ? window.localStorage.getItem(SESSION_KEY) : null; }
   get grant() { return isBrowser() ? window.localStorage.getItem(GRANT_KEY) : null; }
@@ -147,6 +147,34 @@ export class LocalEngineClient {
     } catch (error) {
       if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
       else this.emit("error", error);
+      return false;
+    }
+  }
+
+  async authorizeDirectly() {
+    if (!isBrowser()) return false;
+    this.emit("authorizing");
+    try {
+      const response = await window.fetch(`${this.baseUrl}/api/authorize/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_origin: window.location.origin }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (response.status === 404) {
+        throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
+      }
+      if (!response.ok) throw Object.assign(new Error(await response.text()), { status: response.status });
+      const data = await response.json();
+      this.setSessionToken(data.session_token);
+      this.setGrant(data.grant);
+      this.mediaTickets.clear();
+      this.mediaTicketRequests.clear();
+      return await this.check();
+    } catch (error) {
+      if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
+      else if (error.code === "engine_update_required") this.emit("update_required", error);
+      else this.emit(error.status === 403 ? "permission_denied" : "error", error);
       return false;
     }
   }

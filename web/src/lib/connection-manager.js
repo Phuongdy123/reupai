@@ -1,6 +1,6 @@
-// This adapter deliberately contains no auth logic. Persistent-grant refresh,
-// callback exchange and revoke live in LocalEngineClient so every UI surface
-// observes the same connection state.
+// This adapter deliberately contains no auth logic. One-click authorization,
+// persistent-grant refresh, legacy callback exchange and revoke live in
+// LocalEngineClient so every UI surface observes the same connection state.
 export class ConnectionManager {
   constructor(client, onChange = () => {}) {
     this.client = client;
@@ -14,7 +14,7 @@ export class ConnectionManager {
   }
 
   check() { return this.client.check(); }
-  authorize() { return this.client.beginAuthorization(); }
+  authorize() { return this.client.connect(); }
   completeAuthorization(code, state) { return this.client.completeAuthorization(code, state); }
   revoke() { return this.client.revoke(); }
   destroy() { this.unsubscribe?.(); }

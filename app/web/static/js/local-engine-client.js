@@ -91,17 +91,28 @@
         }
     }
 
-    function connect() {
-        const callback = `${window.location.origin}${window.location.pathname}`;
-        const authState = window.crypto.randomUUID();
-        window.sessionStorage.setItem(stateKey, authState);
-        const params = new URLSearchParams({
-            client_origin: window.location.origin,
-            redirect_uri: callback,
-            state: authState,
-        });
+    async function connect() {
         emit('authorizing');
-        window.location.assign(`${engineUrl}/authorize?${params.toString()}`);
+        try {
+            const response = await window.fetch(`${engineUrl}/api/authorize/connect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_origin: window.location.origin }),
+            });
+            if (response.status === 404) {
+                throw Object.assign(new Error('Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm.'), { code: 'engine_update_required' });
+            }
+            if (!response.ok) throw Object.assign(new Error(await response.text()), { status: response.status });
+            const data = await response.json();
+            window.localStorage.setItem(tokenKey, data.session_token);
+            window.localStorage.setItem(grantKey, data.grant);
+            return await check();
+        } catch (error) {
+            if (error.name === 'TypeError' || /fetch|network/i.test(error.message || '')) emit('disconnected', error);
+            else if (error.code === 'engine_update_required') emit('update_required', error);
+            else emit(error.status === 403 ? 'permission_denied' : 'error', error);
+            return false;
+        }
     }
 
     async function completeCallback() {

@@ -22,7 +22,7 @@ const pages = {
   "/history": ["Lịch sử", "Theo dõi lịch sử xử lý và kết quả của từng job"],
   "/settings": ["Cài đặt", "Thông tin cấu hình hiện tại của Reup AI"],
 };
-const labels = { checking: "Đang kiểm tra", connected: "Đã kết nối", disconnected: "Local Engine offline", authorization_required: "Cần cấp quyền", authorizing: "Đang cấp quyền", permission_denied: "Quyền bị từ chối", error: "Lỗi kết nối" };
+const labels = { checking: "Đang kiểm tra", connected: "Đã kết nối", disconnected: "Local Engine offline", authorization_required: "Cần cấp quyền", authorizing: "Đang cấp quyền", permission_denied: "Quyền bị từ chối", update_required: "Cần cập nhật Local Engine", error: "Lỗi kết nối" };
 
 function StatusControl() {
   const { status, error, check, connect, revoke, client } = useEngine();

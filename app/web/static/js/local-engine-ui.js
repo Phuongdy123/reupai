@@ -12,7 +12,8 @@
         const labels = {
             checking: 'Đang kiểm tra', connected: 'Local Engine đã kết nối',
             disconnected: 'Local Engine offline', authorization_required: 'Cần cấp quyền',
-            authorizing: 'Đang cấp quyền', permission_denied: 'Bị từ chối', error: 'Lỗi Local Engine',
+            authorizing: 'Đang cấp quyền', permission_denied: 'Bị từ chối',
+            update_required: 'Cần cập nhật Local Engine', error: 'Lỗi Local Engine',
         };
         badge.dataset.state = detail.status;
         label.textContent = labels[detail.status] || detail.status;
