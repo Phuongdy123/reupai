@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -25,8 +26,31 @@ from runtime_paths import get_config_dir
 
 SCOPES = ["https://www.googleapis.com/auth/generative-language.retriever"]
 TOKEN_PATH = get_config_dir() / "gemini-oauth.dat"
-_lock = threading.Lock()
-_state: dict[str, str] = {"status": "disconnected", "error": ""}
+_lock = threading.RLock()
+_state: dict[str, object] = {
+    "status": "disconnected",
+    "error": "",
+    # Every authorization attempt gets an id. Disconnecting invalidates the
+    # current id, so a stale browser callback can never sign the user back in.
+    "attempt": 0,
+    "started_at": 0.0,
+}
+
+
+def _status_from_state(*, credentials: Credentials | None = None) -> dict[str, object]:
+    """Build a status response without re-entering the state lock."""
+    with _lock:
+        running = _state["status"] == "connecting"
+        error = str(_state["error"] or "")
+        started_at = float(_state["started_at"] or 0.0)
+    return {
+        "configured": _client_config() is not None,
+        "connected": credentials is not None,
+        "connecting": running,
+        "error": error if error else None,
+        "started_at": int(started_at) if running and started_at else None,
+        "storage": "windows_dpapi" if os.name == "nt" else "local_user_file",
+    }
 
 
 def _client_config() -> dict[str, Any] | None:
@@ -130,16 +154,7 @@ def get_credentials() -> Credentials | None:
 
 def status() -> dict[str, object]:
     credentials = get_credentials()
-    with _lock:
-        running = _state["status"] == "connecting"
-        error = _state["error"]
-    return {
-        "configured": _client_config() is not None,
-        "connected": credentials is not None,
-        "connecting": running,
-        "error": error if error else None,
-        "storage": "windows_dpapi" if os.name == "nt" else "local_user_file",
-    }
+    return _status_from_state(credentials=credentials)
 
 
 def start_authorization() -> dict[str, object]:
@@ -147,19 +162,25 @@ def start_authorization() -> dict[str, object]:
         raise RuntimeError("Google OAuth chưa được cấu hình trong Local Engine. Hãy cập nhật bản Engine do ReupAI phát hành.")
     with _lock:
         if _state["status"] == "connecting":
-            return status()
-        _state.update(status="connecting", error="")
+            return _status_from_state(credentials=get_credentials())
+        attempt = int(_state["attempt"]) + 1
+        _state.update(status="connecting", error="", attempt=attempt, started_at=time.time())
 
     def run() -> None:
         try:
             flow = InstalledAppFlow.from_client_config(_client_config(), SCOPES)
             credentials = flow.run_local_server(host="localhost", port=0, open_browser=True, authorization_prompt_message="ReupAI đang mở trang đăng nhập Google…")
+            with _lock:
+                if int(_state["attempt"]) != attempt:
+                    return
             _save_credentials(credentials)
             with _lock:
-                _state.update(status="connected", error="")
+                if int(_state["attempt"]) == attempt:
+                    _state.update(status="connected", error="", started_at=0.0)
         except Exception as error:
             with _lock:
-                _state.update(status="error", error=str(error)[:240])
+                if int(_state["attempt"]) == attempt:
+                    _state.update(status="error", error=str(error)[:240], started_at=0.0)
 
     threading.Thread(target=run, name="reupai-gemini-oauth", daemon=True).start()
     return status()
@@ -170,4 +191,9 @@ def disconnect() -> None:
         TOKEN_PATH.unlink(missing_ok=True)
     finally:
         with _lock:
-            _state.update(status="disconnected", error="")
+            _state.update(
+                status="disconnected",
+                error="",
+                attempt=int(_state["attempt"]) + 1,
+                started_at=0.0,
+            )
