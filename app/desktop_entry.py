@@ -139,6 +139,9 @@ def _prepare_environment() -> None:
             "REUP_MAX_PARALLEL_PIPELINES=1\n"
             "REUP_MIN_FREE_DISK_BYTES=2147483648\n"
             "# REUP_BROWSER_CHANNEL=auto\n"
+            "# Gemini: Google OAuth is preferred for customers.\n"
+            "# REUP_GOOGLE_OAUTH_CLIENT_ID=\n"
+            "# REUP_GOOGLE_OAUTH_CLIENT_SECRET=\n"
             "# GEMINI_API_KEY=\n",
             encoding="utf-8",
         )

@@ -52,6 +52,7 @@ for package in (
     "playwright",
     "edge_tts",
     "google.genai",
+    "google_auth_oauthlib",
     "pystray",
 ):
     package_datas, package_binaries, package_hidden = collect_all(package)

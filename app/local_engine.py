@@ -105,6 +105,7 @@ ENGINE_CAPABILITIES = {
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
+    "gemini_google_oauth": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
 ensure_runtime_dirs()
@@ -466,6 +467,28 @@ def diagnostics(_: bool = Depends(require_token)):
         "allowed_origins": ALLOWED_ORIGINS,
     })
     return details
+
+
+@app.get("/api/gemini/oauth")
+def gemini_oauth_status(_: bool = Depends(require_token)):
+    from services.gemini_oauth import status as oauth_status
+    return oauth_status()
+
+
+@app.post("/api/gemini/oauth/start")
+def gemini_oauth_start(_: bool = Depends(require_token)):
+    from services.gemini_oauth import start_authorization
+    try:
+        return start_authorization()
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.delete("/api/gemini/oauth")
+def gemini_oauth_disconnect(_: bool = Depends(require_token)):
+    from services.gemini_oauth import disconnect
+    disconnect()
+    return {"ok": True}
 
 
 @app.post("/api/videos")

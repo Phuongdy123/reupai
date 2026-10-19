@@ -9,6 +9,7 @@ from dotenv import dotenv_values, load_dotenv
 from google import genai
 from runtime_paths import get_config_dir
 from google.genai import types
+from services.gemini_oauth import get_credentials
 
 
 # =========================================================
@@ -62,15 +63,14 @@ if not os.getenv("GEMINI_API_KEY"):
     load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 API_KEY = os.getenv("GEMINI_API_KEY")
+OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
 
-if not API_KEY:
+if not API_KEY and not OAUTH_CREDENTIALS:
     raise ValueError(
-        r"Chua cau hinh GEMINI_API_KEY. Mo %LOCALAPPDATA%\ReupAI\config\engine.env va them GEMINI_API_KEY=<your-key>."
+        "Chưa kết nối Google cho Gemini. Mở Cài đặt Local Engine, chọn Kết nối Google rồi thử lại."
     )
 
-client = genai.Client(
-    api_key=API_KEY
-)
+client = genai.Client(api_key=API_KEY) if API_KEY else genai.Client(credentials=OAUTH_CREDENTIALS)
 
 
 # =========================================================

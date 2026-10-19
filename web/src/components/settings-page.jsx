@@ -29,6 +29,7 @@ export function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [oauthStarting, setOauthStarting] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
   const connected = status === "connected";
@@ -36,6 +37,7 @@ export function SettingsPage() {
   const mediaReady = Boolean(diagnostics?.readiness?.media);
   const translationReady = Boolean(diagnostics?.readiness?.translation);
   const storageReady = Boolean(diagnostics?.readiness?.storage);
+  const googleOAuth = diagnostics?.configuration?.gemini_oauth;
 
   const load = useCallback(async () => {
     if (status !== "connected") return;
@@ -68,6 +70,22 @@ export function SettingsPage() {
     return () => { requestSequence.current += 1; };
   }, [connected, load]);
   useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
+  useEffect(() => {
+    if (!googleOAuth?.connecting || !connected) return undefined;
+    const timer = window.setInterval(() => load(), 2500);
+    return () => window.clearInterval(timer);
+  }, [connected, googleOAuth?.connecting, load]);
+
+  const connectGoogle = async () => {
+    if (!connected || oauthStarting) return;
+    setOauthStarting(true); setError("");
+    try {
+      await client.json("/api/gemini/oauth/start", { method: "POST" });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message || "Không thể bắt đầu đăng nhập Google.");
+    } finally { setOauthStarting(false); }
+  };
 
   const save = async (event) => {
     event.preventDefault();
@@ -131,8 +149,9 @@ export function SettingsPage() {
         <div className="setting-row"><span>Trình duyệt nguồn</span><strong>{diagnostics ? (diagnostics.dependencies?.playwright ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Nhận diện phụ đề</span><strong>{diagnostics ? (diagnostics.components?.ocr ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
-        <div className="setting-row"><span>Gemini API key</span><strong>{diagnostics ? (translationReady ? "Đã cấu hình" : "Chưa cấu hình") : "—"}</strong></div>
-        {!translationReady && diagnostics && <p className="muted">Vietsub và Voice cần Gemini API key. Thêm <code>GEMINI_API_KEY=...</code> vào <code>{diagnostics.configuration?.config_path || "engine.env"}</code>, rồi khởi động lại Local Engine.</p>}
+        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (translationReady ? "Đã kết nối" : googleOAuth?.connecting ? "Đang chờ Google xác nhận" : "Chưa kết nối") : "—"}</strong></div>
+        {!translationReady && diagnostics && <div className="settings-actions"><button className="btn primary" onClick={connectGoogle} disabled={!connected || oauthStarting || googleOAuth?.connecting}>{oauthStarting || googleOAuth?.connecting ? "Đang mở Google…" : "Kết nối Google"}</button><p className="muted">Google sẽ mở trong trình duyệt. ReupAI chỉ lưu token đã mã hóa trên máy này, không gửi token hay API key lên website.</p></div>}
+        {googleOAuth?.error && <p className="muted">Google chưa hoàn tất: {googleOAuth.error}</p>}
         <div className="setting-row"><span>Dung lượng an toàn</span><strong>{diagnostics ? (storageReady ? "Đủ để chạy" : `Cần tối thiểu ${formatSpace(diagnostics.storage?.minimum_free_bytes)}`) : "—"}</strong></div>
         <div className="setting-row"><span>Python</span><strong>{diagnostics?.python || "—"}</strong></div>
         <div className="setting-row"><span>CPU logic</span><strong>{diagnostics?.cpu_count || "—"}</strong></div>

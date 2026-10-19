@@ -169,10 +169,16 @@ def runtime_diagnostics() -> dict[str, Any]:
         "ocr": all(_module_available(name) for name in ("paddle", "paddlex", "paddleocr")),
         "vietnamese_tts": all(_module_available(name) for name in ("vieneu", "vieneu_utils", "sea_g2p")) and _sea_g2p_dictionary_available(),
     }
-    gemini_configured = bool(
+    api_key_configured = bool(
         (os.getenv("GEMINI_API_KEY") or "").strip()
         or (config_values.get("GEMINI_API_KEY") or "").strip()
     )
+    try:
+        from services.gemini_oauth import status as gemini_oauth_status
+        oauth = gemini_oauth_status()
+    except Exception:
+        oauth = {"configured": False, "connected": False, "connecting": False, "error": None}
+    gemini_configured = api_key_configured or bool(oauth.get("connected"))
     return {
         "platform": platform.system(),
         "platform_release": platform.release(),
@@ -183,7 +189,8 @@ def runtime_diagnostics() -> dict[str, Any]:
         "components": components,
         "configuration": {
             "config_path": str(config_path),
-            "gemini_api_key_configured": gemini_configured,
+            "gemini_api_key_configured": api_key_configured,
+            "gemini_oauth": oauth,
         },
         "readiness": {
             "media": all(tools.values()) and all(dependencies.values()),
