@@ -30,6 +30,7 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [oauthStarting, setOauthStarting] = useState(false);
+  const [oauthDisconnecting, setOauthDisconnecting] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
   const connected = status === "connected";
@@ -85,6 +86,17 @@ export function SettingsPage() {
     } catch (requestError) {
       setError(requestError.message || "Không thể bắt đầu đăng nhập Google.");
     } finally { setOauthStarting(false); }
+  };
+
+  const disconnectGoogle = async () => {
+    if (!connected || oauthDisconnecting) return;
+    setOauthDisconnecting(true); setError("");
+    try {
+      await client.json("/api/gemini/oauth", { method: "DELETE" });
+      await load();
+    } catch (requestError) {
+      setError(requestError.message || "Không thể đăng xuất Google trên máy này.");
+    } finally { setOauthDisconnecting(false); }
   };
 
   const save = async (event) => {
@@ -151,6 +163,7 @@ export function SettingsPage() {
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (translationReady ? "Đã kết nối" : googleOAuth?.connecting ? "Đang chờ Google xác nhận" : "Chưa kết nối") : "—"}</strong></div>
         {!translationReady && diagnostics && <div className="settings-actions"><button className="btn primary" onClick={connectGoogle} disabled={!connected || oauthStarting || googleOAuth?.connecting}>{oauthStarting || googleOAuth?.connecting ? "Đang mở Google…" : "Kết nối Google"}</button><p className="muted">Google sẽ mở trong trình duyệt. ReupAI chỉ lưu token đã mã hóa trên máy này, không gửi token hay API key lên website.</p></div>}
+        {translationReady && googleOAuth?.connected && <div className="settings-actions"><button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang đăng xuất…" : "Đăng xuất Google"}</button><p className="muted">Xóa token Google đã mã hóa khỏi Local Engine trên máy này.</p></div>}
         {googleOAuth?.error && <p className="muted">Google chưa hoàn tất: {googleOAuth.error}</p>}
         <div className="setting-row"><span>Dung lượng an toàn</span><strong>{diagnostics ? (storageReady ? "Đủ để chạy" : `Cần tối thiểu ${formatSpace(diagnostics.storage?.minimum_free_bytes)}`) : "—"}</strong></div>
         <div className="setting-row"><span>Python</span><strong>{diagnostics?.python || "—"}</strong></div>
