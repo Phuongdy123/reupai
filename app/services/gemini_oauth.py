@@ -11,6 +11,7 @@ import base64
 import ctypes
 import json
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,22 @@ _state: dict[str, str] = {"status": "disconnected", "error": ""}
 
 
 def _client_config() -> dict[str, Any] | None:
+    """Load the release-only desktop client before checking development env vars.
+
+    The JSON is intentionally ignored by Git.  It is included in the Windows
+    installer via ``app/assets`` so customers only approve Google access; they
+    never receive a setup step or an API key field.
+    """
+    source_root = Path(__file__).resolve().parents[1]
+    bundle_root = Path(getattr(sys, "_MEIPASS", source_root.parent))
+    for path in (bundle_root / "app" / "assets" / "google_oauth_client.json", source_root / "assets" / "google_oauth_client.json"):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            installed = value.get("installed") if isinstance(value, dict) else None
+            if isinstance(installed, dict) and installed.get("client_id"):
+                return {"installed": installed}
+        except (OSError, ValueError, TypeError):
+            continue
     client_id = os.getenv("REUP_GOOGLE_OAUTH_CLIENT_ID", "").strip()
     if not client_id:
         return None

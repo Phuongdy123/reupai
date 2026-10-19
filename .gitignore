@@ -34,3 +34,6 @@ artifacts/engine-runtime-smoke/
 
 .vercel
 .env*
+
+# Google OAuth desktop client: bundled only in local release builds.
+app/assets/google_oauth_client.json
