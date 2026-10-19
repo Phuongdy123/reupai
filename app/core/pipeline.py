@@ -360,11 +360,22 @@ def normalize_music_volume(value, default: float = 0.25) -> float:
 
 
 def is_youtube_music_url(value: str) -> bool:
-    """Return whether a URL benefits from the browser-cookie retry path."""
+    """Return whether a YouTube URL benefits from browser-cookie retry."""
     hostname = (urlparse(value).hostname or "").lower().rstrip(".")
     return hostname == "youtu.be" or hostname == "youtube.com" or hostname.endswith(
         ".youtube.com"
     )
+
+
+def is_tiktok_music_url(value: str) -> bool:
+    """Recognize normal, mobile and short TikTok share links."""
+    hostname = (urlparse(value).hostname or "").lower().rstrip(".")
+    return hostname == "tiktok.com" or hostname.endswith(".tiktok.com")
+
+
+def supports_browser_cookie_music_retry(value: str) -> bool:
+    """Sites whose public media downloads commonly need browser cookies."""
+    return is_youtube_music_url(value) or is_tiktok_music_url(value)
 
 
 def music_download_command(
@@ -443,10 +454,10 @@ def resolve_music_url_track(job_dir: Path, music_url: str, is_valid_file) -> Pat
 
     try:
         result = download()
-        # YouTube can reject anonymous extractor traffic even for public
-        # videos. The first attempt stays cookie-free; if it fails, retry with
-        # the same browser profile the normal video downloader already uses.
-        if result.returncode != 0 and is_youtube_music_url(url):
+        # YouTube and TikTok can reject anonymous extractor traffic even for
+        # public posts. The first attempt stays cookie-free; if it fails, retry
+        # with the same browser profile the normal video downloader uses.
+        if result.returncode != 0 and supports_browser_cookie_music_retry(url):
             result = download(use_browser_cookies=True)
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("Tải nhạc quá 10 phút. Hãy thử link khác hoặc tải tệp nhạc từ máy.") from error

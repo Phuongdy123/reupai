@@ -2265,10 +2265,10 @@ function ensureProcessConfigDialog() {
 
             <details class="process-config-advanced" id="processMusicSection">
                 <summary>Nhạc nền</summary>
-                <p>Dán link audio/video công khai hoặc chọn một tệp trên máy. Nhạc sẽ lặp vừa đủ chiều dài video và được trộn cùng tiếng gốc hoặc Voice.</p>
+                <p>Dán link YouTube hoặc TikTok công khai, link audio/video khác, hoặc chọn một tệp trên máy. Nhạc sẽ lặp vừa đủ chiều dài video và được trộn cùng tiếng gốc hoặc Voice.</p>
                 <div class="process-config-grid">
                     <label>Link nhạc / video có nhạc
-                        <input id="processMusicUrl" type="url" inputmode="url" placeholder="https://...">
+                        <input id="processMusicUrl" type="url" inputmode="url" placeholder="YouTube, TikTok hoặc https://...">
                     </label>
                     <label>Hoặc chọn audio/video trên máy
                         <input id="processMusicFile" type="file" accept="audio/*,video/*">
@@ -2283,7 +2283,7 @@ function ensureProcessConfigDialog() {
                         <output data-for="processMusicVolume">25%</output>
                     </label>
                 </div>
-                <small id="processMusicHint">Không chọn nhạc: video giữ nguyên âm thanh hiện có.</small>
+                <small id="processMusicHint">Không chọn nhạc: video giữ nguyên âm thanh hiện có. Link TikTok công khai được tách audio tự động.</small>
             </details>
 
             <details class="process-config-advanced">

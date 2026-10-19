@@ -75,6 +75,27 @@ class BackgroundMusicTests(unittest.TestCase):
         self.assertIn("--cookies-from-browser", retry_command)
         self.assertIn("chrome", retry_command)
 
+    def test_tiktok_failure_retries_with_browser_cookies(self):
+        url = "https://vt.tiktok.com/ZStest/"
+
+        def first_failure_then_download(command, **_kwargs):
+            if "--cookies-from-browser" not in command:
+                return SimpleNamespace(returncode=1, stdout="", stderr="verification required")
+            template = Path(command[command.index("-o") + 1])
+            Path(str(template).replace("%(ext)s", "m4a")).write_bytes(b"audio")
+            return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+        with patch.object(
+            pipeline.subprocess,
+            "run",
+            side_effect=first_failure_then_download,
+        ) as run:
+            actual = pipeline.resolve_music_url_track(self.job_dir, url, lambda path: path.is_file())
+
+        self.assertTrue(actual.is_file())
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("--cookies-from-browser", run.call_args_list[1].args[0])
+
     def test_youtube_host_detection_accepts_common_links(self):
         for url in (
             "https://youtu.be/example",
@@ -83,6 +104,17 @@ class BackgroundMusicTests(unittest.TestCase):
         ):
             self.assertTrue(pipeline.is_youtube_music_url(url))
         self.assertFalse(pipeline.is_youtube_music_url("https://example.com/audio"))
+
+    def test_tiktok_host_detection_accepts_share_links(self):
+        for url in (
+            "https://www.tiktok.com/@creator/video/123",
+            "https://m.tiktok.com/v/123.html",
+            "https://vm.tiktok.com/ZStest/",
+            "https://vt.tiktok.com/ZStest/",
+        ):
+            self.assertTrue(pipeline.is_tiktok_music_url(url))
+            self.assertTrue(pipeline.supports_browser_cookie_music_retry(url))
+        self.assertFalse(pipeline.is_tiktok_music_url("https://example.com/audio"))
 
     def test_music_volume_accepts_silence_and_up_to_200_percent(self):
         self.assertEqual(pipeline.normalize_music_volume(0), 0.0)
