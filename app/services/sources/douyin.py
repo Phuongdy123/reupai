@@ -443,6 +443,27 @@ def _headless_default():
     )
 
 
+def _browser_channel_candidates():
+    """Prefer the customer's Chrome, then Edge, then bundled Chromium.
+
+    A public Windows release cannot assume Chrome is installed.  Playwright's
+    bundled Chromium is a final fallback, while Edge is present on most
+    supported Windows systems.  A support technician can pin a choice in
+    ``engine.env`` with ``REUP_BROWSER_CHANNEL=chrome`` or ``msedge``.
+    """
+    requested = os.getenv("REUP_BROWSER_CHANNEL", "").strip().lower()
+    aliases = {"chrome": "chrome", "edge": "msedge", "msedge": "msedge", "bundled": None, "chromium": None}
+    candidates = []
+    if requested in aliases:
+        candidates.append(aliases[requested])
+    candidates.extend(["chrome", "msedge", None])
+    unique = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
 def _install_headless_resource_filter(page, *, on_media=None):
     """Skip browser assets the scraper does not use and duplicate media reads."""
 
@@ -496,40 +517,28 @@ def _open_context(
         .start()
     )
 
-    try:
-        context = (
-            playwright
-            .chromium
-            .launch_persistent_context(
-                user_data_dir=str(
-                    profile_dir
-                ),
+    errors = []
+    context = None
+    for channel in _browser_channel_candidates():
+        launch_options = {
+            "user_data_dir": str(profile_dir),
+            "headless": headless,
+            "viewport": {"width": 1440, "height": 1000},
+            "locale": "zh-CN",
+            "args": ["--disable-blink-features=AutomationControlled"],
+        }
+        if channel is not None:
+            launch_options["channel"] = channel
+        try:
+            context = playwright.chromium.launch_persistent_context(**launch_options)
+            break
+        except Exception as error:
+            errors.append(error)
 
-                channel="chrome",
-
-                headless=headless,
-
-                viewport={
-                    "width":
-                        1440,
-
-                    "height":
-                        1000,
-                },
-
-                locale="zh-CN",
-
-                args=[
-                    "--disable-blink-features="
-                    "AutomationControlled",
-                ],
-            )
-        )
-
-    except Exception as error:
+    if context is None:
         playwright.stop()
-
-        error_text = str(error).lower()
+        error = errors[-1] if errors else RuntimeError("Không có trình duyệt Chromium khả dụng.")
+        error_text = "\n".join(str(item).lower() for item in errors)
         if (
             "target page, context or browser has been closed"
             in error_text
@@ -537,12 +546,18 @@ def _open_context(
             or "existing browser session" in error_text
         ):
             raise DouyinUnavailable(
-                "Chrome khong mo duoc profile Douyin. "
-                "Hay dong cua so Chrome ma ReupAI da mo, "
+                "Chrome hoặc Edge không mở được profile Douyin. "
+                "Hãy đóng cửa sổ trình duyệt do ReupAI mở, "
                 "sau do thu lai."
             ) from error
-
-        raise
+        if "executable doesn't exist" in error_text or "executable does not exist" in error_text:
+            raise DouyinUnavailable(
+                "Không tìm thấy Chrome, Microsoft Edge hoặc Chromium đi kèm. "
+                "Hãy cài Chrome/Edge rồi thử lại."
+            ) from error
+        raise DouyinUnavailable(
+            "Không thể khởi động trình duyệt để đọc Douyin. Hãy đóng các cửa sổ ReupAI đang dùng rồi thử lại."
+        ) from error
 
     return (
         playwright,

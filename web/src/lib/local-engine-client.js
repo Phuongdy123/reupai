@@ -2,6 +2,7 @@ const DEFAULT_ENGINE_URL = "http://127.0.0.1:17888";
 const SESSION_KEY = "reupai.local-engine.session";
 const GRANT_KEY = "reupai.local-engine.grant";
 const STATE_KEY = "reupai.local-engine.state";
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -15,6 +16,31 @@ function mapPath(path) {
   const stop = value.match(/^\/api\/process\/([^/]+)\/stop(?:\?(.*))?$/);
   if (stop) return `/api/jobs/${stop[1]}/stop${stop[2] ? `?${stop[2]}` : ""}`;
   return value;
+}
+
+async function fetchWithTimeout(url, options = {}, fallbackTimeout = DEFAULT_REQUEST_TIMEOUT_MS) {
+  const { timeoutMs, signal, ...fetchOptions } = options;
+  if (signal) return window.fetch(url, { ...fetchOptions, signal });
+  const duration = Number(timeoutMs ?? fallbackTimeout);
+  if (!Number.isFinite(duration) || duration <= 0) return window.fetch(url, fetchOptions);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), duration);
+  try {
+    return await window.fetch(url, { ...fetchOptions, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function responseError(response, fallback = "Local Engine không thể hoàn tất yêu cầu.") {
+  let detail = "";
+  try {
+    const data = await response.json();
+    detail = typeof data?.detail === "string" ? data.detail : "";
+  } catch (_) { /* A proxy or an older Engine may return an empty response. */ }
+  const error = new Error(detail || `${fallback} (HTTP ${response.status}).`);
+  error.status = response.status;
+  return error;
 }
 
 export class LocalEngineClient {
@@ -65,11 +91,11 @@ export class LocalEngineClient {
     if (this.sessionToken) headers.set("Authorization", `Bearer ${this.sessionToken}`);
     let response;
     try {
-      response = await window.fetch(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
+      response = await fetchWithTimeout(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
       if (response.status === 401 && this.grant && !String(path).startsWith("/api/authorize/")) {
         if (await this.refreshSession()) {
           headers.set("Authorization", `Bearer ${this.sessionToken}`);
-          response = await window.fetch(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
+          response = await fetchWithTimeout(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
         }
       }
     } catch (error) {
@@ -85,7 +111,7 @@ export class LocalEngineClient {
     let data = {};
     try { data = await response.json(); } catch (_) { /* no body */ }
     if (!response.ok) {
-      const error = new Error(data.detail || `Local Engine HTTP ${response.status}`);
+      const error = new Error(typeof data.detail === "string" ? data.detail : `Local Engine HTTP ${response.status}`);
       error.status = response.status;
       throw error;
     }
@@ -101,11 +127,11 @@ export class LocalEngineClient {
 
   async refreshStoredGrant() {
     if (!this.grant) return false;
-    const response = await window.fetch(`${this.baseUrl}/api/authorize/session`, {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/authorize/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ client_origin: window.location.origin, grant: this.grant }),
-      signal: AbortSignal.timeout(8000),
+      timeoutMs: 8000,
     });
     if (response.ok) {
       const data = await response.json();
@@ -131,8 +157,12 @@ export class LocalEngineClient {
   async checkConnection() {
     if (this.status !== "connected") this.emit("checking");
     try {
-      const health = await window.fetch(`${this.baseUrl}/api/health`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      if (!health.ok) throw new Error(`Health HTTP ${health.status}`);
+      const healthResponse = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: 8000 });
+      if (!healthResponse.ok) throw await responseError(healthResponse, "Không thể kiểm tra Local Engine");
+      const health = await healthResponse.json().catch(() => ({}));
+      if (!health?.capabilities?.direct_authorization) {
+        throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
+      }
       let status = await this.request("/api/status", { cache: "no-store" });
       if (status.status === 401 && await this.refreshSession()) {
         status = await this.request("/api/status", { cache: "no-store" });
@@ -146,6 +176,7 @@ export class LocalEngineClient {
       return true;
     } catch (error) {
       if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
+      else if (error.code === "engine_update_required") this.emit("update_required", error);
       else this.emit("error", error);
       return false;
     }
@@ -155,16 +186,16 @@ export class LocalEngineClient {
     if (!isBrowser()) return false;
     this.emit("authorizing");
     try {
-      const response = await window.fetch(`${this.baseUrl}/api/authorize/connect`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/authorize/connect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ client_origin: window.location.origin }),
-        signal: AbortSignal.timeout(8000),
+        timeoutMs: 8000,
       });
       if (response.status === 404) {
         throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
       }
-      if (!response.ok) throw Object.assign(new Error(await response.text()), { status: response.status });
+      if (!response.ok) throw await responseError(response, "Không thể cấp quyền Local Engine");
       const data = await response.json();
       this.setSessionToken(data.session_token);
       this.setGrant(data.grant);
@@ -246,12 +277,13 @@ export class LocalEngineClient {
     }
     this.emit("authorizing");
     try {
-      const response = await window.fetch(`${this.baseUrl}/api/authorize/token`, {
+      const response = await fetchWithTimeout(`${this.baseUrl}/api/authorize/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, client_origin: window.location.origin }),
+        timeoutMs: 8000,
       });
-      if (!response.ok) throw Object.assign(new Error(await response.text()), { status: response.status });
+      if (!response.ok) throw await responseError(response, "Không thể hoàn tất kết nối Local Engine");
       const data = await response.json();
       this.setSessionToken(data.session_token);
       this.setGrant(data.grant);

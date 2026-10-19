@@ -33,6 +33,9 @@ export function SettingsPage() {
   const requestSequence = useRef(0);
   const connected = status === "connected";
   const busyConnection = status === "checking" || status === "authorizing";
+  const mediaReady = Boolean(diagnostics?.readiness?.media);
+  const translationReady = Boolean(diagnostics?.readiness?.translation);
+  const storageReady = Boolean(diagnostics?.readiness?.storage);
 
   const load = useCallback(async () => {
     if (status !== "connected") return;
@@ -121,9 +124,16 @@ export function SettingsPage() {
       </section>
 
       <section className="panel">
-        <div className="panel-head"><div><h2>Chẩn đoán xử lý</h2><p>Kiểm tra nhanh môi trường chạy pipeline trên máy này.</p></div><span className="setting-status">{diagnostics?.tools?.ffmpeg && diagnostics?.tools?.ffprobe ? "Sẵn sàng" : "Cần kiểm tra"}</span></div>
+        <div className="panel-head"><div><h2>Chẩn đoán xử lý</h2><p>Kiểm tra trước các điều kiện dễ làm job dừng giữa chừng.</p></div><span className="setting-status">{mediaReady && storageReady ? "Sẵn sàng" : diagnostics ? "Cần xử lý" : "Đang kiểm tra"}</span></div>
         <div className="setting-row"><span>FFmpeg</span><strong>{diagnostics ? (diagnostics.tools?.ffmpeg ? "Đã cài" : "Không tìm thấy") : "—"}</strong></div>
         <div className="setting-row"><span>FFprobe</span><strong>{diagnostics ? (diagnostics.tools?.ffprobe ? "Đã cài" : "Không tìm thấy") : "—"}</strong></div>
+        <div className="setting-row"><span>Trình tải video</span><strong>{diagnostics ? (diagnostics.dependencies?.yt_dlp ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
+        <div className="setting-row"><span>Trình duyệt nguồn</span><strong>{diagnostics ? (diagnostics.dependencies?.playwright ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
+        <div className="setting-row"><span>Nhận diện phụ đề</span><strong>{diagnostics ? (diagnostics.components?.ocr ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
+        <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
+        <div className="setting-row"><span>Gemini API key</span><strong>{diagnostics ? (translationReady ? "Đã cấu hình" : "Chưa cấu hình") : "—"}</strong></div>
+        {!translationReady && diagnostics && <p className="muted">Vietsub và Voice cần Gemini API key. Thêm <code>GEMINI_API_KEY=...</code> vào <code>{diagnostics.configuration?.config_path || "engine.env"}</code>, rồi khởi động lại Local Engine.</p>}
+        <div className="setting-row"><span>Dung lượng an toàn</span><strong>{diagnostics ? (storageReady ? "Đủ để chạy" : `Cần tối thiểu ${formatSpace(diagnostics.storage?.minimum_free_bytes)}`) : "—"}</strong></div>
         <div className="setting-row"><span>Python</span><strong>{diagnostics?.python || "—"}</strong></div>
         <div className="setting-row"><span>CPU logic</span><strong>{diagnostics?.cpu_count || "—"}</strong></div>
         <div className="setting-row"><span>Chế độ dữ liệu</span><strong>{diagnostics?.runtime_mode === "production" ? "Production" : diagnostics?.runtime_mode === "development" ? "Development" : "—"}</strong></div>

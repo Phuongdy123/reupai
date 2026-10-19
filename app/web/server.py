@@ -1764,6 +1764,39 @@ def mark_process_cancelled(
 # BACKGROUND PIPELINE
 # =========================================================
 
+def _pipeline_failure_message(return_code: int | None, log_path: Path) -> str:
+    """Turn common child-process failures into an action a customer can take.
+
+    The complete child log stays on the local machine.  The job card only gets
+    a short explanation so a failed render does not look like a generic exit
+    code or a Python traceback.
+    """
+    try:
+        tail = log_path.read_text(encoding="utf-8", errors="replace")[-16000:]
+    except OSError:
+        tail = ""
+    normalized = tail.lower()
+
+    if "gemini_api_key" in normalized:
+        return "Chưa cấu hình Gemini API key. Mở Cài đặt Local Engine và thêm key vào engine.env rồi chạy lại job."
+    if "no space left" in normalized or "not enough space" in normalized or "disk full" in normalized:
+        return "Ổ đĩa không còn đủ chỗ trống để xử lý video. Hãy giải phóng dung lượng rồi chạy lại job."
+    if "0x800700e8" in normalized or "2147942632" in normalized or "not enough memory" in normalized:
+        return "Windows đang thiếu tài nguyên để chạy FFmpeg. Hãy đóng bớt ứng dụng nặng, chờ job khác hoàn tất rồi chạy lại."
+    if "0xc000013a" in normalized or "3221225786" in normalized:
+        return "Job đã bị dừng giữa chừng. Hãy kiểm tra nút Dừng, phần mềm bảo mật hoặc khởi động lại Local Engine rồi chạy lại."
+    if "ffmpeg" in normalized and ("not found" in normalized or "cannot find" in normalized or "winerror 2" in normalized):
+        return "Không tìm thấy FFmpeg trong Local Engine. Mở Cài đặt để kiểm tra môi trường, rồi cài lại bản Local Engine mới nhất."
+    if "sea_g2p" in normalized or "vieneu" in normalized:
+        return "Thiếu thành phần giọng đọc tiếng Việt của Local Engine. Hãy cài lại bản Local Engine mới nhất rồi chạy lại Voice."
+    if "paddle" in normalized or "paddlex" in normalized or "paddleocr" in normalized:
+        return "Thiếu hoặc hỏng thành phần nhận diện phụ đề. Hãy cài lại bản Local Engine mới nhất rồi thử lại."
+    if "access is denied" in normalized or "permission denied" in normalized:
+        return "Local Engine không có quyền đọc hoặc ghi một tệp cần thiết. Hãy đóng ứng dụng đang giữ tệp rồi chạy lại job."
+    if return_code is not None:
+        return f"Pipeline dừng với mã {return_code}. Mở Chi tiết của job để xem nhật ký xử lý trên máy này."
+    return "Pipeline dừng trước khi hoàn tất. Mở Chi tiết của job để xem nhật ký xử lý trên máy này."
+
 def _pipeline_worker_once(
     *,
     video_url: str,
@@ -1799,6 +1832,17 @@ def _pipeline_worker_once(
         job_dir
         / f"web_{mode}.log"
     )
+
+    # A retried job reuses its directory.  It must never read a completed or
+    # failed progress file from the earlier attempt and report the wrong state.
+    try:
+        progress_path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # The new child still writes fresh progress.  Do not block a job only
+        # because antivirus briefly has the old status file open.
+        pass
 
     command = pipeline_command(
         video_url,
@@ -2262,15 +2306,9 @@ def _pipeline_worker_once(
         else:
 
             message = (
-                progress.get(
-                    "message"
-                )
-                if progress
-                else (
-                    "Pipeline dừng "
-                    f"với exit code "
-                    f"{return_code}."
-                )
+                progress.get("message")
+                if progress and str(progress.get("status", "")).lower() == "failed"
+                else _pipeline_failure_message(return_code, log_path)
             )
 
             fail_job(

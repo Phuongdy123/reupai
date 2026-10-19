@@ -6,17 +6,104 @@ import json
 import multiprocessing
 import os
 import runpy
+import socket
 import subprocess
 import sys
 import threading
 import time
+import traceback
+import urllib.error
+import urllib.request
 import webbrowser
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
+
+CHILD_MODES = {"--pipeline", "--python-module", "--check-config", "--check-voice", "--check-media"}
+
+
+def _is_child_mode() -> bool:
+    return len(sys.argv) > 1 and sys.argv[1] in CHILD_MODES
+
+
+def _failure_log_path() -> Path:
+    """Find a writable log location even when normal startup has failed."""
+    root_override = os.getenv("REUP_DATA_DIR", "").strip()
+    if root_override:
+        root = Path(root_override).expanduser()
+    else:
+        local_app_data = os.getenv("LOCALAPPDATA", "").strip()
+        root = Path(local_app_data) / "ReupAI" if local_app_data else Path.home() / "AppData" / "Local" / "ReupAI"
+    try:
+        log_dir = root / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir / "startup-failure.log"
+    except OSError:
+        return Path.cwd() / "ReupAI-startup-failure.log"
+
+
+def _redact_sensitive_text(value: str) -> str:
+    """Keep accidental API-key text out of customer-facing support logs."""
+    import re
+
+    return re.sub(
+        r"(?im)(GEMINI_API_KEY\s*[=:]\s*)[^\s'\"]+",
+        r"\1[redacted]",
+        value,
+    )
+
+
+def _record_unhandled_error(error: Exception) -> Path:
+    path = _failure_log_path()
+    summary = _redact_sensitive_text(str(error))
+    detail = _redact_sensitive_text("".join(traceback.format_exception(type(error), error, error.__traceback__)))
+    try:
+        with path.open("a", encoding="utf-8") as log_file:
+            log_file.write(
+                f"\n[{datetime.now(timezone.utc).isoformat()}] {type(error).__name__}: {summary}\n{detail}\n"
+            )
+    except OSError:
+        pass
+    return path
+
+
+def _show_startup_error(error: Exception, log_path: Path) -> None:
+    """Show one useful Windows message instead of a PyInstaller traceback dialog."""
+    if os.name != "nt":
+        return
+    message = (
+        "ReupAI Local Engine không thể khởi động.\n\n"
+        f"Lý do: {type(error).__name__}: {_redact_sensitive_text(str(error))}\n\n"
+        f"Nhật ký: {log_path}"
+    )
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(0, message, "ReupAI Local Engine", 0x10)
+    except Exception:
+        pass
+
+
+def _running_engine() -> bool:
+    """Return whether a healthy Engine already owns the loopback port."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:17888/api/health", timeout=1.5) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+        return bool(payload.get("ok") and payload.get("engine") == "ReupAI")
+    except (OSError, ValueError, urllib.error.URLError):
+        return False
+
+
+def _port_is_busy() -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", 17888), timeout=0.8):
+            return True
+    except OSError:
+        return False
 
 
 def _configure_utf8_streams() -> None:
@@ -51,6 +138,7 @@ def _prepare_environment() -> None:
             "REUP_MAX_PARALLEL_DOWNLOADS=1\n"
             "REUP_MAX_PARALLEL_PIPELINES=1\n"
             "REUP_MIN_FREE_DISK_BYTES=2147483648\n"
+            "# REUP_BROWSER_CHANNEL=auto\n"
             "# GEMINI_API_KEY=\n",
             encoding="utf-8",
         )
@@ -322,11 +410,36 @@ def run_desktop() -> int:
 
 def main() -> int:
     multiprocessing.freeze_support()
+    # Double-clicking the executable while it is already running should open
+    # the workspace, not start a second tray process or fail on the port.
+    if not _is_child_mode() and _running_engine():
+        webbrowser.open("https://www.reupai.cloud")
+        return 0
     _prepare_environment()
     if _dispatch_child_mode():
         return 0
+    if _port_is_busy():
+        raise RuntimeError(
+            "Cổng 17888 đang được một ứng dụng khác sử dụng. Hãy đóng ứng dụng đó rồi mở lại ReupAI."
+        )
     return run_desktop()
 
 
+def run_safely() -> int:
+    """Prevent frozen child failures from becoming opaque PyInstaller dialogs."""
+    try:
+        return main()
+    except Exception as error:
+        log_path = _record_unhandled_error(error)
+        if _is_child_mode():
+            # Pipeline workers redirect stderr to the per-job log.  Preserve
+            # enough detail there for support while keeping the desktop quiet.
+            print(f"[ReupAI] {type(error).__name__}: {error}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+        else:
+            _show_startup_error(error, log_path)
+        return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(run_safely())

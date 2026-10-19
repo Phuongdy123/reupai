@@ -100,7 +100,12 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.0"
+ENGINE_VERSION = "0.2.1"
+ENGINE_CAPABILITIES = {
+    "direct_authorization": True,
+    "media_tickets": True,
+    "runtime_readiness": True,
+}
 LOCAL_TOKEN_PATH = get_local_token_path()
 ensure_runtime_dirs()
 
@@ -430,6 +435,7 @@ def health():
         "engine": "ReupAI",
         "version": ENGINE_VERSION,
         "status": "ready",
+        "capabilities": ENGINE_CAPABILITIES,
     }
 
 
@@ -439,6 +445,7 @@ def status(_: bool = Depends(require_token)):
     return {
         "engine_running": True,
         "version": ENGINE_VERSION,
+        "capabilities": ENGINE_CAPABILITIES,
         "active_jobs": len(list_active_jobs(limit=20)),
         "storage": {
             "root": str(get_runtime_root()),

@@ -1,6 +1,7 @@
 """Regression coverage for the streamlined Local Engine authorization flow."""
 from pathlib import Path
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 import local_engine
+from services.engine_runtime import runtime_diagnostics
 
 
 class LocalEngineAuthorizationTests(unittest.TestCase):
@@ -63,6 +65,25 @@ class LocalEngineAuthorizationTests(unittest.TestCase):
                 origin="https://reupai.cloud",
             )
         self.assertEqual(mismatch.exception.status_code, 403)
+
+    def test_health_advertises_web_compatibility(self):
+        health = local_engine.health()
+
+        self.assertTrue(health["ok"])
+        self.assertTrue(health["capabilities"]["direct_authorization"])
+        self.assertTrue(health["capabilities"]["runtime_readiness"])
+
+    def test_runtime_diagnostics_never_returns_the_gemini_key(self):
+        secret = "test-local-key-must-not-leak"
+        with patch.dict(os.environ, {"GEMINI_API_KEY": secret}):
+            diagnostics = runtime_diagnostics()
+
+        encoded = json.dumps(diagnostics)
+        self.assertTrue(diagnostics["configuration"]["gemini_api_key_configured"])
+        self.assertNotIn(secret, encoded)
+        self.assertIn("minimum_free_bytes", diagnostics["storage"])
+        self.assertIn("ocr", diagnostics["components"])
+        self.assertIn("vietnamese_tts", diagnostics["components"])
 
 
 if __name__ == "__main__":

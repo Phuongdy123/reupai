@@ -177,6 +177,27 @@ lưu trong `%LOCALAPPDATA%\ReupAI`; cấu hình Local Engine nằm tại
 `%LOCALAPPDATA%\ReupAI\config\engine.env`. Gỡ ứng dụng không xóa video, project
 hoặc thành phẩm của người dùng.
 
+### Checklist trước khi phát hành cho khách Windows
+
+1. Build từ môi trường sạch bằng `scripts\build_windows.ps1`, rồi phát hành
+   `release\ReupAI-Setup-<version>.exe` và checksum SHA-256 đi kèm.
+2. Cài thử bằng installer trên một Windows x64 khác, mở ReupAI hai lần, rồi
+   xác nhận lần thứ hai chỉ mở website thay vì tạo thêm Local Engine.
+3. Vào **Cài đặt → Chẩn đoán xử lý**. FFmpeg, FFprobe, trình tải video và
+   trình duyệt nguồn phải báo sẵn sàng. Nếu dùng Vietsub hoặc Voice, thêm
+   `GEMINI_API_KEY=...` vào `%LOCALAPPDATA%\ReupAI\config\engine.env`, sau đó
+   khởi động lại Local Engine.
+4. Chạy một video Vietsub, một video Voice, một link Douyin và một video có
+   nhạc nền. Hệ thống thử Chrome, Microsoft Edge rồi Chromium đi kèm để đọc
+   Douyin; có thể đặt `REUP_BROWSER_CHANNEL=chrome`, `msedge` hoặc `bundled`
+   trong `engine.env` nếu cần cố định trình duyệt.
+5. Khi job lỗi, web chỉ hiện nguyên nhân có thể xử lý; nhật ký đầy đủ nằm ở
+   `%LOCALAPPDATA%\ReupAI\logs` và log của từng job nằm trong thư mục job.
+
+Engine chỉ bind loopback `127.0.0.1`. File video, token Engine, Gemini key và
+dữ liệu job không được gửi lên website. Website chỉ nhận một browser session
+gắn với đúng origin để điều khiển Engine trên chính máy đó.
+
 ## Tài khoản website và phê duyệt truy cập
 
 Website production dùng Supabase cho **tài khoản và quyền truy cập**. Local Engine, video, jobs, SQLite và file thành phẩm vẫn chỉ nằm trên máy người dùng.
