@@ -11,7 +11,7 @@ const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
 const CONNECTION_LABELS = {
   checking: "Đang kiểm tra", connected: "Đã kết nối", disconnected: "Local Engine offline",
   authorization_required: "Cần cấp quyền", authorizing: "Đang cấp quyền",
-  permission_denied: "Quyền truy cập bị từ chối", error: "Lỗi kết nối",
+  permission_denied: "Quyền truy cập bị từ chối", update_required: "Cần cập nhật Local Engine", error: "Lỗi kết nối",
 };
 
 function formatSpace(bytes) {
@@ -21,14 +21,13 @@ function formatSpace(bytes) {
 }
 
 export function SettingsPage() {
-  const { status, client, connect, check, revoke } = useEngine();
+  const { status, client, connect, check } = useEngine();
   const [settings, setSettings] = useState(DEFAULTS);
   const [engineInfo, setEngineInfo] = useState(null);
   const [diagnostics, setDiagnostics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [revoking, setRevoking] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
@@ -80,14 +79,6 @@ export function SettingsPage() {
     finally { setSaving(false); }
   };
 
-  const revokeAccess = async () => {
-    if (revoking) return;
-    setRevoking(true); setError("");
-    try { await revoke(); }
-    catch (requestError) { setError(requestError.message || "Không thể xác nhận thu hồi quyền trên Local Engine."); }
-    finally { setRevoking(false); }
-  };
-
   return <div className="settings-page">
     {error && <div className="error-banner" role="alert"><span><Icon name="alert" size={16} />{error}</span>{connected && <button className="btn" onClick={load} disabled={loading || saving}>Thử lại</button>}</div>}
     {saved && <div className="notice-banner" role="status"><Icon name="check" size={16} />Đã lưu cài đặt trên máy này.</div>}
@@ -105,11 +96,10 @@ export function SettingsPage() {
         <div className="setting-row"><span>Địa chỉ Engine</span><code>{client.baseUrl}</code></div>
         <div className="setting-row"><span>Quyền trên trình duyệt này</span><strong>{client.hasPersistentGrant ? "Đã cấp quyền" : "Chưa cấp quyền"}</strong></div>
         <div className="setting-row"><span>Phiên bản</span><strong>{engineInfo?.version || "—"}</strong></div>
-        {!connected && <p className="muted">{status === "authorization_required" || status === "permission_denied" ? "Bấm Kết nối ReupAI và chọn Cho phép trên trang Local Engine." : "Khởi động ReupAI Local Engine trên máy này rồi kiểm tra lại."}</p>}
+        {!connected && <p className="muted">{status === "authorization_required" || status === "permission_denied" ? "Bấm Kết nối ReupAI để cấp quyền ngay trên trang này." : status === "update_required" ? "Cập nhật Local Engine để dùng kết nối một chạm." : "Khởi động ReupAI Local Engine trên máy này rồi kiểm tra lại."}</p>}
         <div className="settings-actions">
           {(status === "authorization_required" || status === "permission_denied") && <button className="btn primary" onClick={connect}>Kết nối ReupAI</button>}
-          <button className="btn" onClick={check} disabled={busyConnection || revoking}><Icon name="refresh" size={16} />{busyConnection ? CONNECTION_LABELS[status] : "Kiểm tra kết nối"}</button>
-          {connected && <button className="btn danger" onClick={revokeAccess} disabled={revoking}>{revoking ? "Đang thu hồi…" : "Thu hồi quyền"}</button>}
+          <button className="btn" onClick={check} disabled={busyConnection}><Icon name="refresh" size={16} />{busyConnection ? CONNECTION_LABELS[status] : "Kiểm tra kết nối"}</button>
         </div>
       </section>
 

@@ -25,14 +25,14 @@ const pages = {
 const labels = { checking: "Đang kiểm tra", connected: "Đã kết nối", disconnected: "Local Engine offline", authorization_required: "Cần cấp quyền", authorizing: "Đang cấp quyền", permission_denied: "Quyền bị từ chối", update_required: "Cần cập nhật Local Engine", error: "Lỗi kết nối" };
 
 function StatusControl() {
-  const { status, error, check, connect, revoke, client } = useEngine();
+  const { status, error, check, connect, client } = useEngine();
   const busy = status === "checking" || status === "authorizing";
   const visual = status === "checking" && client.hasPersistentGrant ? "reconnecting" : status;
   return <div className="topbar-user engine-status-control">
     <span className="local-engine-indicator" id="localEngineIndicator" data-state={visual} title={client.baseUrl}>
       <span className="local-engine-dot" /><span id="localEngineLabel">{visual === "reconnecting" ? "Đang kết nối lại" : labels[status]}</span>
     </span>
-    {status === "connected" ? <button id="localEngineRevoke" className="local-engine-action" onClick={revoke}>Thu hồi</button> : <button id="localEngineConnect" className="local-engine-action" disabled={busy} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{busy ? "Đang kết nối…" : status === "authorization_required" || status === "permission_denied" ? "Kết nối ReupAI" : "Thử lại"}</button>}
+    {status !== "connected" && <button id="localEngineConnect" className="local-engine-action" disabled={busy} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{busy ? "Đang kết nối…" : status === "authorization_required" || status === "permission_denied" ? "Kết nối ReupAI" : "Thử lại"}</button>}
     <button id="localEngineRetry" className="local-engine-action engine-retry" disabled={busy} title="Kiểm tra kết nối" aria-label="Kiểm tra kết nối" onClick={check}><Icon name="refresh" size={15} /></button>
     {error && <span className="sr-only">{error.message}</span>}
   </div>;
