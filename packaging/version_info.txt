@@ -14,11 +14,11 @@ VSVersionInfo(
       StringTable('040904B0', [
         StringStruct('CompanyName', 'ReupAI'),
         StringStruct('FileDescription', 'ReupAI Local Engine'),
-        StringStruct('FileVersion', '0.2.1'),
+        StringStruct('FileVersion', '0.2.2'),
         StringStruct('InternalName', 'ReupAI'),
         StringStruct('OriginalFilename', 'ReupAI.exe'),
         StringStruct('ProductName', 'ReupAI Local Engine'),
-        StringStruct('ProductVersion', '0.2.1')
+        StringStruct('ProductVersion', '0.2.2')
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
