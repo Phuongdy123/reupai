@@ -351,6 +351,14 @@ def normalize_music_url(value) -> str:
     return url
 
 
+def normalize_music_volume(value, default: float = 0.25) -> float:
+    """Keep user-selected music gain inside the supported 0–200% range."""
+    try:
+        return max(0.0, min(2.0, float(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def is_youtube_music_url(value: str) -> bool:
     """Return whether a URL benefits from the browser-cookie retry path."""
     hostname = (urlparse(value).hostname or "").lower().rstrip(".")
@@ -2532,7 +2540,7 @@ def render_voiceover(
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
     renderer.MUSIC_PATH = music_path
-    renderer.MUSIC_VOLUME = music_volume
+    renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
 
     renderer.PREVIEW_SECONDS = preview_seconds
@@ -2668,7 +2676,7 @@ def render_subtitle_only(
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
     renderer.MUSIC_PATH = music_path
-    renderer.MUSIC_VOLUME = music_volume
+    renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
 
     renderer.RENDER_MODE = "subtitle"
@@ -2771,7 +2779,7 @@ def rerender_existing_output(
         "logo_path": config.get("logo_path"),
         "blur_intervals": intervals,
         "music_path": config.get("music_path"),
-        "music_volume": float(config.get("music_volume", 0.25)),
+        "music_volume": normalize_music_volume(config.get("music_volume", 0.25)),
         "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
         "force": True,
     }
@@ -3028,10 +3036,7 @@ def pipeline(
                 music_path = cached_music
         except (OSError, ValueError):
             pass
-    try:
-        music_volume = max(0.0, min(1.0, float(config.get("music_volume", 0.25))))
-    except (TypeError, ValueError):
-        music_volume = 0.25
+    music_volume = normalize_music_volume(config.get("music_volume", 0.25))
     config = {
         **config,
         "music_path": str(music_path) if music_path and valid_music_file(music_path) else None,

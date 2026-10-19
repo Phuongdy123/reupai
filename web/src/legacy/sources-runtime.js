@@ -2274,7 +2274,12 @@ function ensureProcessConfigDialog() {
                         <input id="processMusicFile" type="file" accept="audio/*,video/*">
                     </label>
                     <label>Âm lượng nhạc
-                        <input id="processMusicVolume" type="range" min="0" max="1" step="0.05" value="0.25">
+                        <div class="music-volume-control">
+                            <input id="processMusicVolume" type="range" min="0" max="2" step="0.01" value="0.25" aria-label="Âm lượng nhạc nền">
+                            <input id="processMusicVolumePercent" type="number" min="0" max="200" step="1" value="25" inputmode="numeric" aria-label="Phần trăm âm lượng nhạc nền">
+                            <span aria-hidden="true">%</span>
+                        </div>
+                        <small>0% tắt nhạc · nhập trực tiếp từ 0–200%.</small>
                         <output data-for="processMusicVolume">25%</output>
                     </label>
                 </div>
@@ -2358,7 +2363,22 @@ function ensureProcessConfigDialog() {
     const close = () => dialog.close();
     dialog.querySelector('#closeProcessConfig').onclick = close;
     dialog.querySelector('#cancelProcessConfig').onclick = close;
-    ['processOriginalVolume', 'processVoiceVolume', 'processTtsSpeed', 'processMusicVolume'].forEach(id => {
+    const syncMusicVolume = source => {
+        const slider = dialog.querySelector('#processMusicVolume');
+        const percent = dialog.querySelector('#processMusicVolumePercent');
+        const output = dialog.querySelector('output[data-for="processMusicVolume"]');
+        const raw = source === percent ? Number(percent.value) / 100 : Number(slider.value);
+        const normalized = Number.isFinite(raw) ? Math.min(2, Math.max(0, raw)) : 0.25;
+        slider.value = String(normalized);
+        percent.value = String(Math.round(normalized * 100));
+        output.textContent = `${Math.round(normalized * 100)}%`;
+    };
+    const musicSlider = dialog.querySelector('#processMusicVolume');
+    const musicPercent = dialog.querySelector('#processMusicVolumePercent');
+    musicSlider?.addEventListener('input', () => syncMusicVolume(musicSlider));
+    musicPercent?.addEventListener('input', () => syncMusicVolume(musicPercent));
+
+    ['processOriginalVolume', 'processVoiceVolume', 'processTtsSpeed'].forEach(id => {
         const input = dialog.querySelector(`#${id}`);
         const output = dialog.querySelector(`output[data-for="${id}"]`);
         input?.addEventListener('input', () => {
@@ -2941,7 +2961,10 @@ async function openProcessConfig(video, card, mode) {
             music_url: musicUrl || null,
             music_data: musicData,
             music_filename: musicFile?.name || null,
-            music_volume: Number(value('processMusicVolume') || 0.25),
+            music_volume: (() => {
+                const selected = Number(value('processMusicVolume'));
+                return Number.isFinite(selected) ? Math.min(2, Math.max(0, selected)) : 0.25;
+            })(),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
             aspect_ratio: value('processAspectRatio') || null,
             blur_preset: value('processBlurPreset') || null,

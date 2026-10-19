@@ -1770,6 +1770,10 @@ tbody tr:hover {
 .process-config-grid label, .process-blur-grid label { display:grid; gap:6px; color:#dbe5f5; font-size:12px; font-weight:700; }
 .process-config-grid input, .process-config-grid select, .process-blur-grid input { width:100%; }
 .process-config-grid output { color:#a9a1ff; font-size:11px; }
+.music-volume-control { display:grid; grid-template-columns:minmax(0,1fr) 68px auto; align-items:center; gap:8px; }
+.process-config-grid .music-volume-control input[type="range"] { min-width:0; }
+.process-config-grid .music-volume-control input[type="number"] { text-align:right; }
+.process-config-grid label > small { color:var(--muted); font-size:10px; font-weight:500; }
 .process-check-option { grid-template-columns:22px minmax(0,1fr); align-items:center; column-gap:9px; padding:11px 12px; border:1px solid var(--line); border-radius:12px; background:rgba(15,23,42,.45); cursor:pointer; }
 .process-check-option input[type="checkbox"] { appearance:none; width:21px; height:21px; margin:0; border:1px solid var(--line-strong); border-radius:7px; background:#0b1220; cursor:pointer; transition:background .16s ease, border-color .16s ease, box-shadow .16s ease; }
 .process-check-option input[type="checkbox"]:checked { border-color:var(--purple); background:var(--purple); box-shadow:0 0 0 3px rgba(124,108,255,.16); }

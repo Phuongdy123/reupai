@@ -84,6 +84,13 @@ class BackgroundMusicTests(unittest.TestCase):
             self.assertTrue(pipeline.is_youtube_music_url(url))
         self.assertFalse(pipeline.is_youtube_music_url("https://example.com/audio"))
 
+    def test_music_volume_accepts_silence_and_up_to_200_percent(self):
+        self.assertEqual(pipeline.normalize_music_volume(0), 0.0)
+        self.assertEqual(pipeline.normalize_music_volume("1.5"), 1.5)
+        self.assertEqual(pipeline.normalize_music_volume(9), 2.0)
+        self.assertEqual(pipeline.normalize_music_volume(-3), 0.0)
+        self.assertEqual(pipeline.normalize_music_volume("invalid"), 0.25)
+
     def test_downloaded_track_must_contain_valid_audio(self):
         url = "https://example.com/music"
         with patch.object(
