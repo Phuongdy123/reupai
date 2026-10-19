@@ -52,6 +52,38 @@ class BackgroundMusicTests(unittest.TestCase):
         self.assertIn("yt_dlp", command)
         self.assertIn("--audio-format", command)
 
+    def test_youtube_failure_retries_with_browser_cookies(self):
+        url = "https://www.youtube.com/watch?v=public-track"
+
+        def first_failure_then_download(command, **_kwargs):
+            if "--cookies-from-browser" not in command:
+                return SimpleNamespace(returncode=1, stdout="", stderr="Sign in to confirm")
+            template = Path(command[command.index("-o") + 1])
+            Path(str(template).replace("%(ext)s", "m4a")).write_bytes(b"audio")
+            return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+        with patch.object(
+            pipeline.subprocess,
+            "run",
+            side_effect=first_failure_then_download,
+        ) as run:
+            actual = pipeline.resolve_music_url_track(self.job_dir, url, lambda path: path.is_file())
+
+        self.assertTrue(actual.is_file())
+        self.assertEqual(run.call_count, 2)
+        retry_command = run.call_args_list[1].args[0]
+        self.assertIn("--cookies-from-browser", retry_command)
+        self.assertIn("chrome", retry_command)
+
+    def test_youtube_host_detection_accepts_common_links(self):
+        for url in (
+            "https://youtu.be/example",
+            "https://www.youtube.com/watch?v=example",
+            "https://music.youtube.com/watch?v=example",
+        ):
+            self.assertTrue(pipeline.is_youtube_music_url(url))
+        self.assertFalse(pipeline.is_youtube_music_url("https://example.com/audio"))
+
     def test_downloaded_track_must_contain_valid_audio(self):
         url = "https://example.com/music"
         with patch.object(

@@ -351,6 +351,52 @@ def normalize_music_url(value) -> str:
     return url
 
 
+def is_youtube_music_url(value: str) -> bool:
+    """Return whether a URL benefits from the browser-cookie retry path."""
+    hostname = (urlparse(value).hostname or "").lower().rstrip(".")
+    return hostname == "youtu.be" or hostname == "youtube.com" or hostname.endswith(
+        ".youtube.com"
+    )
+
+
+def music_download_command(
+    music_template: str,
+    music_url: str,
+    *,
+    use_browser_cookies: bool = False,
+) -> list[str]:
+    """Build the isolated yt-dlp command used for a remote music track."""
+    from services.engine_runtime import python_module_command
+
+    command = python_module_command(
+        "yt_dlp",
+        "--no-playlist",
+        "--no-warnings",
+        "--retries",
+        "5",
+        "--fragment-retries",
+        "5",
+        "--socket-timeout",
+        "30",
+        "-f",
+        "bestaudio[ext=m4a]/bestaudio/best",
+        "-x",
+        "--audio-format",
+        "m4a",
+        "--audio-quality",
+        "5",
+    )
+    if use_browser_cookies:
+        command.extend(
+            [
+                "--cookies-from-browser",
+                os.getenv("REUP_COOKIE_BROWSER", "chrome"),
+            ]
+        )
+    command.extend(["-o", music_template, music_url])
+    return command
+
+
 def resolve_music_url_track(job_dir: Path, music_url: str, is_valid_file) -> Path:
     """Return a validated cached/downloaded audio track for one remote URL."""
     url = normalize_music_url(music_url)
@@ -370,16 +416,14 @@ def resolve_music_url_track(job_dir: Path, music_url: str, is_valid_file) -> Pat
             pass
 
     music_template = str(job_dir / f"background_music_{music_key}.%(ext)s")
-    from services.engine_runtime import python_module_command
-    music_command = python_module_command(
-        "yt_dlp",
-        "--no-playlist", "--no-warnings",
-        "-x", "--audio-format", "m4a",
-        "-o", music_template, url,
-    )
-    try:
-        result = subprocess.run(
-            music_command,
+
+    def download(*, use_browser_cookies: bool = False):
+        return subprocess.run(
+            music_download_command(
+                music_template,
+                url,
+                use_browser_cookies=use_browser_cookies,
+            ),
             cwd=str(PROJECT_ROOT),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -388,6 +432,14 @@ def resolve_music_url_track(job_dir: Path, music_url: str, is_valid_file) -> Pat
             timeout=600,
             check=False,
         )
+
+    try:
+        result = download()
+        # YouTube can reject anonymous extractor traffic even for public
+        # videos. The first attempt stays cookie-free; if it fails, retry with
+        # the same browser profile the normal video downloader already uses.
+        if result.returncode != 0 and is_youtube_music_url(url):
+            result = download(use_browser_cookies=True)
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("Tải nhạc quá 10 phút. Hãy thử link khác hoặc tải tệp nhạc từ máy.") from error
     except OSError as error:
@@ -2421,7 +2473,7 @@ def render_voiceover(
 
     music_path=None,
 
-    music_volume=0.12,
+    music_volume=0.25,
     auto_brand_blur=False,
     
     
@@ -2565,7 +2617,7 @@ def render_subtitle_only(
 
     music_path=None,
 
-    music_volume=0.12,
+    music_volume=0.25,
     auto_brand_blur=False,
 
     force=False,
@@ -2719,7 +2771,7 @@ def rerender_existing_output(
         "logo_path": config.get("logo_path"),
         "blur_intervals": intervals,
         "music_path": config.get("music_path"),
-        "music_volume": float(config.get("music_volume", 0.12)),
+        "music_volume": float(config.get("music_volume", 0.25)),
         "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
         "force": True,
     }
@@ -2977,9 +3029,9 @@ def pipeline(
         except (OSError, ValueError):
             pass
     try:
-        music_volume = max(0.0, min(1.0, float(config.get("music_volume", 0.12))))
+        music_volume = max(0.0, min(1.0, float(config.get("music_volume", 0.25))))
     except (TypeError, ValueError):
-        music_volume = 0.12
+        music_volume = 0.25
     config = {
         **config,
         "music_path": str(music_path) if music_path and valid_music_file(music_path) else None,
@@ -3826,7 +3878,7 @@ def pipeline(
 
                 music_path=config.get("music_path"),
 
-                music_volume=float(config.get("music_volume", 0.12)),
+                music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
 
 
@@ -3893,7 +3945,7 @@ def pipeline(
 
                 music_path=config.get("music_path"),
 
-                music_volume=float(config.get("music_volume", 0.12)),
+                music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
 
 

@@ -488,7 +488,7 @@ class ProcessRequest(BaseModel):
     music_url: Optional[str] = None
     music_data: Optional[str] = None
     music_filename: Optional[str] = None
-    music_volume: float = 0.12
+    music_volume: float = 0.25
     logo_path: Optional[str] = None
     aspect_ratio: Optional[str] = None
     logo_size: Optional[float] = None

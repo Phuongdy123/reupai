@@ -2274,8 +2274,8 @@ function ensureProcessConfigDialog() {
                         <input id="processMusicFile" type="file" accept="audio/*,video/*">
                     </label>
                     <label>Âm lượng nhạc
-                        <input id="processMusicVolume" type="range" min="0" max="1" step="0.05" value="0.12">
-                        <output data-for="processMusicVolume">12%</output>
+                        <input id="processMusicVolume" type="range" min="0" max="1" step="0.05" value="0.25">
+                        <output data-for="processMusicVolume">25%</output>
                     </label>
                 </div>
                 <small id="processMusicHint">Không chọn nhạc: video giữ nguyên âm thanh hiện có.</small>
@@ -2427,7 +2427,7 @@ async function openProcessConfig(video, card, mode) {
     set('processVoice', defaults.voice || 'Trúc Ly');
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
-    set('processMusicVolume', defaults.music_volume ?? 0.12);
+    set('processMusicVolume', defaults.music_volume ?? 0.25);
     const musicFileInput = dialog.querySelector('#processMusicFile');
     const musicUrlInput = dialog.querySelector('#processMusicUrl');
     const musicHint = dialog.querySelector('#processMusicHint');
@@ -2686,7 +2686,7 @@ async function openProcessConfig(video, card, mode) {
         set('processVoice', 'Trúc Ly');
         set('processAspectRatio', '');
         set('processMusicUrl', '');
-        set('processMusicVolume', 0.12);
+        set('processMusicVolume', 0.25);
         dialog.querySelector('#processMusicFile').value = '';
         dialog.querySelector('#processAutoBrandBlur').checked = false;
         set('processBlurPreset', '');
@@ -2941,7 +2941,7 @@ async function openProcessConfig(video, card, mode) {
             music_url: musicUrl || null,
             music_data: musicData,
             music_filename: musicFile?.name || null,
-            music_volume: Number(value('processMusicVolume') || 0.12),
+            music_volume: Number(value('processMusicVolume') || 0.25),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
             aspect_ratio: value('processAspectRatio') || null,
             blur_preset: value('processBlurPreset') || null,

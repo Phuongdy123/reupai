@@ -298,7 +298,7 @@ LOGO_TEXT = None
 LOGO_PATH_OVERRIDE = None
 BLUR_INTERVALS = []
 MUSIC_PATH = None
-MUSIC_VOLUME = 0.12
+MUSIC_VOLUME = 0.25
 
 
 
@@ -7664,9 +7664,9 @@ def render_final(region):
         music_index = 2 if use_voice else 1
         music_filter = (
             f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-            "[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0[aout]"
+            "[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
             if use_music
-            else "[original][voice]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+            else "[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
         )
         filter_complex = (
 
@@ -7765,7 +7765,7 @@ def render_final(region):
             video_filter
             + ";[1:a]volume="
             + str(float(MUSIC_VOLUME))
-            + "[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+            + "[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
         )
         use_voice = True
 
