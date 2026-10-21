@@ -1,5 +1,5 @@
 #define MyAppName "ReupAI Local Engine"
-#define MyAppVersion "0.2.8"
+#define MyAppVersion "0.2.9"
 #define MyAppPublisher "ReupAI"
 #define MyAppURL "https://www.reupai.cloud"
 #define MyAppExeName "ReupAI.exe"
@@ -39,3 +39,4 @@ Name: "{userstartup}\ReupAI Local Engine"; Filename: "{app}\{#MyAppExeName}"; Pa
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Khởi động ReupAI Local Engine"; Flags: nowait postinstall skipifsilent
+
