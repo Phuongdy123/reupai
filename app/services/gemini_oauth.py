@@ -43,6 +43,7 @@ _state: dict[str, object] = {
     # current id, so a stale browser callback can never sign the user back in.
     "attempt": 0,
     "started_at": 0.0,
+    "api_setup": None,
 }
 
 
@@ -56,6 +57,7 @@ def _status_from_state(
         running = _state["status"] == "connecting"
         error = str(_state["error"] or "")
         started_at = float(_state["started_at"] or 0.0)
+        api_setup = _state["api_setup"]
     return {
         "configured": _client_config() is not None,
         "connected": credentials is not None,
@@ -63,6 +65,7 @@ def _status_from_state(
         "connecting": running,
         "error": error if error else None,
         "started_at": int(started_at) if running and started_at else None,
+        "api_setup": api_setup,
         "storage": "windows_dpapi" if os.name == "nt" else "local_user_file",
     }
 
@@ -218,7 +221,7 @@ def start_authorization() -> dict[str, object]:
         if _state["status"] == "connecting":
             return _status_from_state(credentials=get_credentials())
         attempt = int(_state["attempt"]) + 1
-        _state.update(status="connecting", error="", attempt=attempt, started_at=time.time())
+        _state.update(status="connecting", error="", attempt=attempt, started_at=time.time(), api_setup=None)
 
     def run() -> None:
         try:
@@ -228,9 +231,12 @@ def start_authorization() -> dict[str, object]:
                 if int(_state["attempt"]) != attempt:
                     return
             _save_credentials(credentials)
+            # Consent succeeded: enable the Gemini API immediately. The setup
+            # stays local and runs without a second UI action.
+            api_setup = enable_gemini_api()
             with _lock:
                 if int(_state["attempt"]) == attempt:
-                    _state.update(status="connected", error="", started_at=0.0)
+                    _state.update(status="connected", error="", started_at=0.0, api_setup=api_setup)
         except Exception as error:
             with _lock:
                 if int(_state["attempt"]) == attempt:
@@ -401,4 +407,5 @@ def disconnect() -> None:
                 error="",
                 attempt=int(_state["attempt"]) + 1,
                 started_at=0.0,
+                api_setup=None,
             )

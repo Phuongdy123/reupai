@@ -32,9 +32,9 @@ export function SettingsPage() {
   const [oauthStarting, setOauthStarting] = useState(false);
   const [oauthDisconnecting, setOauthDisconnecting] = useState(false);
   const [geminiAccess, setGeminiAccess] = useState(null);
-  const [geminiEnabling, setGeminiEnabling] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
+  const geminiAutoEnableAttempted = useRef(false);
   const connected = status === "connected";
   const busyConnection = status === "checking" || status === "authorizing";
   const mediaReady = Boolean(diagnostics?.readiness?.media);
@@ -71,7 +71,7 @@ export function SettingsPage() {
     else {
       requestSequence.current += 1;
       setEngineInfo(null); setDiagnostics(null); setLoaded(false); setLoading(false); setSaved(false);
-      setGeminiAccess(null); setGeminiEnabling(false);
+      setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
     }
     return () => { requestSequence.current += 1; };
   }, [connected, load]);
@@ -89,6 +89,12 @@ export function SettingsPage() {
     }
     try {
       const result = await client.json("/api/gemini/oauth/verify", { cache: "no-store" });
+      if (result.state === "disabled" && !geminiAutoEnableAttempted.current) {
+        geminiAutoEnableAttempted.current = true;
+        const setup = await client.json("/api/gemini/oauth/enable", { method: "POST" });
+        setGeminiAccess(setup);
+        return;
+      }
       setGeminiAccess(result);
     } catch (requestError) {
       setGeminiAccess({ state: "temporary_error", ready: false, message: requestError.message || "Chưa thể kiểm tra Gemini." });
@@ -104,7 +110,7 @@ export function SettingsPage() {
 
   const connectGoogle = async () => {
     if (!connected || oauthStarting) return;
-    setOauthStarting(true); setError("");
+    setOauthStarting(true); setError(""); geminiAutoEnableAttempted.current = false;
     try {
       await client.json("/api/gemini/oauth/start", { method: "POST" });
       await load();
@@ -118,22 +124,11 @@ export function SettingsPage() {
     setOauthDisconnecting(true); setError("");
     try {
       await client.json("/api/gemini/oauth", { method: "DELETE" });
+      geminiAutoEnableAttempted.current = false;
       await load();
     } catch (requestError) {
       setError(requestError.message || "Không thể đăng xuất Google trên máy này.");
     } finally { setOauthDisconnecting(false); }
-  };
-
-  const enableGemini = async () => {
-    if (!connected || geminiEnabling) return;
-    setGeminiEnabling(true); setError("");
-    try {
-      const result = await client.json("/api/gemini/oauth/enable", { method: "POST" });
-      setGeminiAccess(result);
-      if (result.state === "ready") await load();
-    } catch (requestError) {
-      setError(requestError.message || "Không thể bật Gemini API.");
-    } finally { setGeminiEnabling(false); }
   };
 
   const save = async (event) => {
@@ -198,10 +193,9 @@ export function SettingsPage() {
         <div className="setting-row"><span>Trình duyệt nguồn</span><strong>{diagnostics ? (diagnostics.dependencies?.playwright ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Nhận diện phụ đề</span><strong>{diagnostics ? (diagnostics.components?.ocr ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
-        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : geminiReady ? "Sẵn sàng" : googleOAuth?.connecting ? "Đang chờ Google xác nhận" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleOAuth?.connected ? (geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Cần bật Gemini API") : "Chưa kết nối") : "—"}</strong></div>
+        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : geminiReady ? "Sẵn sàng" : googleOAuth?.connecting ? "Đang chờ Google xác nhận" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleOAuth?.connected ? (geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "Chưa kết nối") : "—"}</strong></div>
         {!apiKeyConfigured && diagnostics && <div className="settings-actions">
           {(!googleOAuth?.connected || googleNeedsReconnect) && <button className="btn primary" onClick={connectGoogle} disabled={!connected || oauthStarting || googleOAuth?.connecting}>{oauthStarting || googleOAuth?.connecting ? "Đang chờ Google…" : googleNeedsReconnect ? "Kết nối lại Google" : "Kết nối Google"}</button>}
-          {googleOAuth?.connected && !googleNeedsReconnect && !geminiReady && <button className="btn primary" onClick={enableGemini} disabled={!connected || geminiEnabling || geminiAccess?.state === "enabling"}>{geminiEnabling || geminiAccess?.state === "enabling" ? "Đang bật Gemini…" : "Bật Gemini API"}</button>}
           {googleOAuth?.connecting && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang dừng…" : "Dừng chờ"}</button>}
           {googleOAuth?.connected && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang đăng xuất…" : "Đăng xuất Google"}</button>}
           {!googleOAuth?.connected && !googleNeedsReconnect && <p className="muted">Google sẽ mở trong trình duyệt để cấp quyền cho Gemini. ReupAI chỉ lưu token đã mã hóa trên máy này.</p>}
