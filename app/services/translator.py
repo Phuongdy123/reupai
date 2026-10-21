@@ -79,6 +79,73 @@ if not API_KEY and not OAUTH_CREDENTIALS:
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 
+class GeminiSetupError(RuntimeError):
+    """A permanent customer setup issue that should never trigger fallbacks."""
+
+
+def _gemini_enable_url(project_id: str | None) -> str:
+    if project_id:
+        return (
+            "https://console.cloud.google.com/apis/library/"
+            f"generativelanguage.googleapis.com?project={project_id}"
+        )
+    return "https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com"
+
+
+def _gemini_api_disabled_message(project_id: str | None) -> str:
+    return (
+        "Gemini API chưa được bật cho Google Cloud project "
+        f"{project_id or 'này'}. Mở {_gemini_enable_url(project_id)}, "
+        "chọn Enable, chờ 2-5 phút rồi chạy lại. Không cần Gemini API key."
+    )
+
+
+def _is_gemini_api_disabled(error: Exception) -> bool:
+    value = _error_text(error).lower()
+    return any(
+        phrase in value
+        for phrase in (
+            "has not been used in project",
+            "generativelanguage.googleapis.com",
+            "gemini api is disabled",
+            "gemini api has not been used",
+        )
+    )
+
+
+def ensure_translation_ready() -> None:
+    """Fail before download/transcription when Google API access is unavailable."""
+    if not OAUTH_CREDENTIALS:
+        return
+    credentials = get_credentials()
+    if not credentials or not credentials.token:
+        raise GeminiSetupError(
+            "Phiên đăng nhập Google đã hết hạn. Mở Cài đặt Local Engine và kết nối Google lại."
+        )
+    project_id = OAUTH_PROJECT_ID or get_project_id()
+    response = requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers={
+            "Authorization": f"Bearer {credentials.token}",
+            "x-goog-user-project": project_id or "",
+        },
+        timeout=15,
+    )
+    if response.ok:
+        return
+    try:
+        details = response.json().get("error", {}).get("message", "")
+    except ValueError:
+        details = ""
+    error = RuntimeError(f"Gemini OAuth trả lỗi HTTP {response.status_code}: {details}")
+    if _is_gemini_api_disabled(error):
+        raise GeminiSetupError(_gemini_api_disabled_message(project_id)) from error
+    raise GeminiSetupError(
+        "Không thể xác nhận quyền dùng Gemini với Google. "
+        "Mở Cài đặt Local Engine, đăng xuất rồi kết nối Google lại."
+    ) from error
+
+
 def _oauth_generate_content(model_name: str, prompt: str) -> str:
     """Generate content through Gemini Developer API with local OAuth token."""
     credentials = get_credentials()
@@ -1003,6 +1070,16 @@ def translate_batch(
                         error
                     )
                 )
+
+                # Enabling the API is a project-level prerequisite. Trying
+                # every model and then a missing local fallback only makes the
+                # customer wait and hides the action they need to take.
+                if _is_gemini_api_disabled(error):
+                    raise GeminiSetupError(
+                        _gemini_api_disabled_message(
+                            OAUTH_PROJECT_ID or get_project_id()
+                        )
+                    ) from error
 
                 # Model khong ton tai / project khong duoc dung model.
                 # Khong retry cung model, chuyen model tiep theo.

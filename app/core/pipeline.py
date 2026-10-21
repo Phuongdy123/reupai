@@ -3316,6 +3316,21 @@ def pipeline(
 
 
 
+        # Validate Gemini before downloading or transcribing. A completed
+        # Google OAuth login does not imply that the Gemini API is enabled for
+        # its Cloud project.
+        write_progress(
+            job_dir,
+            stage="prepare",
+            percent=2,
+            status="running",
+            message="Dang kiem tra quyen Gemini.",
+            mode=mode,
+        )
+        from services.translator import ensure_translation_ready
+
+        ensure_translation_ready()
+
         # 1. SOURCE
 
 

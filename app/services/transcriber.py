@@ -1,16 +1,73 @@
-from faster_whisper import WhisperModel
 import os
+from functools import lru_cache
+
+from faster_whisper import WhisperModel
 
 
 # =========================
 # LOAD WHISPER MODEL
 # =========================
 
-model = WhisperModel(
-    "small",
-    device="cpu",
-    compute_type="int8"
-)
+WHISPER_MODEL = os.getenv("REUP_WHISPER_MODEL", "small").strip() or "small"
+WHISPER_DEVICE = os.getenv("REUP_WHISPER_DEVICE", "auto").strip().lower() or "auto"
+
+
+def _positive_int(name: str, default: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+        return value if value > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 3)
+
+
+def _cpu_threads() -> int:
+    """Leave capacity for the Local Engine and browser while transcribing."""
+    configured = _positive_int("REUP_WHISPER_CPU_THREADS", 0)
+    if configured:
+        return configured
+    return min(8, max(4, (os.cpu_count() or 4) - 2))
+
+
+def _create_model() -> WhisperModel:
+    """Prefer CUDA when its libraries are usable, then safely fall back to CPU."""
+    cpu_options = {
+        "device": "cpu",
+        "compute_type": "int8",
+        "cpu_threads": _cpu_threads(),
+        "num_workers": 1,
+    }
+    if WHISPER_DEVICE in {"cpu", "none"}:
+        print(f"Whisper: {WHISPER_MODEL} / CPU / {_cpu_threads()} threads")
+        return WhisperModel(WHISPER_MODEL, **cpu_options)
+
+    if WHISPER_DEVICE in {"auto", "cuda", "gpu"}:
+        try:
+            model = WhisperModel(
+                WHISPER_MODEL,
+                device="cuda",
+                compute_type="float16",
+                num_workers=1,
+            )
+            print(f"Whisper: {WHISPER_MODEL} / NVIDIA CUDA / float16")
+            return model
+        except Exception as error:
+            if WHISPER_DEVICE in {"cuda", "gpu"}:
+                print(f"Whisper CUDA khong kha dung, chuyen sang CPU: {error}")
+            else:
+                print("Whisper CUDA khong kha dung, dung CPU toi uu.")
+
+    print(f"Whisper: {WHISPER_MODEL} / CPU / {_cpu_threads()} threads")
+    return WhisperModel(WHISPER_MODEL, **cpu_options)
+
+
+@lru_cache(maxsize=1)
+def _model() -> WhisperModel:
+    # Delay the model load until a transcription job actually needs it. This
+    # keeps the local engine responsive and lets Gemini preflight fail fast.
+    return _create_model()
 
 
 # =========================
@@ -20,9 +77,9 @@ model = WhisperModel(
 def transcribe(audio_path: str):
     print("Dang nhan dien audio...")
 
-    segments, info = model.transcribe(
+    segments, info = _model().transcribe(
         audio_path,
-        beam_size=5
+        beam_size=WHISPER_BEAM_SIZE,
     )
 
     print(f"Language detected: {info.language}")

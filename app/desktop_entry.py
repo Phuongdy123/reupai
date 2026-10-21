@@ -27,7 +27,14 @@ CHILD_MODES = {"--pipeline", "--python-module", "--check-config", "--check-voice
 
 
 def _is_child_mode() -> bool:
-    return len(sys.argv) > 1 and sys.argv[1] in CHILD_MODES
+    # ``--pipeline`` replaces ``sys.argv`` with the pipeline arguments before
+    # it runs.  Keep this marker so a child failure remains a job error in the
+    # web UI instead of being shown as a misleading "Engine cannot start"
+    # Windows dialog.
+    return (
+        os.getenv("REUP_CHILD_MODE") == "1"
+        or (len(sys.argv) > 1 and sys.argv[1] in CHILD_MODES)
+    )
 
 
 def _failure_log_path() -> Path:
@@ -175,6 +182,7 @@ def _dispatch_child_mode() -> bool:
     if len(sys.argv) < 2:
         return False
     mode = sys.argv[1]
+    os.environ["REUP_CHILD_MODE"] = "1"
     if mode == "--check-config":
         from dotenv import dotenv_values
         from runtime_paths import get_config_dir, get_logs_dir
