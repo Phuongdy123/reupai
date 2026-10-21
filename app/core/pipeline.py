@@ -351,6 +351,29 @@ def normalize_music_url(value) -> str:
     return url
 
 
+def normalize_video_url(value) -> str:
+    """Accept a plain video URL or the Markdown link format copied from chat.
+
+    Browser chat clients frequently copy a URL as ``[label](url)``.  yt-dlp
+    receives command arguments verbatim, so passing that wrapper makes an
+    otherwise valid Bilibili or Douyin URL fail before it can read cookies.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("Chưa có link video.")
+    if len(raw) > 4096:
+        raise ValueError("Link video quá dài.")
+
+    markdown = re.fullmatch(r"\[([^\]]*)\]\((https?://[^\s)]+)\)", raw)
+    if markdown:
+        raw = markdown.group(2)
+
+    parsed = urlparse(raw)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Link video phải bắt đầu bằng http:// hoặc https://.")
+    return raw
+
+
 def normalize_music_volume(value, default: float = 0.25) -> float:
     """Keep user-selected music gain inside the supported 0–200% range."""
     try:
@@ -2869,6 +2892,8 @@ def pipeline(
 ):
 
 
+
+    url = normalize_video_url(url)
 
     require_command("ffmpeg")
 
