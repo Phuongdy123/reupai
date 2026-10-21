@@ -8,6 +8,9 @@ let loadingPage = false;
 const PAGE_SIZE = 10;
 const pageCache = {};
 let sourceSyncPromise = null;
+let sourceRateLimitUntil = 0;
+let sourceRateLimitTimer = null;
+let sourceRateLimitSourceUrl = '';
 let lastLoadedSourceUrl = '';
 let lastLoadedInputMode = 'channel';
 
@@ -37,6 +40,73 @@ let serverStateTimer = null;
 
 const selectedVideoIds = new Set();
 let batchRunning = false;
+
+
+function sourceCooldownLabel(seconds) {
+    const remaining = Math.max(0, Math.ceil(Number(seconds) || 0));
+    const minutes = Math.floor(remaining / 60);
+    const secondsPart = String(remaining % 60).padStart(2, '0');
+    return minutes > 0 ? `${minutes}:${secondsPart}` : `${remaining}s`;
+}
+
+
+function clearSourceRateLimitCooldown() {
+    sourceRateLimitUntil = 0;
+    sourceRateLimitSourceUrl = '';
+    if (sourceRateLimitTimer) {
+        window.clearInterval(sourceRateLimitTimer);
+        sourceRateLimitTimer = null;
+    }
+}
+
+
+function renderSourceRateLimitCooldown() {
+    const button = document.getElementById('syncSourceBtn');
+    const remainingMs = sourceRateLimitUntil - Date.now();
+
+    if (remainingMs <= 0) {
+        const sourceUrl = sourceRateLimitSourceUrl;
+        clearSourceRateLimitCooldown();
+        if (button) {
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+            button.innerHTML = `${uiIcon('refresh', 15)} Đồng bộ nguồn`;
+        }
+        const currentUrl = document.getElementById('sourceUrl')?.value.trim() || '';
+        if (sourceUrl && currentUrl === sourceUrl) {
+            window.setTimeout(() => loadVideos(true), 250);
+        }
+        return;
+    }
+
+    if (!button) {
+        return;
+    }
+
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML = `${uiIcon('clock', 15)} Tự thử lại sau ${sourceCooldownLabel(remainingMs / 1000)}`;
+}
+
+
+function setSourceRateLimitCooldown(seconds, sourceUrl) {
+    const safeSeconds = Math.max(0, Math.ceil(Number(seconds) || 0));
+    if (!safeSeconds) {
+        clearSourceRateLimitCooldown();
+        return;
+    }
+
+    sourceRateLimitUntil = Date.now() + (safeSeconds * 1000);
+    sourceRateLimitSourceUrl = sourceUrl || '';
+    if (sourceRateLimitTimer) {
+        window.clearInterval(sourceRateLimitTimer);
+    }
+    renderSourceRateLimitCooldown();
+    sourceRateLimitTimer = window.setInterval(
+        renderSourceRateLimitCooldown,
+        1000
+    );
+}
 
 
 function escapeHtml(
@@ -1201,6 +1271,13 @@ async function loadVideos(refresh = false) {
                 data.detail
                 || 'Không lấy được video.'
             );
+        }
+
+        const retryAfterSeconds = Number(data.retry_after_seconds || 0);
+        if (data.rate_limited && retryAfterSeconds > 0) {
+            setSourceRateLimitCooldown(retryAfterSeconds, sourceUrl);
+        } else {
+            clearSourceRateLimitCooldown();
         }
 
         const videos = data.videos || [];
@@ -12256,9 +12333,13 @@ loadVideos = async function(...args) {
         return await sourceSyncPromise;
     } finally {
         if (button) {
-            button.disabled = false;
-            button.removeAttribute('aria-busy');
-            button.innerHTML = originalHtml;
+            if (sourceRateLimitUntil > Date.now()) {
+                renderSourceRateLimitCooldown();
+            } else {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                button.innerHTML = originalHtml;
+            }
         }
         sourceSyncPromise = null;
     }

@@ -1,5 +1,6 @@
 import html
 import json
+import math
 import os
 import re
 import secrets
@@ -411,6 +412,8 @@ LIBRARY_SCAN_CACHE = {}
 LIBRARY_SCAN_CACHE_LOCK = threading.Lock()
 LIBRARY_SCAN_CACHE_TTL_SECONDS = 3
 SOURCE_SYNC_CACHE_TTL_SECONDS = 60
+SOURCE_SYNC_RATE_LIMIT_BASE_SECONDS = 120
+SOURCE_SYNC_RATE_LIMIT_MAX_SECONDS = 900
 DOWNLOAD_SLOTS = threading.BoundedSemaphore(
     max_parallel_downloads()
 )
@@ -3986,7 +3989,8 @@ def load_source_sync_cache(profile_url: str):
     try:
         row = conn.execute(
             """
-            SELECT platform, profile_url, videos_json, total, has_more, checked_at
+            SELECT platform, profile_url, videos_json, total, has_more, checked_at,
+                   rate_limited_until, rate_limit_failures
             FROM source_sync_cache
             WHERE profile_key = ?
             LIMIT 1
@@ -4011,6 +4015,8 @@ def load_source_sync_cache(profile_url: str):
         "total": row["total"],
         "has_more": bool(row["has_more"]),
         "checked_at": float(row["checked_at"] or 0),
+        "rate_limited_until": float(row["rate_limited_until"] or 0),
+        "rate_limit_failures": int(row["rate_limit_failures"] or 0),
     }
 
 
@@ -4022,6 +4028,8 @@ def save_source_sync_cache(
     total=None,
     has_more=True,
     checked_at=None,
+    rate_limited_until=0,
+    rate_limit_failures=0,
 ):
 
     profile_key = normalize_profile_url(profile_url)
@@ -4036,15 +4044,18 @@ def save_source_sync_cache(
             """
             INSERT INTO source_sync_cache (
                 profile_key, platform, profile_url, videos_json,
-                total, has_more, checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                total, has_more, checked_at, rate_limited_until,
+                rate_limit_failures
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_key) DO UPDATE SET
                 platform = excluded.platform,
                 profile_url = excluded.profile_url,
                 videos_json = excluded.videos_json,
                 total = excluded.total,
                 has_more = excluded.has_more,
-                checked_at = excluded.checked_at
+                checked_at = excluded.checked_at,
+                rate_limited_until = excluded.rate_limited_until,
+                rate_limit_failures = excluded.rate_limit_failures
             """,
             (
                 profile_key,
@@ -4054,6 +4065,8 @@ def save_source_sync_cache(
                 total,
                 int(bool(has_more)),
                 float(checked_at if checked_at is not None else time.time()),
+                float(rate_limited_until or 0),
+                max(0, int(rate_limit_failures or 0)),
             ),
         )
         conn.commit()
@@ -4137,6 +4150,13 @@ def api_videos(
             enrich_video(video, default_channel=default_channel)
             for video in page_videos
         ]
+        rate_limited_until = float(
+            (sync_cache or {}).get("rate_limited_until") or 0
+        )
+        retry_after_seconds = max(
+            0,
+            int(math.ceil(rate_limited_until - time.time())),
+        )
         return {
             "platform": platform,
             "videos": enriched,
@@ -4149,6 +4169,8 @@ def api_videos(
             "has_more": has_more,
             "checked_remote": False,
             "new_count": 0,
+            "rate_limited": retry_after_seconds > 0,
+            "retry_after_seconds": retry_after_seconds,
         }
 
     def persist_cache_if_needed(sync_cache, cached_videos, total, has_more):
@@ -4160,6 +4182,12 @@ def api_videos(
                 total=total,
                 has_more=has_more,
                 checked_at=(sync_cache or {}).get("checked_at") or time.time(),
+                rate_limited_until=(sync_cache or {}).get(
+                    "rate_limited_until", 0
+                ),
+                rate_limit_failures=(sync_cache or {}).get(
+                    "rate_limit_failures", 0
+                ),
             )
 
     # Serialize syncs so simultaneous clicks share the result of one network fetch.
@@ -4180,6 +4208,34 @@ def api_videos(
                 cached_total,
                 cached_has_more,
                 "Đang hiển thị dữ liệu đã lưu. Bấm Đồng bộ để kiểm tra video mới.",
+            )
+
+        rate_limited_until = float(
+            (sync_cache or {}).get("rate_limited_until") or 0
+        )
+        if rate_limited_until > now:
+            persist_cache_if_needed(
+                sync_cache,
+                cached,
+                cached_total,
+                cached_has_more,
+            )
+            retry_after_seconds = max(
+                1,
+                int(math.ceil(rate_limited_until - now)),
+            )
+            return cache_response(
+                sync_cache,
+                cached,
+                cached_total,
+                cached_has_more,
+                (
+                    "Bilibili đang tạm giới hạn yêu cầu. "
+                    f"ReupAI sẽ thử lại sau khoảng {retry_after_seconds} giây."
+                    if not cached
+                    else "Bilibili đang tạm giới hạn yêu cầu; đang hiển thị dữ liệu đã lưu. "
+                    f"ReupAI sẽ thử lại sau khoảng {retry_after_seconds} giây."
+                ),
             )
 
         if (
@@ -4211,33 +4267,40 @@ def api_videos(
                 limit=limit,
             )
         except BilibiliRateLimited:
-            if not cached:
-                save_source_sync_cache(
-                    url,
-                    platform,
-                    [],
-                    total=None,
-                    has_more=True,
-                    checked_at=time.time(),
-                )
-                raise HTTPException(
-                    status_code=429,
-                    detail="Bilibili đang giới hạn yêu cầu; chưa có dữ liệu cache để hiển thị.",
-                )
+            previous_failures = int(
+                (sync_cache or {}).get("rate_limit_failures") or 0
+            )
+            failures = min(previous_failures + 1, 4)
+            cooldown_seconds = min(
+                SOURCE_SYNC_RATE_LIMIT_BASE_SECONDS * (2 ** (failures - 1)),
+                SOURCE_SYNC_RATE_LIMIT_MAX_SECONDS,
+            )
+            rate_limited_until = time.time() + cooldown_seconds
             save_source_sync_cache(
                 url,
                 platform,
                 cached,
                 total=cached_total,
-                has_more=cached_has_more,
+                has_more=cached_has_more if cached else True,
                 checked_at=time.time(),
+                rate_limited_until=rate_limited_until,
+                rate_limit_failures=failures,
             )
             return cache_response(
-                None,
+                {
+                    "rate_limited_until": rate_limited_until,
+                    "rate_limit_failures": failures,
+                },
                 cached,
                 cached_total,
                 cached_has_more,
-                "Bilibili đang giới hạn yêu cầu; đang hiển thị dữ liệu đã lưu. Thử đồng bộ lại sau khoảng một phút.",
+                (
+                    "Bilibili đang tạm giới hạn yêu cầu. "
+                    f"ReupAI sẽ tự thử lại sau khoảng {cooldown_seconds} giây."
+                    if not cached
+                    else "Bilibili đang tạm giới hạn yêu cầu; đang hiển thị dữ liệu đã lưu. "
+                    f"ReupAI sẽ tự thử lại sau khoảng {cooldown_seconds} giây."
+                ),
             )
         except DouyinUnavailable as error:
             if not cached:

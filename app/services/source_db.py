@@ -256,9 +256,26 @@ def init_db():
             videos_json TEXT NOT NULL DEFAULT '[]',
             total INTEGER,
             has_more INTEGER NOT NULL DEFAULT 1,
-            checked_at REAL NOT NULL
+            checked_at REAL NOT NULL,
+            rate_limited_until REAL NOT NULL DEFAULT 0,
+            rate_limit_failures INTEGER NOT NULL DEFAULT 0
         )
     """)
+
+    cache_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(source_sync_cache)"
+        ).fetchall()
+    }
+    for column, definition in (
+        ("rate_limited_until", "REAL NOT NULL DEFAULT 0"),
+        ("rate_limit_failures", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if column not in cache_columns:
+            cursor.execute(
+                f"ALTER TABLE source_sync_cache ADD COLUMN {column} {definition}"
+            )
 
     conn.commit()
 

@@ -100,7 +100,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.4"
+ENGINE_VERSION = "0.2.5"
 ENGINE_CAPABILITIES = {
     "direct_authorization": True,
     "media_tickets": True,
