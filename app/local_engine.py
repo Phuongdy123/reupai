@@ -100,7 +100,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.9"
+ENGINE_VERSION = "0.2.10"
 ENGINE_CAPABILITIES = {
     "direct_authorization": True,
     "media_tickets": True,
@@ -823,4 +823,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
