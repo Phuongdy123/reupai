@@ -100,12 +100,13 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.5"
+ENGINE_VERSION = "0.2.6"
 ENGINE_CAPABILITIES = {
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
     "gemini_google_oauth": True,
+    "gemini_api_enablement": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
 ensure_runtime_dirs()
@@ -482,6 +483,18 @@ def gemini_oauth_start(_: bool = Depends(require_token)):
         return start_authorization()
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/api/gemini/oauth/verify")
+def gemini_oauth_verify(_: bool = Depends(require_token)):
+    from services.gemini_oauth import verify_gemini_access
+    return verify_gemini_access()
+
+
+@app.post("/api/gemini/oauth/enable")
+def gemini_oauth_enable(_: bool = Depends(require_token)):
+    from services.gemini_oauth import enable_gemini_api
+    return enable_gemini_api()
 
 
 @app.delete("/api/gemini/oauth")

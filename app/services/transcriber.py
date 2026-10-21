@@ -21,6 +21,7 @@ def _positive_int(name: str, default: int) -> int:
 
 
 WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 3)
+_CUDA_DISABLED_FOR_SESSION = False
 
 
 def _cpu_threads() -> int:
@@ -33,6 +34,8 @@ def _cpu_threads() -> int:
 
 def _create_model() -> WhisperModel:
     """Prefer CUDA when its libraries are usable, then safely fall back to CPU."""
+    if _CUDA_DISABLED_FOR_SESSION:
+        return _cpu_model()
     cpu_options = {
         "device": "cpu",
         "compute_type": "int8",
@@ -70,17 +73,54 @@ def _model() -> WhisperModel:
     return _create_model()
 
 
+@lru_cache(maxsize=1)
+def _cpu_model() -> WhisperModel:
+    return WhisperModel(
+        WHISPER_MODEL,
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=_cpu_threads(),
+        num_workers=1,
+    )
+
+
+def _is_cuda_runtime_error(error: Exception) -> bool:
+    value = str(error).lower()
+    return any(token in value for token in (
+        "cublas", "cudnn", "cudart", "cuda driver", "cuda error",
+        "cannot be loaded", "not found",
+    ))
+
+
+def _run_transcription(model: WhisperModel, audio_path: str):
+    """Materialize segments while the CUDA fallback guard is still active."""
+    segments, info = model.transcribe(
+        audio_path,
+        beam_size=WHISPER_BEAM_SIZE,
+    )
+    return list(segments), info
+
+
 # =========================
 # TRANSCRIBE AUDIO
 # =========================
 
 def transcribe(audio_path: str):
+    global _CUDA_DISABLED_FOR_SESSION
     print("Dang nhan dien audio...")
 
-    segments, info = _model().transcribe(
-        audio_path,
-        beam_size=WHISPER_BEAM_SIZE,
-    )
+    try:
+        segments, info = _run_transcription(_model(), audio_path)
+    except Exception as error:
+        # On some PCs CTranslate2 creates a CUDA model successfully and only
+        # discovers a missing cublas DLL during the first transcription.
+        # Automatically retry once on CPU so the video job can continue.
+        if WHISPER_DEVICE not in {"auto", "cuda", "gpu"} or not _is_cuda_runtime_error(error):
+            raise
+        print(f"Whisper CUDA loi ({error}); chuyen sang CPU toi uu.")
+        _CUDA_DISABLED_FOR_SESSION = True
+        _model.cache_clear()
+        segments, info = _run_transcription(_cpu_model(), audio_path)
 
     print(f"Language detected: {info.language}")
     print(

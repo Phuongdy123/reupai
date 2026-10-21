@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import requests
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -24,7 +25,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from runtime_paths import get_config_dir
 
 
-SCOPES = ["https://www.googleapis.com/auth/generative-language.retriever"]
+# ``cloud-platform`` is required only for the one-click "Bật Gemini API"
+# action. The Gemini scope continues to authorize calls to the Developer API.
+# Keep both scopes in the consent request so a newly installed Engine has a
+# complete setup flow and never asks a customer to paste an API key.
+SCOPES = [
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/generative-language.retriever",
+]
+OAUTH_SCOPE_VERSION = 2
 TOKEN_PATH = get_config_dir() / "gemini-oauth.dat"
 _lock = threading.RLock()
 _state: dict[str, object] = {
@@ -37,7 +46,11 @@ _state: dict[str, object] = {
 }
 
 
-def _status_from_state(*, credentials: Credentials | None = None) -> dict[str, object]:
+def _status_from_state(
+    *,
+    credentials: Credentials | None = None,
+    needs_reauthorization: bool = False,
+) -> dict[str, object]:
     """Build a status response without re-entering the state lock."""
     with _lock:
         running = _state["status"] == "connecting"
@@ -46,6 +59,7 @@ def _status_from_state(*, credentials: Credentials | None = None) -> dict[str, o
     return {
         "configured": _client_config() is not None,
         "connected": credentials is not None,
+        "needs_reauthorization": needs_reauthorization,
         "connecting": running,
         "error": error if error else None,
         "started_at": int(started_at) if running and started_at else None,
@@ -136,29 +150,46 @@ def _dpapi_decrypt(value: bytes) -> bytes:
         ctypes.windll.kernel32.LocalFree(target_blob.pbData)
 
 
-def _load_credentials() -> Credentials | None:
+def _load_token_data() -> dict[str, Any] | None:
     try:
         payload = TOKEN_PATH.read_bytes()
         if payload.startswith(b"DPAPI:"):
             payload = _dpapi_decrypt(base64.b64decode(payload[6:]))
         data = json.loads(payload.decode("utf-8"))
-        return Credentials.from_authorized_user_info(data, SCOPES)
+        return data if isinstance(data, dict) else None
     except (OSError, ValueError, TypeError, UnicodeError):
         return None
 
 
+def _credentials_from_data(data: dict[str, Any]) -> Credentials | None:
+    try:
+        return Credentials.from_authorized_user_info(data, SCOPES)
+    except (ValueError, TypeError):
+        return None
+
+
+def _requires_scope_upgrade(data: dict[str, Any] | None) -> bool:
+    """Old tokens cannot enable the API and must receive the new consent."""
+    return bool(data) and data.get("_reupai_scope_version") != OAUTH_SCOPE_VERSION
+
+
 def _save_credentials(credentials: Credentials) -> None:
-    data = credentials.to_json().encode("utf-8")
+    data = json.loads(credentials.to_json())
+    data["_reupai_scope_version"] = OAUTH_SCOPE_VERSION
+    payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
     TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
     if os.name == "nt":
-        data = b"DPAPI:" + base64.b64encode(_dpapi_encrypt(data))
+        payload = b"DPAPI:" + base64.b64encode(_dpapi_encrypt(payload))
     temporary = TOKEN_PATH.with_suffix(".tmp")
-    temporary.write_bytes(data)
+    temporary.write_bytes(payload)
     temporary.replace(TOKEN_PATH)
 
 
 def get_credentials() -> Credentials | None:
-    credentials = _load_credentials()
+    data = _load_token_data()
+    if _requires_scope_upgrade(data):
+        return None
+    credentials = _credentials_from_data(data) if data else None
     if not credentials:
         return None
     try:
@@ -171,8 +202,13 @@ def get_credentials() -> Credentials | None:
 
 
 def status() -> dict[str, object]:
-    credentials = get_credentials()
-    return _status_from_state(credentials=credentials)
+    data = _load_token_data()
+    needs_reauthorization = _requires_scope_upgrade(data)
+    credentials = None if needs_reauthorization else get_credentials()
+    return _status_from_state(
+        credentials=credentials,
+        needs_reauthorization=needs_reauthorization,
+    )
 
 
 def start_authorization() -> dict[str, object]:
@@ -202,6 +238,157 @@ def start_authorization() -> dict[str, object]:
 
     threading.Thread(target=run, name="reupai-gemini-oauth", daemon=True).start()
     return status()
+
+
+def _oauth_headers(credentials: Credentials, project_id: str | None) -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {credentials.token}"}
+    if project_id:
+        headers["x-goog-user-project"] = project_id
+    return headers
+
+
+def _response_message(response: requests.Response) -> str:
+    """Return a compact, safe message for the local setup screen."""
+    try:
+        data = response.json()
+        value = data.get("error", {}).get("message", "") if isinstance(data, dict) else ""
+    except ValueError:
+        value = ""
+    return str(value or "").replace("\n", " ")[:240]
+
+
+def _gemini_check(credentials: Credentials, project_id: str | None) -> requests.Response:
+    return requests.get(
+        "https://generativelanguage.googleapis.com/v1beta/models",
+        headers=_oauth_headers(credentials, project_id),
+        timeout=15,
+    )
+
+
+def _is_api_disabled(response: requests.Response) -> bool:
+    message = _response_message(response).lower()
+    return response.status_code in {403, 404} and any(
+        phrase in message
+        for phrase in (
+            "has not been used in project",
+            "generativelanguage.googleapis.com",
+            "gemini api is disabled",
+            "gemini api has not been used",
+        )
+    )
+
+
+def verify_gemini_access() -> dict[str, object]:
+    """Check the actual Gemini endpoint without exposing a credential.
+
+    We intentionally verify Gemini first. A customer can use an API already
+    enabled by the ReupAI administrator without having IAM rights to inspect
+    Google Cloud Service Usage themselves.
+    """
+    current = status()
+    if current["needs_reauthorization"]:
+        return {
+            "state": "reauthorization_required",
+            "ready": False,
+            "message": "Cần kết nối lại Google để cấp quyền Gemini mới.",
+            "project_id": get_project_id(),
+        }
+    credentials = get_credentials()
+    project_id = get_project_id()
+    if not credentials or not credentials.token:
+        return {
+            "state": "not_connected",
+            "ready": False,
+            "message": "Chưa kết nối Google cho Gemini.",
+            "project_id": project_id,
+        }
+    try:
+        response = _gemini_check(credentials, project_id)
+    except requests.RequestException:
+        return {
+            "state": "temporary_error",
+            "ready": False,
+            "message": "Chưa thể kiểm tra Gemini. Hãy kiểm tra Internet rồi thử lại.",
+            "project_id": project_id,
+        }
+    if response.ok:
+        return {
+            "state": "ready",
+            "ready": True,
+            "message": "Gemini đã sẵn sàng.",
+            "project_id": project_id,
+        }
+    if _is_api_disabled(response):
+        return {
+            "state": "disabled",
+            "ready": False,
+            "message": "Gemini API chưa được bật cho dự án ReupAI.",
+            "project_id": project_id,
+        }
+    if response.status_code in {401, 403}:
+        return {
+            "state": "reauthorization_required",
+            "ready": False,
+            "message": "Quyền Google đã hết hạn. Hãy kết nối lại Google.",
+            "project_id": project_id,
+        }
+    return {
+        "state": "error",
+        "ready": False,
+        "message": "Không thể xác nhận quyền Gemini lúc này. Hãy thử lại.",
+        "project_id": project_id,
+    }
+
+
+def enable_gemini_api() -> dict[str, object]:
+    """Request Google Cloud to enable Gemini API for the OAuth client project."""
+    current = verify_gemini_access()
+    if current["ready"] or current["state"] != "disabled":
+        return current
+
+    credentials = get_credentials()
+    project_id = get_project_id()
+    if not credentials or not credentials.token or not project_id:
+        return {
+            "state": "reauthorization_required",
+            "ready": False,
+            "message": "Hãy kết nối lại Google để bật Gemini API.",
+            "project_id": project_id,
+        }
+    service = f"projects/{project_id}/services/generativelanguage.googleapis.com"
+    try:
+        response = requests.post(
+            f"https://serviceusage.googleapis.com/v1/{service}:enable",
+            headers=_oauth_headers(credentials, project_id),
+            timeout=20,
+        )
+    except requests.RequestException:
+        return {
+            "state": "temporary_error",
+            "ready": False,
+            "message": "Chưa gửi được yêu cầu bật Gemini API. Hãy thử lại.",
+            "project_id": project_id,
+        }
+    if response.ok or response.status_code == 409:
+        return {
+            "state": "enabling",
+            "ready": False,
+            "message": "Đang bật Gemini API. Google có thể cần vài phút để hoàn tất.",
+            "project_id": project_id,
+        }
+    if response.status_code in {401, 403}:
+        return {
+            "state": "administrator_required",
+            "ready": False,
+            "message": "Tài khoản Google này chưa có quyền bật Gemini API cho dự án ReupAI.",
+            "project_id": project_id,
+        }
+    return {
+        "state": "error",
+        "ready": False,
+        "message": "Không thể bật Gemini API lúc này. Hãy thử lại.",
+        "project_id": project_id,
+    }
 
 
 def disconnect() -> None:

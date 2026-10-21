@@ -178,7 +178,9 @@ def runtime_diagnostics() -> dict[str, Any]:
         oauth = gemini_oauth_status()
     except Exception:
         oauth = {"configured": False, "connected": False, "connecting": False, "error": None}
-    gemini_configured = api_key_configured or bool(oauth.get("connected"))
+    gemini_configured = api_key_configured or (
+        bool(oauth.get("connected")) and not bool(oauth.get("needs_reauthorization"))
+    )
     return {
         "platform": platform.system(),
         "platform_release": platform.release(),
