@@ -3923,8 +3923,24 @@ def run_platform_download(
 
         return
 
-    # Bilibili: tiep tuc dung yt-dlp.
-    # Bilibili: khong cookie truoc, neu loi moi retry cookie.
+    browser_error = None
+    if platform == "bilibili":
+        # Source downloads use a separate route from pipeline rendering.
+        # Use the same browser fallback here before yt-dlp, whose Bilibili
+        # extractor currently fails even for publicly playable videos.
+        from services.bilibili_browser import download_video as bilibili_browser_download
+
+        output_path = Path(output_template.replace("%(ext)s", "mp4"))
+        try:
+            bilibili_browser_download(url, output_path)
+            print("[DOWNLOAD] Bilibili browser stream ready:", output_path, flush=True)
+            return
+        except Exception as error:
+            browser_error = error
+            output_path.unlink(missing_ok=True)
+            print("[DOWNLOAD] Bilibili browser failed:", error, flush=True)
+
+    # Try yt-dlp if the browser could not produce a stream.
     attempts = (
         [True, False]
         if platform == "douyin"
@@ -3970,11 +3986,10 @@ def run_platform_download(
             last_code,
         )
 
-    raise RuntimeError(
-        f"yt-dlp download that bai "
-        f"({platform}), exit code "
-        f"{last_code}."
-    )
+    detail = f"yt-dlp thất bại ({platform}), exit code {last_code}."
+    if browser_error is not None:
+        detail = f"Không tải được Bilibili qua trình duyệt: {browser_error}; {detail}"
+    raise RuntimeError(detail)
 
 
 # =========================================================
