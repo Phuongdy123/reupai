@@ -1287,6 +1287,10 @@ def download_video(
                 return output_path
             except Exception as browser_error:
                 print("[bilibili] Chrome/Edge fallback loi:", browser_error)
+                raise RuntimeError(
+                    "Không thể tải video Bilibili bằng trình duyệt: "
+                    f"{browser_error}"
+                ) from browser_error
         raise last_error
 
     source = (

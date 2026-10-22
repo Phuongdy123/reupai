@@ -74,7 +74,8 @@ def download_video(url: str, output_path: Path) -> Path:
         finally:
             browser.close()
 
-    dash = (playinfo.get("data") or {}).get("dash") or {}
+    data = playinfo.get("data") or {}
+    dash = data.get("dash") or {}
     videos = dash.get("video") or []
     audios = dash.get("audio") or []
     accessible = [stream for stream in videos if int(stream.get("height") or 0) <= 720]
@@ -82,12 +83,46 @@ def download_video(url: str, output_path: Path) -> Path:
     audio = max(audios, key=lambda stream: int(stream.get("bandwidth") or 0), default=None)
     video_url = _value(video or {}, "baseUrl", "base_url")
     audio_url = _value(audio or {}, "baseUrl", "base_url")
-    if not video_url or not audio_url:
-        raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
-
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="reupai-bilibili-") as folder:
         folder_path = Path(folder)
+
+        # Bilibili returns a classic progressive MP4 (``durl``) for some
+        # videos, usually when an anonymous session only receives 480p.
+        # Those responses intentionally have no DASH video/audio lists.
+        durls = data.get("durl") or []
+        if durls:
+            parts: list[Path] = []
+            for index, item in enumerate(durls):
+                stream_url = _value(item, "url", "baseUrl", "base_url")
+                if not stream_url:
+                    raise RuntimeError("Bilibili trả về một đoạn MP4 không có URL tải.")
+                part = folder_path / f"part-{index:03d}.mp4"
+                _download(stream_url, part, url)
+                parts.append(part)
+
+            if len(parts) == 1:
+                shutil.copyfile(parts[0], output_path)
+            else:
+                manifest = folder_path / "concat.txt"
+                manifest.write_text(
+                    "".join(f"file '{part.as_posix()}'\n" for part in parts),
+                    encoding="utf-8",
+                )
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(output_path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError("Bilibili browser fallback không ghép được các đoạn MP4: " + result.stderr[-500:])
+            return output_path
+
+        if not video_url or not audio_url:
+            raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
+
         video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
         _download(video_url, video_file, url)
         _download(audio_url, audio_file, url)
