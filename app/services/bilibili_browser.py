@@ -69,7 +69,21 @@ def download_video(url: str, output_path: Path) -> Path:
         try:
             page = browser.new_page(viewport={"width": 1365, "height": 900}, user_agent=USER_AGENT)
             page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-            page.wait_for_function("() => Boolean(window.__playinfo__)", timeout=15_000)
+            # __playinfo__ is created before the asynchronous play URL request
+            # finishes.  Waiting only for the object races that request and
+            # yields an empty ``data`` object for some Bilibili videos.
+            page.wait_for_function(
+                """() => {
+                    const data = window.__playinfo__?.data || {};
+                    const progressive = Array.isArray(data.durl)
+                        && data.durl.some(item => item && (item.url || item.baseUrl || item.base_url));
+                    const dash = data.dash || {};
+                    const separate = Array.isArray(dash.video) && dash.video.length > 0
+                        && Array.isArray(dash.audio) && dash.audio.length > 0;
+                    return progressive || separate;
+                }""",
+                timeout=30_000,
+            )
             playinfo = page.evaluate("() => window.__playinfo__") or {}
         finally:
             browser.close()
