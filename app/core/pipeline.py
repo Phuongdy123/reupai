@@ -1276,6 +1276,17 @@ def download_video(
             )
 
     if last_error is not None:
+        if platform == "bilibili":
+            print("[bilibili] yt-dlp bi chan, thu Chrome/Edge fallback...")
+            try:
+                from services.bilibili_browser import download_video as browser_download_video
+
+                output_path = job_dir / "source.mp4"
+                browser_download_video(url, output_path)
+                print("[bilibili] Chrome/Edge fallback thanh cong.")
+                return output_path
+            except Exception as browser_error:
+                print("[bilibili] Chrome/Edge fallback loi:", browser_error)
         raise last_error
 
     source = (
