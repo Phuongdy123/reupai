@@ -1,5 +1,7 @@
 # Reup AI
 
+Rủi ro khi phát hành Local Engine cho máy khách và cách xử lý được ghi trong [release-risks.md](docs/release-risks.md).
+
 Ứng dụng Python để theo dõi nguồn video Bilibili/Douyin, tải video, nhận dạng và dịch phụ đề, tạo giọng đọc tiếng Việt, rồi kết xuất video đầu ra.
 
 ## Chạy ứng dụng
@@ -71,7 +73,7 @@ khi chạy production). Browser chỉ giữ credential grant dạng opaque để
 browser session mới sau khi Engine restart; grant bị xóa hoàn toàn khi bấm
 **Thu hồi**.
 
-Cần cấu hình `GEMINI_API_KEY` trong `.env` ở thư mục gốc để dùng dịch vụ dịch Gemini. Pipeline cũng cần các chương trình hệ thống mà nó gọi, gồm FFmpeg; hãy bảo đảm chúng có thể được tìm thấy qua `PATH`.
+Để dùng Gemini trên bản cài Windows, khách kết nối Google trong Cài đặt Local Engine và bật Gemini API cho Google Cloud project đã chọn. Có thể dùng `GEMINI_API_KEY` trong `%LOCALAPPDATA%\ReupAI\config\engine.env` như phương án thay thế. Bộ cài Windows đã kèm FFmpeg và FFprobe; môi trường phát triển cần có chúng trong `PATH`.
 
 ## Điều chỉnh tốc độ tải và RAM
 

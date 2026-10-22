@@ -70,6 +70,7 @@ from web.server import (
     api_stream,
     preview_source_video,
     library_source,
+    active_download_count,
 )
 from services.library_api import (
     CollectionCreateBody,
@@ -100,7 +101,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.15"
+ENGINE_VERSION = "0.2.16"
 ENGINE_CAPABILITIES = {
     "direct_authorization": True,
     "media_tickets": True,
@@ -449,6 +450,7 @@ def status(_: bool = Depends(require_token)):
         "version": ENGINE_VERSION,
         "capabilities": ENGINE_CAPABILITIES,
         "active_jobs": len(list_active_jobs(limit=20)),
+        "active_downloads": active_download_count(),
         "storage": {
             "root": str(get_runtime_root()),
             "downloads": str(get_downloads_dir()),
@@ -465,6 +467,7 @@ def diagnostics(_: bool = Depends(require_token)):
         "engine": "ReupAI",
         "version": ENGINE_VERSION,
         "active_jobs": list_active_jobs(limit=50),
+        "active_downloads": active_download_count(),
         "allowed_origins": ALLOWED_ORIGINS,
     })
     return details

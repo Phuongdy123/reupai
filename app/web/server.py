@@ -408,6 +408,8 @@ PROCESS_LOCK = threading.Lock()
 SOURCE_SYNC_LOCK = threading.Lock()
 DOWNLOAD_VIDEO_LOCKS = {}
 DOWNLOAD_VIDEO_LOCKS_LOCK = threading.Lock()
+ACTIVE_DOWNLOADS = 0
+ACTIVE_DOWNLOADS_LOCK = threading.Lock()
 LIBRARY_SCAN_CACHE = {}
 LIBRARY_SCAN_CACHE_LOCK = threading.Lock()
 LIBRARY_SCAN_CACHE_TTL_SECONDS = 3
@@ -420,6 +422,23 @@ DOWNLOAD_SLOTS = threading.BoundedSemaphore(
 PIPELINE_SLOTS = threading.BoundedSemaphore(
     max_parallel_pipelines()
 )
+
+
+def active_download_count() -> int:
+    with ACTIVE_DOWNLOADS_LOCK:
+        return ACTIVE_DOWNLOADS
+
+
+@contextmanager
+def tracked_download():
+    global ACTIVE_DOWNLOADS
+    with ACTIVE_DOWNLOADS_LOCK:
+        ACTIVE_DOWNLOADS += 1
+    try:
+        yield
+    finally:
+        with ACTIVE_DOWNLOADS_LOCK:
+            ACTIVE_DOWNLOADS -= 1
 
 
 @contextmanager
@@ -4749,7 +4768,7 @@ def api_download(
     downloaded_now = False
 
     try:
-        with download_video_lock(video_id):
+        with tracked_download(), download_video_lock(video_id):
             # A per-video lock covers the check and the staging file. Other
             # videos still use the configured DOWNLOAD_SLOTS concurrency.
             existing = find_valid_downloaded_video(folder)
