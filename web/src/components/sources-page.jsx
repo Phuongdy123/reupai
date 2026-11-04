@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useEngine } from "./engine-provider";
 import { mountProductRuntime } from "../lib/product-runtime";
-import { sourcesMarkup } from "../legacy/sources-markup";
-import { startSourcesRuntime } from "../legacy/sources-runtime";
 import { sendFeedback } from "./feedback-provider";
 import { useFeedback } from "./feedback-provider";
 import { PENDING_SOURCE_KEY } from "./workspace-assistant";
@@ -27,12 +25,19 @@ export function SourcesPage() {
     const finishWaiting = () => endWaiting(waitId);
     setReady(false);
     setError(null);
-    element.innerHTML = sourcesMarkup;
     const onError = (event) => { const message = event.detail?.message || "Không thể hoàn tất thao tác trên Local Engine."; if (active) setError(message); sendFeedback("error", message); };
     const onReady = () => { if (active) { finishWaiting(); setReady(true); } };
     element.addEventListener("product-runtime:error", onError);
     element.addEventListener("product-runtime:ready", onReady);
-    mountProductRuntime(element, client, startSourcesRuntime).then((cleanup) => {
+    Promise.all([
+      import("../legacy/sources-markup"),
+      import("../legacy/sources-runtime"),
+    ]).then(([markupModule, runtimeModule]) => {
+      if (!active) return;
+      element.innerHTML = markupModule.sourcesMarkup;
+      return mountProductRuntime(element, client, runtimeModule.startSourcesRuntime);
+    }).then((cleanup) => {
+      if (!cleanup) return;
       if (!active) cleanup();
       else { dispose = cleanup; }
     }).catch((requestError) => { const message = requestError.message || "Không đọc được dữ liệu local."; finishWaiting(); if (active) setError(message); sendFeedback("error", message); });
