@@ -52,16 +52,6 @@ export function Dashboard() {
     fetch("/api/billing/me", { cache: "no-store" }).then((response) => response.json()).then((value) => { if (active) setBilling(value); }).catch(() => {});
     return () => { active = false; };
   }, []);
-  useEffect(() => {
-    if (status !== "connected") return undefined;
-    const pollJobs = () => { if (document.visibilityState === "visible") loadJobs(); };
-    const pollDashboard = () => { if (document.visibilityState === "visible") load(); };
-    const onVisible = () => { if (document.visibilityState === "visible") { load(); loadJobs(); } };
-    const jobTimer = window.setInterval(pollJobs, 2000);
-    const dataTimer = window.setInterval(pollDashboard, 10000);
-    document.addEventListener("visibilitychange", onVisible);
-    return () => { window.clearInterval(jobTimer); window.clearInterval(dataTimer); document.removeEventListener("visibilitychange", onVisible); };
-  }, [load, loadJobs, status]);
   const recentIds = recentCards(data?.recent_jobs || []).map(jobVideoId).join(",");
   useEffect(() => {
     if (status !== "connected" || !recentIds) return undefined;
@@ -97,6 +87,17 @@ export function Dashboard() {
     finally { setStopping(null); }
   };
   const stats = status === "connected" ? data?.stats || {} : {};
+  const hasActiveJobs = jobs.some((job) => ACTIVE_JOBS.has(job.status));
+  useEffect(() => {
+    if (status !== "connected") return undefined;
+    const pollJobs = () => { if (document.visibilityState === "visible") loadJobs(); };
+    const pollDashboard = () => { if (document.visibilityState === "visible") load(); };
+    const onVisible = () => { if (document.visibilityState === "visible") { load(); loadJobs(); } };
+    const jobTimer = window.setInterval(pollJobs, hasActiveJobs ? 2000 : 15000);
+    const dataTimer = window.setInterval(pollDashboard, hasActiveJobs ? 10000 : 30000);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(jobTimer); window.clearInterval(dataTimer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [hasActiveJobs, load, loadJobs, status]);
   return <div className="dashboard-workspace">
     <section className="dashboard-welcome">
       <div><span className="workspace-eyebrow">KHÔNG GIAN SÁNG TẠO</span><h2>Từ ý tưởng đến <span>video của bạn.</span></h2><p>Tạo phụ đề, thêm giọng đọc và hoàn thiện câu chuyện tiếp theo.</p></div>
