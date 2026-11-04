@@ -12,7 +12,12 @@ export function PlansPage() {
   const [account, setAccount] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [pollTimedOut, setPollTimedOut] = useState(false);
+  const [pollRetry, setPollRetry] = useState(0);
   const orderCode = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("order");
+  const orderResult = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("result");
+  const currentOrder = orderCode ? account?.orders?.find((order) => String(order.order_code) === orderCode) : null;
+  const terminalOrderStatus = ["paid", "cancelled", "failed"].includes(currentOrder?.status) ? currentOrder.status : null;
 
   useEffect(() => {
     let active = true;
@@ -25,9 +30,23 @@ export function PlansPage() {
       } catch (caught) { if (active) setError(caught.message); }
     };
     load();
-    const timer = orderCode ? window.setInterval(load, 4000) : null;
+    setPollTimedOut(false);
+    const cancelledAtPayOS = orderResult === "cancel";
+    const alreadyFinal = Boolean(terminalOrderStatus);
+    let attempts = 0;
+    const timer = orderCode && !cancelledAtPayOS && !alreadyFinal
+      ? window.setInterval(() => {
+        attempts += 1;
+        if (attempts >= 60) {
+          window.clearInterval(timer);
+          if (active) setPollTimedOut(true);
+          return;
+        }
+        load();
+      }, 4000)
+      : null;
     return () => { active = false; if (timer) window.clearInterval(timer); };
-  }, [orderCode]);
+  }, [orderCode, orderResult, terminalOrderStatus, pollRetry]);
 
   async function checkout() {
     setBusy(true); setError("");
@@ -41,7 +60,10 @@ export function PlansPage() {
     } catch (caught) { setError(caught.message); setBusy(false); }
   }
 
-  const paidOrder = orderCode && account?.orders?.find((order) => String(order.order_code) === orderCode && order.status === "paid");
+  const paidOrder = currentOrder?.status === "paid";
+  const cancelledOrder = orderResult === "cancel" || currentOrder?.status === "cancelled";
+  const failedOrder = currentOrder?.status === "failed";
+  const waitingForOrder = Boolean(orderCode && !paidOrder && !cancelledOrder && !failedOrder);
   return <main className="plans-page">
     <header className="plans-nav"><Link href="/" className="plans-brand">Reup<span>AI</span></Link><Link href="/app">Vào workspace →</Link></header>
     <div className="plans-content">
@@ -51,7 +73,10 @@ export function PlansPage() {
       {account?.configured === false && <div className="plans-banner" role="status">Hệ thống lượt xử lý đang được thiết lập.</div>}
       {account?.configured && !account?.paymentsEnabled && <div className="plans-banner" role="status">Gói Free đã hoạt động. Thanh toán Pro đang được cấu hình; bạn có thể liên hệ quản trị viên để được hỗ trợ lượt.</div>}
       {paidOrder && <div className="plans-banner success" role="status">Thanh toán đã được xác nhận. Gói Pro của bạn đã được kích hoạt.</div>}
-      {orderCode && !paidOrder && <div className="plans-banner" role="status">Đang kiểm tra đơn {orderCode}. Gói Pro chỉ được kích hoạt sau khi payOS xác nhận giao dịch. Nếu đã chuyển tiền mà trạng thái chưa đổi, chờ một chút rồi tải lại trang hoặc liên hệ hỗ trợ kèm mã đơn này.</div>}
+      {cancelledOrder && <div className="plans-banner" role="status">Đơn {orderCode} đã được hủy. Gói Pro chưa được kích hoạt; bạn có thể tạo thanh toán mới bất cứ lúc nào.</div>}
+      {failedOrder && <div className="plans-banner error" role="alert">Đơn {orderCode} không hoàn tất. Gói Pro chưa được kích hoạt; hãy thử thanh toán lại hoặc liên hệ hỗ trợ kèm mã đơn.</div>}
+      {waitingForOrder && !pollTimedOut && <div className="plans-banner" role="status">Đang chờ payOS xác nhận đơn {orderCode}. Gói Pro chỉ được kích hoạt sau khi giao dịch được xác nhận.</div>}
+      {waitingForOrder && pollTimedOut && <div className="plans-banner" role="status"><span>Chưa nhận được xác nhận cho đơn {orderCode}. Nếu bạn đã thanh toán, kiểm tra lại trạng thái hoặc liên hệ hỗ trợ kèm mã đơn.</span><button className="plans-check-order" type="button" onClick={() => setPollRetry((value) => value + 1)}>Kiểm tra lại</button></div>}
       {error && <div className="plans-banner error" role="alert">{error}</div>}
       <div className="plans-grid">
         <article className="plans-card"><div className="plans-card-top"><span className="plans-mark">01 / KHỞI ĐẦU</span><h2>Free</h2><p>Thử toàn bộ quy trình với video của bạn.</p></div><div className="plans-price"><strong>0đ</strong><span>3 video hoàn tất</span></div><ul><li>Vietsub và lồng tiếng AI</li><li>Tùy chỉnh, xem và tải thành phẩm</li><li>Lỗi hoặc hủy job không trừ lượt</li><li>File video lưu trên máy của bạn</li></ul><Link className="plans-button secondary" href="/sign-up">Bắt đầu miễn phí →</Link></article>

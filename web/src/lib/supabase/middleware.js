@@ -8,10 +8,20 @@ function configured() {
 }
 
 export async function updateSession(request) {
-  if (request.nextUrl.pathname === "/terms" || request.nextUrl.pathname === "/privacy" || request.nextUrl.pathname.startsWith("/giai-phap")) {
+  const { pathname, search } = request.nextUrl;
+  if (pathname === "/terms" || pathname === "/privacy" || pathname.startsWith("/giai-phap")) {
     return NextResponse.next({ request });
   }
-  if (!configured()) return NextResponse.next({ request });
+  if (!configured()) {
+    if (publicRoutes.has(pathname) || pathname === "/pending" || pathname.startsWith("/auth/")) {
+      return NextResponse.next({ request });
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.search = "";
+    url.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(url);
+  }
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, {
@@ -25,7 +35,6 @@ export async function updateSession(request) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const { pathname, search } = request.nextUrl;
   const isPublic = publicRoutes.has(pathname) || pathname.startsWith("/auth/");
   if (!user) {
     if (isPublic || pathname === "/pending") return response;
