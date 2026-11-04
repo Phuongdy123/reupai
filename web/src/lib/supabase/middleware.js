@@ -1,13 +1,16 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 
-const publicRoutes = new Set(["/", "/sign-in", "/sign-up"]);
+const publicRoutes = new Set(["/", "/sign-in", "/sign-up", "/plans", "/terms", "/privacy"]);
 
 function configured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
 }
 
 export async function updateSession(request) {
+  if (request.nextUrl.pathname === "/terms" || request.nextUrl.pathname === "/privacy" || request.nextUrl.pathname.startsWith("/giai-phap")) {
+    return NextResponse.next({ request });
+  }
   if (!configured()) return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
@@ -34,7 +37,7 @@ export async function updateSession(request) {
   const { data: profile } = await supabase.from("profiles").select("status, role").eq("id", user.id).maybeSingle();
   const status = profile?.status || "pending";
   if (status !== "approved") {
-    if (pathname === "/pending" || pathname.startsWith("/auth/")) return response;
+    if (pathname === "/pending" || pathname === "/plans" || pathname.startsWith("/auth/")) return response;
     const url = request.nextUrl.clone(); url.pathname = "/pending"; url.search = "";
     return NextResponse.redirect(url);
   }

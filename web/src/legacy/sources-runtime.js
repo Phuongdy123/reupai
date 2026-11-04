@@ -9,6 +9,7 @@ let sourceTotal = null;
 let totalPages = null;
 let remoteHasMore = true;
 let loadingPage = false;
+let pendingPage = null;
 const PAGE_SIZE = 10;
 const pageCache = {};
 let sourceSyncPromise = null;
@@ -689,7 +690,18 @@ function renderPagination() {
                     ? ' active'
                     : ''
                 )
+                + (
+                    Number(item) === pendingPage
+                    ? ' is-pending'
+                    : ''
+                )
             );
+
+        button.type = 'button';
+        button.setAttribute('aria-label', `Trang ${item}`);
+        if (Number(item) === Number(currentPage)) {
+            button.setAttribute('aria-current', 'page');
+        }
 
         button.dataset.page =
             String(
@@ -817,6 +829,18 @@ function renderVideoLoadingState() {
 }
 
 
+function scrollToVideoList() {
+    const target = document.getElementById('videos');
+    if (!target) return;
+    target.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'auto'
+            : 'smooth',
+        block: 'start'
+    });
+}
+
+
 async function loadPage(
     page,
     force = false
@@ -835,6 +859,10 @@ async function loadPage(
         && page > totalPages
     ) {
         page = totalPages;
+    }
+
+    if (loadingPage || (!force && page === currentPage)) {
+        return;
     }
 
     if (
@@ -859,17 +887,8 @@ async function loadPage(
             'đọc từ cache'
         );
 
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
+        scrollToVideoList();
 
-        return;
-    }
-
-    if (
-        loadingPage
-    ) {
         return;
     }
 
@@ -891,6 +910,12 @@ async function loadPage(
 
     loadingPage =
         true;
+
+    pendingPage = page;
+    const videoList = document.getElementById('videos');
+    const keepCurrentVideos = Boolean(videoList?.children.length && currentVideos.length);
+    videoList?.classList.toggle('is-page-loading', keepCurrentVideos);
+    videoList?.setAttribute('aria-busy', 'true');
 
     renderPagination();
 
@@ -914,7 +939,8 @@ async function loadPage(
             + ` · video ${startNumber}-${endNumber}...`
         );
 
-    renderVideoLoadingState();
+    if (!keepCurrentVideos) renderVideoLoadingState();
+    else scrollToVideoList();
 
     try {
 
@@ -1021,10 +1047,7 @@ async function loadPage(
             : 'Bilibili'
         );
 
-        window.scrollTo({
-            top: 0,
-            behavior: 'smooth'
-        });
+        if (!keepCurrentVideos) scrollToVideoList();
 
     } catch (
         error
@@ -1043,6 +1066,10 @@ async function loadPage(
 
         loadingPage =
             false;
+
+        pendingPage = null;
+        videoList?.classList.remove('is-page-loading');
+        videoList?.removeAttribute('aria-busy');
 
         renderPagination();
     }
@@ -2168,56 +2195,80 @@ function ensureProcessConfigDialog() {
 
     dialog = document.createElement('dialog');
     dialog.id = 'processConfigDialog';
+    dialog.setAttribute('aria-labelledby', 'processConfigTitle');
     dialog.innerHTML = `
         <form method="dialog" class="process-config-dialog">
             <div class="process-config-head">
-                <div>
-                    <span class="process-config-kicker">TÙY CHỈNH JOB</span>
-                    <h3 id="processConfigTitle">Thiết lập Vietsub</h3>
-                    <p id="processConfigVideoTitle"></p>
+                <button type="button" class="btn secondary process-config-back" id="closeProcessConfig">${uiIcon('undo', 16)} Quay lại</button>
+                <div class="process-config-heading">
+                    <h3 id="processConfigTitle">Thiết lập Video</h3>
+                    <p><span id="processConfigMode">Vietsub</span> · Tùy chỉnh thông số trước khi xử lý</p>
                 </div>
-                <button type="button" class="modern-icon-btn" id="closeProcessConfig" aria-label="Đóng"><svg class="ui-icon"><use href="#ui-close"></use></svg></button>
             </div>
 
+            <div class="process-config-showcase">
             <div class="process-config-preview" id="processConfigPreviewWrap">
                 <div class="process-preview-stage" id="processPreviewStage">
                     <video id="processConfigPreview" controls preload="metadata"></video>
                     <canvas id="processPreviewCanvas"></canvas>
+                    <div id="processBlurPreviewOverlay" class="process-blur-preview-overlay" hidden aria-hidden="true"></div>
                 </div>
                 <div id="processConfigPreviewEmpty">Video chưa tải về máy nên chưa có bản xem trước.</div>
                 <button type="button" class="btn secondary process-download-source" id="processDownloadSource">${uiIcon('download', 16)} Tải video để xem trước</button>
             </div>
+            <aside class="process-video-info" aria-label="Thông tin video">
+                <h4>${uiIcon('video', 18)} Thông tin video</h4>
+                <dl>
+                    <div><dt>Tên video</dt><dd id="processConfigVideoTitle"></dd></div>
+                    <div><dt>Thời lượng</dt><dd id="processConfigDuration">Chưa rõ</dd></div>
+                    <div><dt>Độ phân giải</dt><dd id="processConfigResolution">Chưa rõ</dd></div>
+                    <div><dt>Tỷ lệ khung hình</dt><dd id="processConfigRatio">Chưa rõ</dd></div>
+                    <div><dt>Trạng thái</dt><dd id="processConfigStatus">Đang kiểm tra</dd></div>
+                </dl>
+                <p>Xem trước trên máy trước khi xử lý để chọn vùng mờ và vị trí logo chính xác.</p>
+            </aside>
+            </div>
 
             <div class="process-preview-tools">
-                <span>Chọn trực tiếp trên video:</span>
+                <div class="process-section-heading"><strong>Công cụ nhanh</strong><small>Chọn trực tiếp trên video</small></div>
                 <button type="button" class="btn secondary process-pick-btn active" data-pick-mode="sub">${uiIcon('blur', 16)} Vùng mờ sub</button>
+                <button type="button" class="btn secondary" id="processAutoBlurPreview">${uiIcon('sparkles', 16)} AI dò vùng mờ · xem thử 8 giây</button>
                 <button type="button" class="btn secondary process-pick-btn" data-pick-mode="custom">${uiIcon('blur', 16)} Vùng mờ tùy chỉnh</button>
                 <button type="button" class="btn secondary process-pick-btn" data-pick-mode="logo">${uiIcon('sparkles', 16)} Vị trí logo</button>
                 <button type="button" class="btn secondary" id="toggleProcessPicker" aria-pressed="false">${uiIcon('pointer', 16)} Bật kéo vùng</button>
-                <button type="button" class="btn secondary" id="resetProcessConfig">${uiIcon('reset', 16)} Đặt lại lựa chọn</button>
                 <button type="button" class="btn secondary" id="undoProcessConfig">${uiIcon('undo', 16)} Hoàn tác</button>
                 <small id="processPickerHint">Chọn loại vùng trước, sau đó bấm “Bật kéo vùng” nếu muốn kéo trên video.</small>
+                <small id="processAutoBlurStatus" role="status"></small>
             </div>
 
-            <div class="process-preset-bar">
-                <label>Preset realtime
-                    <select id="processPresetSelect">
-                        <option value="">Không dùng preset</option>
-                    </select>
-                </label>
-                <input id="processPresetName" placeholder="Tên preset mới">
-                <button type="button" class="btn secondary" id="saveProcessPreset">Lưu và áp dụng</button>
-                <button type="button" class="btn secondary" id="deleteProcessPreset">Xóa</button>
-                <small id="processPresetStatus">Chọn preset sẽ cập nhật ngay cấu hình hiện tại.</small>
-            </div>
-
-            <div class="process-config-grid">
+            <div class="process-settings-layout">
+            <section class="process-settings-card">
+                <div class="process-section-heading"><strong>Phụ đề &amp; nhận diện</strong><small>Ngôn ngữ, kiểu chữ và khung hình</small></div>
+                <div class="process-config-grid">
                 <label>Thời lượng xem trước
                     <select id="processPreviewSeconds">
                         <option value="">Toàn bộ video</option>
                         <option value="10">10 giây đầu</option>
                         <option value="30">30 giây đầu</option>
                         <option value="60">60 giây đầu</option>
+                    </select>
+                </label>
+                <label>Tỷ lệ video đầu ra
+                    <select id="processAspectRatio">
+                        <option value="">Giữ nguyên mặc định</option>
+                        <option value="shorts">YouTube Shorts · 9:16</option>
+                        <option value="youtube">YouTube ngang · 16:9</option>
+                        <option value="facebook">Facebook · 4:5</option>
+                        <option value="tiktok">TikTok · 9:16</option>
+                    </select>
+                </label>
+                <label>Ngôn ngữ video nguồn
+                    <select id="processSourceLanguage">
+                        <option value="auto">Tự động nhận diện (khuyên dùng)</option>
+                        <option value="vi">Tiếng Việt</option>
+                        <option value="zh">Tiếng Trung</option>
+                        <option value="en">Tiếng Anh</option>
+                        <option value="ja">Tiếng Nhật</option>
                     </select>
                 </label>
                 <label>Cỡ chữ phụ đề
@@ -2229,6 +2280,25 @@ function ensureProcessConfigDialog() {
                         <option value="36">36 px</option>
                     </select>
                 </label>
+                <label class="process-subtitle-style-field">Phong cách phụ đề
+                    <select id="processSubtitleStyle">
+                        <option value="minimal">Minimal Clean</option>
+                        <option value="bold">Creator Bold</option>
+                        <option value="cinema">Cinema</option>
+                        <option value="neon">Neon Pop</option>
+                        <option value="box">Simple Box</option>
+                    </select>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAutoBrandBlur" type="checkbox">
+                    Tự động làm mờ ID/chữ watermark
+                    <small>Chỉ bật khi video có watermark ở góc trên.</small>
+                </label>
+                </div>
+            </section>
+            <section class="process-settings-card">
+                <div class="process-section-heading"><strong>Âm thanh &amp; giọng đọc</strong><small>Âm lượng, giọng đọc và tốc độ</small></div>
+                <div class="process-config-grid">
                 <label>Âm lượng audio gốc
                     <input id="processOriginalVolume" type="range" min="0" max="1" step="0.05" value="0.15">
                     <output data-for="processOriginalVolume">15%</output>
@@ -2247,24 +2317,48 @@ function ensureProcessConfigDialog() {
                         <option value="Hải Đăng">Hải Đăng</option>
                     </select>
                 </label>
-                <label>Tỷ lệ video đầu ra
-                    <select id="processAspectRatio">
-                        <option value="">Giữ nguyên mặc định</option>
-                        <option value="shorts">YouTube Shorts · 9:16</option>
-                        <option value="youtube">YouTube ngang · 16:9</option>
-                        <option value="facebook">Facebook · 4:5</option>
-                        <option value="tiktok">TikTok · 9:16</option>
-                    </select>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAutoBrandBlur" type="checkbox">
-                    Tự động làm mờ ID/chữ watermark
-                    <small>Chỉ bật khi video có watermark ở góc trên.</small>
-                </label>
+                </div>
+            </section>
             </div>
 
+<details class="process-disclosure process-preset-disclosure"><summary><strong>Cấu hình đã lưu</strong><span>Dùng lại thiết lập yêu thích</span></summary>
+            <div class="process-preset-bar">
+                <div class="process-section-heading"><strong>Preset</strong><small>Lưu và dùng lại thiết lập yêu thích</small></div>
+                <label>Chọn cấu hình
+                    <select id="processPresetSelect">
+                        <option value="">Không dùng preset</option>
+                    </select>
+                </label>
+                <input id="processPresetName" aria-label="Tên cấu hình mới" placeholder="Tên cấu hình mới">
+                <button type="button" class="btn secondary" id="saveProcessPreset">Lưu và áp dụng</button>
+                <button type="button" class="btn secondary" id="deleteProcessPreset">Xóa</button>
+                <small id="processPresetStatus">Chọn preset sẽ cập nhật ngay cấu hình hiện tại.</small>
+            </div>
+
+</details>
+<details class="process-disclosure process-ai-disclosure"><summary><strong>Nhờ AI gợi ý</strong><span>Mô tả ý tưởng để nhận cấu hình phù hợp</span></summary>
+            <section class="process-ai-suggest" aria-label="Trợ lý AI thiết lập video">
+                <div class="process-section-heading"><strong>Gợi ý bằng AI</strong><small>Mô tả mục tiêu, đính kèm ảnh hoặc chụp khung hình hiện tại</small></div>
+                <label for="processAiPrompt" class="process-ai-label">Bạn muốn video được xử lý thế nào?</label>
+                <textarea id="processAiPrompt" rows="2" maxlength="2000" placeholder="Ví dụ: Làm Vietsub cho video dọc, giữ tiếng gốc nhỏ và làm mờ phụ đề cũ ở dưới…"></textarea>
+                <div class="process-ai-tools">
+                    <label class="btn secondary process-ai-attach">Đính kèm ảnh<input id="processAiImage" type="file" accept="image/png,image/jpeg,image/webp"></label>
+                    <button type="button" class="btn secondary" id="processAiFrame">Chụp khung hình</button>
+                    <span id="processAiImageName"></span>
+                    <button type="button" class="btn primary" id="processAiGenerate">Gợi ý cấu hình</button>
+                </div>
+                <div class="process-ai-result" id="processAiResult" role="status" hidden>
+                    <p id="processAiAnswer"></p>
+                    <ul id="processAiSettings"></ul>
+                    <button type="button" class="btn secondary" id="processAiApply" hidden>Áp dụng gợi ý</button>
+                </div>
+                <small>Mô tả và ảnh được gửi đến Google Gemini bằng project của bạn. Gợi ý không tự chạy video; hãy kiểm tra thông số trước khi xử lý.</small>
+            </section>
+
+</details>
+            <div class="process-advanced-shell">
             <details class="process-config-advanced" id="processMusicSection">
-                <summary>Nhạc nền</summary>
+                <summary><strong>Nhạc nền</strong><small>Thêm nhạc và điều chỉnh âm lượng</small></summary>
                 <p>Dán link YouTube hoặc TikTok công khai, link audio/video khác, hoặc chọn một tệp trên máy. Nhạc sẽ lặp vừa đủ chiều dài video và được trộn cùng tiếng gốc hoặc Voice.</p>
                 <div class="process-config-grid">
                     <label>Link nhạc / video có nhạc
@@ -2287,8 +2381,13 @@ function ensureProcessConfigDialog() {
             </details>
 
             <details class="process-config-advanced">
-                <summary>Vùng mờ sub</summary>
+                <summary><strong>Vùng mờ sub</strong><small>Thiết lập vùng mờ cho phụ đề cũ</small></summary>
                 <p>Vùng này dùng để làm mờ phụ đề gốc. Tọa độ tính theo pixel của video.</p>
+                <label class="process-check-option">
+                    <input id="processSourceNoSub" type="checkbox">
+                    Video gốc không có chữ phụ đề
+                    <small>Bỏ qua quét chữ và vùng mờ tự động. Vẫn nhận diện lời thoại, dịch và tạo Voice/Vietsub.</small>
+                </label>
                 <div class="process-blur-grid">
                     <label>Vị trí gợi ý vùng mờ
                         <select id="processBlurPreset">
@@ -2307,7 +2406,7 @@ function ensureProcessConfigDialog() {
             </details>
 
             <details class="process-config-advanced">
-                <summary>Vùng mờ tùy chỉnh</summary>
+                <summary><strong>Vùng mờ tùy chỉnh</strong><small>Tạo vùng mờ bất kỳ trên video</small></summary>
                 <p>Vùng này chỉ làm mờ, không chèn phụ đề. Kéo chọn vùng rồi đặt khoảng thời gian.</p>
                 <div class="process-blur-grid">
                     <label>X <input id="processCustomBlurX" type="number" min="0" placeholder="Tự động"></label>
@@ -2325,7 +2424,7 @@ function ensureProcessConfigDialog() {
             </details>
 
             <details class="process-config-advanced">
-                <summary>Logo chèn lên video</summary>
+                <summary><strong>Logo, nhãn lên video</strong><small>Chèn logo hoặc tên kênh</small></summary>
                 <label>Kiểu logo
                     <select id="processLogoMode">
                         <option value="none">Không chèn logo</option>
@@ -2350,11 +2449,15 @@ function ensureProcessConfigDialog() {
                 </div>
                 <button type="button" class="btn secondary process-section-save" id="saveLogoSelection">${uiIcon('save', 16)} Lưu lựa chọn logo</button>
             </details>
+            </div>
 
             <div class="process-config-note">Mặc định chỉ làm mờ phụ đề. Chọn logo hoặc chữ ở trên khi bạn muốn chèn vào video.</div>
             <div class="process-config-actions">
+                <button type="button" class="btn secondary" id="resetProcessConfig">${uiIcon('reset', 16)} Đặt lại mặc định</button>
+                <div class="process-config-actions-main">
                 <button type="button" class="btn secondary" id="cancelProcessConfig">Hủy</button>
-                <button type="submit" class="btn primary" id="runProcessConfig">Bắt đầu xử lý</button>
+                <button type="submit" class="btn primary" id="runProcessConfig">${uiIcon('sparkles', 16)} Bắt đầu xử lý</button>
+                </div>
             </div>
         </form>
     `;
@@ -2405,7 +2508,7 @@ async function openProcessConfig(video, card, mode) {
     };
     const sectionForTarget = target => {
         const id = target?.id || '';
-        if (id.startsWith('processBlur') || id === 'processBlurPreset') return 'sub';
+        if (id.startsWith('processBlur') || id === 'processBlurPreset' || id === 'processSourceNoSub') return 'sub';
         if (id.startsWith('processCustomBlur') || target?.classList?.contains('blur-start') || target?.classList?.contains('blur-end')) return 'custom';
         if (id.startsWith('processLogo') || id === 'processLogoFile') return 'logo';
         return 'general';
@@ -2436,11 +2539,19 @@ async function openProcessConfig(video, card, mode) {
     dialog.dataset.videoId = video.video_id;
     dialog.dataset.cardId = card.dataset.videoId || '';
 
-    dialog.querySelector('#processConfigTitle').textContent = mode === 'subtitle' ? 'Thiết lập Vietsub' : 'Thiết lập Voice + Vietsub';
+    dialog.querySelector('#processConfigMode').textContent = mode === 'subtitle' ? 'Vietsub' : 'Voice + Vietsub';
     dialog.querySelector('#processConfigVideoTitle').textContent = video.title || video.video_id;
+    dialog.querySelector('#processConfigDuration').textContent = formatDuration(video.duration_seconds || video.duration) || 'Chưa rõ';
+    const sourceWidth = Number(video.video_width || video.width || 0);
+    const sourceHeight = Number(video.video_height || video.height || 0);
+    dialog.querySelector('#processConfigResolution').textContent = sourceWidth && sourceHeight ? `${sourceWidth} × ${sourceHeight}` : 'Chưa rõ';
+    dialog.querySelector('#processConfigRatio').textContent = formatVideoRatio(video) || 'Chưa rõ';
+    dialog.querySelector('#processConfigStatus').textContent = video.downloaded ? 'Đã tải về máy' : 'Chưa tải về máy';
     dialog.querySelector('#processVoiceField').style.display = mode === 'voiceover' ? '' : 'none';
     set('processPreviewSeconds', defaults.preview_seconds || '');
     set('processFontSize', defaults.subtitle_font_size || '');
+    set('processSourceLanguage', defaults.source_language || 'auto');
+    set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.10);
@@ -2448,6 +2559,7 @@ async function openProcessConfig(video, card, mode) {
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
     set('processMusicVolume', defaults.music_volume ?? 0.25);
+    dialog.querySelector('#processSourceNoSub').checked = defaults.source_subtitle_mode === 'none';
     const musicFileInput = dialog.querySelector('#processMusicFile');
     const musicUrlInput = dialog.querySelector('#processMusicUrl');
     const musicHint = dialog.querySelector('#processMusicHint');
@@ -2541,12 +2653,37 @@ async function openProcessConfig(video, card, mode) {
     const empty = dialog.querySelector('#processConfigPreviewEmpty');
     const stage = dialog.querySelector('#processPreviewStage');
     const canvas = dialog.querySelector('#processPreviewCanvas');
+    const blurOverlay = dialog.querySelector('#processBlurPreviewOverlay');
+    const autoBlurButton = dialog.querySelector('#processAutoBlurPreview');
+    const autoBlurStatus = dialog.querySelector('#processAutoBlurStatus');
     const pickButtons = [...dialog.querySelectorAll('.process-pick-btn')];
     const pickerToggle = dialog.querySelector('#toggleProcessPicker');
     let pickMode = 'sub';
     let pickingEnabled = false;
     let dragStart = null;
     let selectedRect = null;
+    let blurPreviewEnd = 0;
+    let blurPreviewWasMuted = false;
+
+    const positionBlurOverlay = () => {
+        if (!blurOverlay || !preview.videoWidth || !selectedRect) return;
+        const rect = preview.getBoundingClientRect();
+        const stageRect = stage.getBoundingClientRect();
+        blurOverlay.style.left = `${rect.left - stageRect.left + selectedRect.x / preview.videoWidth * rect.width}px`;
+        blurOverlay.style.top = `${rect.top - stageRect.top + selectedRect.y / preview.videoHeight * rect.height}px`;
+        blurOverlay.style.width = `${selectedRect.width / preview.videoWidth * rect.width}px`;
+        blurOverlay.style.height = `${selectedRect.height / preview.videoHeight * rect.height}px`;
+    };
+    const stopBlurPreview = () => {
+        const wasActive = blurPreviewEnd > 0 || !blurOverlay.hidden;
+        if (blurPreviewEnd) preview.pause();
+        blurPreviewEnd = 0;
+        if (wasActive) preview.muted = blurPreviewWasMuted;
+        blurOverlay.hidden = true;
+        canvas.style.visibility = '';
+        drawSelection();
+    };
+    dialog.onclose = stopBlurPreview;
 
     const syncSelectionFromFields = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
@@ -2587,6 +2724,7 @@ async function openProcessConfig(video, card, mode) {
         canvas.style.height = `${rect.height}px`;
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
+        if (!blurOverlay.hidden) positionBlurOverlay();
         if (!selectedRect) return;
         context.fillStyle = pickMode === 'logo' ? 'rgba(124,108,255,.22)' : pickMode === 'custom' ? 'rgba(251,191,36,.22)' : 'rgba(45,212,191,.22)';
         context.strokeStyle = pickMode === 'logo' ? '#9b91ff' : pickMode === 'custom' ? '#fbbf24' : '#2dd4bf';
@@ -2607,7 +2745,9 @@ async function openProcessConfig(video, card, mode) {
             set('processCustomBlurWidth', Math.round(rect.width));
             set('processCustomBlurHeight', Math.round(rect.height));
         } else {
-            set('processBlurX', Math.round(rect.x));
+            rect = { ...rect, x: 0, width: preview.videoWidth || rect.width };
+            selectedRect = rect;
+            set('processBlurX', 0);
             set('processBlurY', Math.round(rect.y));
             set('processBlurWidth', Math.round(rect.width));
             set('processBlurHeight', Math.round(rect.height));
@@ -2617,6 +2757,7 @@ async function openProcessConfig(video, card, mode) {
 
     pickButtons.forEach(button => {
         button.onclick = () => {
+            stopBlurPreview();
             pickMode = button.dataset.pickMode || 'blur';
             // Vùng logo là một lựa chọn chủ động: chỉ lúc đó mới bật logo
             // mặc định cho job này. Các job không chọn logo vẫn không chèn gì.
@@ -2633,6 +2774,7 @@ async function openProcessConfig(video, card, mode) {
     });
 
     const setPickingEnabled = enabled => {
+        if (enabled) stopBlurPreview();
         pickingEnabled = !!enabled;
         if (canvas) {
             canvas.classList.toggle('is-picking', pickingEnabled);
@@ -2672,9 +2814,9 @@ async function openProcessConfig(video, card, mode) {
                 y: Math.max(0, Math.min(preview.videoHeight, (event.clientY - bounds.top) * scaleY)),
             };
             selectedRect = {
-                x: Math.max(0, Math.min(dragStart.x, current.x)),
+                x: pickMode === 'sub' ? 0 : Math.max(0, Math.min(dragStart.x, current.x)),
                 y: Math.max(0, Math.min(dragStart.y, current.y)),
-                width: Math.abs(current.x - dragStart.x),
+                width: pickMode === 'sub' ? preview.videoWidth : Math.abs(current.x - dragStart.x),
                 height: Math.abs(current.y - dragStart.y),
             };
             drawSelection();
@@ -2690,9 +2832,82 @@ async function openProcessConfig(video, card, mode) {
     }
 
 
-    preview.onerror = () => { downloadButton.hidden = false; preview.style.display = 'none'; canvas.style.display = 'none'; empty.style.display = 'block'; };
-    preview.onloadedmetadata = () => { video.downloaded = true; downloadButton.hidden = true; preview.style.display = 'block'; canvas.style.display = 'block'; empty.style.display = 'none'; drawSelection(); };
+    preview.onerror = () => {
+        downloadButton.hidden = false;
+        preview.style.display = 'none';
+        canvas.style.display = 'none';
+        stage.dataset.aspect = '';
+        empty.style.display = 'block';
+        dialog.querySelector('#processConfigStatus').textContent = 'Chưa có bản xem trước';
+    };
+    preview.onloadedmetadata = () => {
+        video.downloaded = true;
+        downloadButton.hidden = true;
+        const ratio = preview.videoWidth / Math.max(1, preview.videoHeight);
+        stage.dataset.aspect = ratio > 1.12 ? 'landscape' : ratio < .89 ? 'portrait' : 'square';
+        preview.style.display = 'block';
+        canvas.style.display = 'block';
+        empty.style.display = 'none';
+        dialog.querySelector('#processConfigStatus').textContent = 'Sẵn sàng xem trước';
+        dialog.querySelector('#processConfigDuration').textContent = formatDuration(preview.duration) || dialog.querySelector('#processConfigDuration').textContent;
+        dialog.querySelector('#processConfigResolution').textContent = `${preview.videoWidth} × ${preview.videoHeight}`;
+        dialog.querySelector('#processConfigRatio').textContent = formatVideoRatio({ width: preview.videoWidth, height: preview.videoHeight }) || 'Chưa rõ';
+        drawSelection();
+    };
     preview.onresize = drawSelection;
+    preview.ontimeupdate = () => {
+        if (blurPreviewEnd && preview.currentTime >= blurPreviewEnd) {
+            stopBlurPreview();
+            autoBlurStatus.textContent = 'Đã xem thử 8 giây. Dải mờ chạy hết chiều ngang video; bạn có thể chỉnh chiều cao và vị trí bên dưới.';
+        }
+    };
+    autoBlurButton.onclick = async () => {
+        if (!preview.videoWidth || !video.downloaded) {
+            autoBlurStatus.textContent = 'Hãy tải video về máy trước khi AI dò vùng mờ.';
+            return;
+        }
+        autoBlurButton.disabled = true;
+        autoBlurStatus.textContent = 'AI đang tìm vị trí phụ đề gốc trên video…';
+        try {
+            const channel = encodeURIComponent(video.channel || '2d_animation');
+            const result = await window.reupEngineClient.json(
+                `/api/preview/subtitle-region/${encodeURIComponent(video.video_id)}?channel=${channel}`,
+                { timeoutMs: 180000 },
+            );
+            if (!dialog.open) return;
+            const detected = result.blur || {};
+            const scaleY = preview.videoHeight / Math.max(1, Number(result.video?.height || preview.videoHeight));
+            selectedRect = {
+                x: 0,
+                y: Math.round(Number(detected.y || 0) * scaleY),
+                width: preview.videoWidth,
+                height: Math.max(1, Math.round(Number(detected.height || 0) * scaleY)),
+            };
+            pickMode = 'sub';
+            pickButtons.forEach(item => item.classList.toggle('active', item.dataset.pickMode === 'sub'));
+            updateSelectionFields(selectedRect);
+            dialog.querySelector('#processSourceNoSub').checked = false;
+            setPickingEnabled(false);
+            const length = 8;
+            const start = Math.max(0, Math.min(Math.max(0, preview.duration - length), Number(result.preview_time_seconds || 0) - 1));
+            preview.currentTime = start;
+            blurPreviewEnd = Math.min(preview.duration, start + length);
+            blurPreviewWasMuted = preview.muted;
+            preview.muted = true;
+            blurOverlay.hidden = false;
+            canvas.style.visibility = 'hidden';
+            positionBlurOverlay();
+            autoBlurStatus.textContent = 'Đang xem thử mô phỏng dải mờ trên video trong 8 giây…';
+            await preview.play();
+        } catch (error) {
+            stopBlurPreview();
+            autoBlurStatus.textContent = error?.status === 404
+                ? 'Cần cập nhật Local Engine để dùng chức năng xem thử vùng mờ AI.'
+                : (error?.message || 'Chưa xem thử được. Bạn có thể tự kéo vùng mờ trên video.');
+        } finally {
+            autoBlurButton.disabled = false;
+        }
+    };
     preview.crossOrigin = 'anonymous';
     try { preview.src = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`); } catch { preview.onerror(); }
 
@@ -2700,6 +2915,8 @@ async function openProcessConfig(video, card, mode) {
         if (typeof collectPresetConfig === 'function') dialog._undoConfig = collectPresetConfig();
         set('processPreviewSeconds', '');
         set('processFontSize', '');
+        set('processSourceLanguage', 'auto');
+        set('processSubtitleStyle', 'minimal');
         set('processOriginalVolume', 0.15);
         set('processVoiceVolume', 1);
         set('processTtsSpeed', 1.10);
@@ -2709,6 +2926,7 @@ async function openProcessConfig(video, card, mode) {
         set('processMusicVolume', 0.25);
         dialog.querySelector('#processMusicFile').value = '';
         dialog.querySelector('#processAutoBrandBlur').checked = false;
+        dialog.querySelector('#processSourceNoSub').checked = false;
         set('processBlurPreset', '');
         ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
             'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
@@ -2756,7 +2974,7 @@ async function openProcessConfig(video, card, mode) {
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
-            'processPreviewSeconds', 'processFontSize', 'processOriginalVolume',
+            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processSubtitleStyle', 'processOriginalVolume',
             'processVoiceVolume', 'processTtsSpeed', 'processVoice',
             'processAspectRatio', 'processMusicUrl', 'processMusicVolume',
             'processBlurPreset', 'processLogoMode', 'processLogoPath',
@@ -2768,6 +2986,7 @@ async function openProcessConfig(video, card, mode) {
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
             active_pick_mode: pickMode,
             logo_data: dialog._logoData || null,
             logo_filename: dialog._logoFilename || null,
@@ -2786,6 +3005,8 @@ async function openProcessConfig(video, card, mode) {
         Object.entries(preset).forEach(([id, value]) => {
             if (id === 'auto_brand_blur') {
                 dialog.querySelector('#processAutoBrandBlur').checked = !!value;
+            } else if (id === 'source_subtitle_mode') {
+                dialog.querySelector('#processSourceNoSub').checked = value === 'none';
             } else if (id === 'logo_data') {
                 dialog._logoData = value || null;
             } else if (id === 'logo_filename') {
@@ -2860,7 +3081,7 @@ async function openProcessConfig(video, card, mode) {
         if (name && presets[name]) {
             const current = collectPresetConfig();
             const sectionFields = {
-                sub: ['processBlurPreset', 'processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight'],
+                sub: ['processBlurPreset', 'processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight', 'source_subtitle_mode'],
                 custom: ['processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight', 'blur_intervals'],
                 logo: ['processLogoMode', 'processLogoPath', 'processLogoText', 'processLogoSize', 'processLogoX', 'processLogoY'],
             }[section] || [];
@@ -2897,6 +3118,136 @@ async function openProcessConfig(video, card, mode) {
             reader.readAsDataURL(file);
         });
         dialog._logoFilename = file.name;
+    };
+
+    const aiPrompt = dialog.querySelector('#processAiPrompt');
+    const aiImage = dialog.querySelector('#processAiImage');
+    const aiImageName = dialog.querySelector('#processAiImageName');
+    const aiResult = dialog.querySelector('#processAiResult');
+    const aiAnswer = dialog.querySelector('#processAiAnswer');
+    const aiSettings = dialog.querySelector('#processAiSettings');
+    const aiApply = dialog.querySelector('#processAiApply');
+    const aiGenerate = dialog.querySelector('#processAiGenerate');
+    dialog._assistantRequestSeq = (dialog._assistantRequestSeq || 0) + 1;
+    let aiImageData = null;
+    let aiSuggestion = null;
+    aiPrompt.value = '';
+    aiImage.value = '';
+    aiImageName.textContent = '';
+    aiResult.hidden = true;
+    aiApply.hidden = true;
+    aiImage.onchange = async () => {
+        const file = aiImage.files?.[0];
+        if (!file) return;
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 4 * 1024 * 1024) {
+            aiImage.value = '';
+            aiImageName.textContent = 'Chọn ảnh PNG, JPEG hoặc WebP dưới 4 MB.';
+            return;
+        }
+        aiImageData = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('Không đọc được ảnh.'));
+            reader.readAsDataURL(file);
+        }).catch(() => null);
+        aiImageName.textContent = aiImageData ? file.name : 'Không đọc được ảnh.';
+    };
+    dialog.querySelector('#processAiFrame').onclick = () => {
+        if (!preview.videoWidth) {
+            aiImageName.textContent = 'Tải video để chụp khung hình.';
+            return;
+        }
+        try {
+            const frame = document.createElement('canvas');
+            const scale = Math.min(1, 1280 / preview.videoWidth);
+            frame.width = Math.round(preview.videoWidth * scale);
+            frame.height = Math.round(preview.videoHeight * scale);
+            frame.getContext('2d').drawImage(preview, 0, 0, frame.width, frame.height);
+            aiImageData = frame.toDataURL('image/jpeg', 0.82);
+            aiImage.value = '';
+            aiImageName.textContent = 'Khung hình hiện tại';
+        } catch {
+            aiImageName.textContent = 'Không chụp được khung hình; hãy đính kèm ảnh từ máy.';
+        }
+    };
+    aiGenerate.onclick = async () => {
+        const message = aiPrompt.value.trim();
+        if (!message) { aiPrompt.focus(); return; }
+        const requestSeq = dialog._assistantRequestSeq;
+        aiGenerate.disabled = true;
+        aiGenerate.textContent = 'Đang hỏi Gemini…';
+        aiResult.hidden = false;
+        aiAnswer.textContent = 'Đang phân tích yêu cầu…';
+        aiSettings.replaceChildren();
+        aiApply.hidden = true;
+        aiSuggestion = null;
+        try {
+            const response = await window.reupEngineClient.json('/api/assistant', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message, kind: 'config', mode, image_data: aiImageData,
+                    video_context: {
+                        title: video.title || video.video_id,
+                        duration_seconds: Number(video.duration_seconds || video.duration || preview.duration || 0),
+                        width: preview.videoWidth || sourceWidth,
+                        height: preview.videoHeight || sourceHeight,
+                    },
+                }),
+                timeoutMs: 70000,
+            });
+            if (dialog._assistantRequestSeq !== requestSeq) return;
+            aiAnswer.textContent = response.answer || 'Gemini chưa có gợi ý.';
+            aiSuggestion = response.settings || {};
+            const labels = {
+                aspect_ratio: 'Tỷ lệ đầu ra', blur_preset: 'Vị trí phụ đề cũ',
+                source_subtitle_mode: 'Phụ đề nguồn', original_volume: 'Âm lượng gốc',
+                voice_volume: 'Âm lượng Voice', tts_speed: 'Tốc độ Voice',
+                voice: 'Giọng đọc', auto_brand_blur: 'Làm mờ watermark',
+            };
+            Object.entries(aiSuggestion).forEach(([key, value]) => {
+                if (!labels[key]) return;
+                const item = document.createElement('li');
+                item.textContent = `${labels[key]}: ${typeof value === 'boolean' ? value ? 'Bật' : 'Tắt' : value}`;
+                aiSettings.appendChild(item);
+            });
+            aiApply.hidden = !aiSettings.childElementCount;
+        } catch (error) {
+            if (dialog._assistantRequestSeq !== requestSeq) return;
+            aiAnswer.textContent = error?.status === 404
+                ? 'Local Engine hiện tại chưa có Trợ lý AI. Hãy cập nhật ứng dụng trên máy.'
+                : (error?.message || 'Chưa thể hỏi Gemini. Kiểm tra kết nối trong Cài đặt.');
+        } finally {
+            if (dialog._assistantRequestSeq === requestSeq) {
+                aiGenerate.disabled = false;
+                aiGenerate.textContent = 'Gợi ý cấu hình';
+            }
+        }
+    };
+    aiApply.onclick = () => {
+        if (!aiSuggestion) return;
+        const fields = {
+            aspect_ratio: 'processAspectRatio', blur_preset: 'processBlurPreset',
+            original_volume: 'processOriginalVolume', voice_volume: 'processVoiceVolume',
+            tts_speed: 'processTtsSpeed', voice: 'processVoice',
+        };
+        Object.entries(fields).forEach(([key, id]) => {
+            if (aiSuggestion[key] === undefined) return;
+            set(id, aiSuggestion[key]);
+            dialog.querySelector(`#${id}`)?.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        if (aiSuggestion.source_subtitle_mode) {
+            const noSub = dialog.querySelector('#processSourceNoSub');
+            noSub.checked = aiSuggestion.source_subtitle_mode === 'none';
+            noSub.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (typeof aiSuggestion.auto_brand_blur === 'boolean') {
+            const brand = dialog.querySelector('#processAutoBrandBlur');
+            brand.checked = aiSuggestion.auto_brand_blur;
+            brand.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        aiAnswer.textContent += ' Đã áp dụng vào form; hãy kiểm tra lại trước khi xử lý.';
+        aiApply.hidden = true;
     };
 
     dialog.querySelector('form').onsubmit = async event => {
@@ -2954,6 +3305,8 @@ async function openProcessConfig(video, card, mode) {
         const config = {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
+            source_language: value('processSourceLanguage') || 'auto',
+            subtitle_style: value('processSubtitleStyle') || 'minimal',
             original_volume: Number(value('processOriginalVolume') || 0.15),
             voice_volume: Number(value('processVoiceVolume') || 1),
             tts_speed: Number(value('processTtsSpeed') || 1.10),
@@ -2966,6 +3319,7 @@ async function openProcessConfig(video, card, mode) {
                 return Number.isFinite(selected) ? Math.min(2, Math.max(0, selected)) : 0.25;
             })(),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
             aspect_ratio: value('processAspectRatio') || null,
             blur_preset: value('processBlurPreset') || null,
             logo_size: value('processLogoSize') ? Number(value('processLogoSize')) : null,
@@ -3046,14 +3400,15 @@ function ensureProcessDetailsPopup() {
                 <div class="process-details-bar"></div>
             </div>
 
-            <div class="process-details-log-wrap">
-                <div class="process-details-log-label">Nhật ký trực tiếp</div>
+            <details class="process-details-log-wrap">
+                <summary class="process-details-log-toggle">Chi tiết kỹ thuật <span>Chỉ cần mở khi gửi lỗi cho hỗ trợ</span></summary>
                 <pre class="process-details-log">Đang chờ dữ liệu tiến trình...</pre>
-            </div>
+            </details>
 
             <footer class="process-details-footer">
                 <span>Tiến trình vẫn tiếp tục khi đóng cửa sổ này.</span>
                 <div>
+                    <a class="process-details-google-reconnect" href="/settings#diagnostics" hidden>Sửa nhanh Gemini</a>
                     <button class="process-details-cancel secondary" type="button">
                         Đóng
                     </button>
@@ -3091,6 +3446,39 @@ function ensureProcessDetailsPopup() {
 }
 
 
+function geminiRepairType(message) {
+    const text = String(message || '');
+    if (/(?:phiên[^.]*Google[^.]*hết hạn|quyền Google[^.]*hết hạn|kết nối lại Google|chưa kết nối Google cho Gemini|invalid_grant)/i.test(text)) return 'reauthorize';
+    if (/(?:gemini|generativelanguage|google\.genai|google[^.]*oauth|(?:phiên|quyền)[^.]*Google|Google Cloud project|service usage consumer|no api key was provided|RefreshError)/i.test(text)) return 'diagnose';
+    return null;
+}
+
+function friendlyProcessStage(message, isError) {
+    const value = String(message || '').trim();
+    if (!value) return isError ? 'Xử lý gặp sự cố. Hãy thử lại.' : 'Đang chuẩn bị video.';
+    if (!isError) {
+        if (/vị trí (?:subtitle|sub) gốc/i.test(value)) return 'Đang xác định vị trí phụ đề gốc.';
+        if (/^(?:command:|\$\s|traceback)/i.test(value)) return 'Đang xử lý video trên máy.';
+        return value;
+    }
+    if (/yt-dlp|download that bai|CalledProcessError.*(?:bilibili|douyin)|không thể tải video/i.test(value)) {
+        return 'Không tải được video nguồn. Kiểm tra liên kết và quyền xem video rồi thử lại.';
+    }
+    if (/gemini|generativelanguage|google cloud|google[^.]*oauth|no api key/i.test(value)) {
+        return 'Gemini chưa sẵn sàng. Mở Cài đặt để kiểm tra kết nối Google và quyền project.';
+    }
+    if (/billing|quyền gói|gói dịch vụ/i.test(value)) {
+        return 'Chưa xác nhận được gói đang dùng. Kiểm tra kết nối rồi thử lại.';
+    }
+    if (/không tìm thấy video|file.*(?:not found|không tồn tại)/i.test(value)) {
+        return 'Không tìm thấy video trên máy. Hãy tải lại video nguồn.';
+    }
+    if (/Traceback|(?:Runtime|Value|Import|FileNotFound|Permission)Error|CalledProcessError|exit code|COMMAND:/i.test(value)) {
+        return 'Xử lý gặp sự cố. Mở Chi tiết kỹ thuật nếu cần gửi lỗi cho hỗ trợ.';
+    }
+    return value.length > 180 ? `${value.slice(0, 177)}…` : value;
+}
+
 function syncProcessDetailsPopup(
     card,
     options = {}
@@ -3117,7 +3505,7 @@ function syncProcessDetailsPopup(
     const stopButton = card.querySelector('.stop-process-btn');
 
     popup.querySelector('.process-details-percent').textContent = percent;
-    popup.querySelector('.process-details-stage').textContent = stage;
+    popup.querySelector('.process-details-stage').textContent = friendlyProcessStage(stage, isError);
     popup.querySelector('.process-details-status').textContent = isError
         ? 'Đã xảy ra lỗi'
         : stopped
@@ -3127,6 +3515,13 @@ function syncProcessDetailsPopup(
                 : 'Đang xử lý';
     popup.querySelector('.process-details-log').textContent = log
         || (isError ? stage : 'Đang chờ dữ liệu tiến trình...');
+    const repairLink = popup.querySelector('.process-details-google-reconnect');
+    const repair = isError ? geminiRepairType(stage) : null;
+    repairLink.hidden = !repair;
+    repairLink.textContent = repair === 'reauthorize' ? 'Đăng nhập lại Google' : 'Sửa nhanh Gemini';
+    repairLink.href = repair === 'reauthorize'
+        ? '/settings?reconnect=1#diagnostics'
+        : '/settings#diagnostics';
     popup.querySelector('.process-details-bar').style.width = percent;
     popup.classList.toggle('has-error', isError);
     popup.classList.toggle('is-complete', finished || stopped);
@@ -3158,6 +3553,7 @@ function openProcessDetailsPopup(
     popup.querySelector('.process-details-source').textContent = (
         `${video.video_id} · ${card.querySelector('.process-inline-label')?.textContent || 'Đang xử lý'}`
     );
+    popup.querySelector('.process-details-log-wrap').open = false;
     popup.hidden = false;
     syncProcessDetailsPopup(card, {
         error: card.classList.contains('has-process-error'),
@@ -3322,6 +3718,38 @@ async function processVideo(
 
     try {
 
+        // Check the local engine before making the single web billing request.
+        const health = await window.reupEngineClient.json('/api/health');
+        if (config.source_language && config.source_language !== 'auto' && !health.capabilities?.source_language) {
+            throw new Error('Hãy cập nhật Local Engine để chọn ngôn ngữ lời thoại.');
+        }
+        if (config.subtitle_style && config.subtitle_style !== 'minimal' && !health.capabilities?.subtitle_styles) {
+            throw new Error('Hãy cập nhật Local Engine để dùng phong cách phụ đề mới.');
+        }
+        let billingToken = null;
+        if (!health.capabilities?.billing_ledger) {
+            throw new Error('Local Engine cần được cập nhật để dùng gói Free / Pro. Hãy cài bản ReupAI mới nhất.');
+        }
+        // The reserve endpoint checks account, plan and remaining quota atomically;
+        // a separate /billing/me request here would add an unnecessary round trip.
+        const reservation = await window.fetch('/api/billing/jobs/reserve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ jobKey: crypto.randomUUID(), videoId: video.video_id, mode }),
+        });
+        const result = await reservation.json().catch(() => ({}));
+        if (!reservation.ok) {
+            logBox.textContent += `[billing] Không giữ được lượt xử lý (HTTP ${reservation.status}${result.code ? `, ${result.code}` : ''}) · API: ${reservation.url || new URL('/api/billing/jobs/reserve', window.location.origin).href}\n`;
+            if (reservation.status === 401 || reservation.status === 403) {
+                throw new Error(result.error || 'Phiên đăng nhập hoặc quyền tài khoản đã hết hạn. Hãy đăng nhập lại rồi thử lại.');
+            }
+            throw new Error(result.reason === 'trial_exhausted'
+                ? (result.error || 'Bạn đã hết lượt xử lý. Mở Gói dịch vụ để nâng cấp Pro.')
+                : result.error || 'Máy chủ chưa cấp được lượt xử lý. Vui lòng thử lại sau.');
+        }
+        billingToken = result.token;
+
         const response = (
             await window.reupEngineClient.request(
                 '/api/process',
@@ -3349,6 +3777,7 @@ async function processVideo(
                                 mode,
 
                             ...config,
+                            ...(billingToken ? { billing_token: billingToken } : {}),
                         })
                 }
             )
@@ -3867,6 +4296,8 @@ async function pollProcess(
             data.status
             === 'failed'
         ) {
+
+            progressStage.textContent = `Lỗi · ${data.message || 'Pipeline thất bại.'}`;
 
             video.processing =
                 false;
@@ -13068,21 +13499,39 @@ function injectV137CompactProcessingPopup() {
 
         .process-details-log-wrap {
             margin: 20px 22px;
+            border: 1px solid rgba(148,163,184,.16);
+            border-radius: 11px;
+            background: rgba(2,6,14,.26);
         }
 
-        .process-details-log-label {
-            margin-bottom: 8px;
-            color: #8493a9;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: .09em;
-            text-transform: uppercase;
+        .process-details-log-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 13px 15px;
+            color: #c4cedd;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 750;
+            list-style: none;
+        }
+
+        .process-details-log-toggle::-webkit-details-marker { display: none; }
+        .process-details-log-toggle::after { content: '+'; margin-left: auto; color: #ff8197; font-size: 19px; line-height: 1; }
+        .process-details-log-wrap[open] .process-details-log-toggle::after { content: '−'; }
+        .process-details-log-toggle span { color: #8493a9; font-size: 11px; font-weight: 500; }
+        .process-details-log-toggle:hover { color: #fff; }
+        .process-details-log-toggle:focus-visible { outline: 2px solid #ff6780; outline-offset: -3px; border-radius: 10px; }
+
+        .process-details-log-wrap[open] {
+            background: rgba(2,6,14,.42);
         }
 
         .process-details-log {
             min-height: 110px;
             max-height: 245px;
-            margin: 0;
+            margin: 0 12px 12px;
             padding: 13px;
             overflow: auto;
             border: 1px solid rgba(148,163,184,.13);
@@ -13132,6 +13581,19 @@ function injectV137CompactProcessingPopup() {
             color: #fff;
         }
 
+        .process-details-google-reconnect:not([hidden]) {
+            display: inline-flex;
+            align-items: center;
+            min-height: 34px;
+            padding: 0 11px;
+            border-radius: 8px;
+            background: #e7213b;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 750;
+            text-decoration: none;
+        }
+
         .process-details-stop:disabled {
             cursor: wait;
             opacity: .55;
@@ -13169,6 +13631,7 @@ function injectV137CompactProcessingPopup() {
             .process-details-summary { padding-left: 16px; padding-right: 16px; }
             .process-details-track { margin-left: 16px; margin-right: 16px; }
             .process-details-log-wrap { margin: 16px; }
+            .process-details-log-toggle span { display: none; }
             .process-details-footer { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
             .process-details-footer > div { width: 100%; justify-content: flex-end; }
         }
@@ -13237,26 +13700,89 @@ const ready = initializeV13().then(async () => {
     const id = params.get('video');
     if (!id) return;
     const [data, downloads] = await Promise.all([
-        apiJson('/api/library/videos?q=' + encodeURIComponent(id) + '&limit=500'),
+        // Search in the maximum range accepted by the Local Engine. The API
+        // filters this query after selecting rows, so the default 500 can miss
+        // a valid older video when the library has grown beyond that window.
+        apiJson('/api/library/videos?q=' + encodeURIComponent(id) + '&limit=2000'),
         apiJson('/api/library/downloads'),
     ]);
     const stored = (data.videos || []).find(item => item.video_id === id);
     const local = (downloads.videos || []).find(item => item.video_id === id);
-    const video = stored || local ? {
+    let video = stored || local ? {
         ...local, ...stored,
         title: stored?.title && stored.title !== id ? stored.title : local?.title || stored?.title || id,
         cover_url: stored?.cover_url || local?.cover_url || '',
         url: stored?.url || local?.source_url || '',
         downloaded: !!local || !!stored?.downloaded,
     } : null;
-    if (!video) throw new Error('Không tìm thấy video trong thư viện local: ' + id);
+    if (!video) {
+        // Library cards can outlive their local DB row (or refer to a video
+        // that has never been downloaded). Resolve a recognizable platform
+        // ID directly instead of failing before the user can process it.
+        let directUrl = '';
+        if (/^BV[0-9A-Za-z]+$/.test(id)) {
+            if (id.length !== 12) throw new Error(`Mã Bilibili chưa đầy đủ (${id}). Hãy mở video và dùng link đầy đủ thay vì mã bị cắt.`);
+            directUrl = `https://www.bilibili.com/video/${id}/`;
+        } else if (/^\d{15,22}$/.test(id)) {
+            directUrl = `https://www.douyin.com/video/${id}`;
+        }
+        const sourceInput = document.getElementById('sourceUrl');
+        const sourceMode = document.getElementById('sourceInputMode');
+        if (directUrl && sourceInput && sourceMode) {
+            sourceInput.value = directUrl;
+            sourceInput.dispatchEvent(new Event('input', { bubbles: true }));
+            sourceMode.value = 'video';
+            await loadVideos(true);
+            const inspected = currentVideos.find(item => item.video_id === id) || currentVideos[0];
+            if (inspected && inspected.video_id === id) video = inspected;
+            else {
+                const detail = document.getElementById('info')?.textContent?.trim();
+                throw new Error(detail || `Không nhận diện được ${id}. Video có thể đã bị xóa, giới hạn quyền xem hoặc nguồn đang tạm lỗi.`);
+            }
+        } else {
+            throw new Error(`Không tìm thấy ${id} trong thư viện trên máy. Hãy đồng bộ lại nguồn hoặc mở link video để nhận diện trực tiếp.`);
+        }
+    }
     currentView = 'source';
     currentVideos = [video]; currentPage = 1; sourceTotal = 1; totalPages = 1; remoteHasMore = false;
-    renderVideos(); updateViewLabel('Video local'); updateSourceInfo(video.title || id);
+    renderVideos(); updateViewLabel(video.downloaded ? 'Video local' : 'Video lẻ'); updateSourceInfo(video.title || id);
     const mode = params.get('mode');
     if (mode === 'subtitle' || mode === 'voiceover') {
         const card = document.querySelector('[data-video-id="' + CSS.escape(id) + '"]');
         if (card) await openProcessConfig(video, card, mode);
+    }
+});
+
+document.addEventListener('reupai:assistant-source', async event => {
+    const { url, mode, complete } = event.detail || {};
+    const finish = result => { if (typeof complete === 'function') complete(result); };
+    try {
+        await ready;
+        const parsed = new URL(String(url || ''));
+        const host = parsed.hostname.toLowerCase();
+        const allowed = ['bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv',
+            'douyin.com', 'www.douyin.com', 'v.douyin.com'];
+        if (!['https:', 'http:'].includes(parsed.protocol) || !allowed.includes(host)) {
+            throw new Error('Chỉ hỗ trợ link Bilibili hoặc Douyin hợp lệ.');
+        }
+        if (!['subtitle', 'voiceover'].includes(mode)) throw new Error('Hãy chọn Vietsub hoặc Voice.');
+        const input = document.getElementById('sourceUrl');
+        const inputMode = document.getElementById('sourceInputMode');
+        if (!input || !inputMode) throw new Error('Chưa mở được trang Nguồn video.');
+        input.value = parsed.href;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        inputMode.value = 'video';
+        await loadVideos(true);
+        if (lastLoadedSourceUrl !== parsed.href || currentVideos.length !== 1) {
+            throw new Error(document.getElementById('info')?.textContent || 'Chưa nhận diện được video từ link này.');
+        }
+        const video = currentVideos[0];
+        const card = document.querySelector('[data-video-id="' + CSS.escape(video.video_id) + '"]');
+        if (!card) throw new Error('Đã nhận diện video nhưng chưa mở được cấu hình.');
+        await openProcessConfig(video, card, mode);
+        finish({ ok: true, title: video.title || video.video_id });
+    } catch (error) {
+        finish({ ok: false, message: error?.message || 'Chưa mở được video.' });
     }
 });
 return {

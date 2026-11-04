@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useEngine } from "./engine-provider";
 import { mountProductRuntime } from "../lib/product-runtime";
 import { sourcesMarkup } from "../legacy/sources-markup";
 import { startSourcesRuntime } from "../legacy/sources-runtime";
 import { sendFeedback } from "./feedback-provider";
 import { useFeedback } from "./feedback-provider";
+import { PENDING_SOURCE_KEY } from "./workspace-assistant";
 
 export function SourcesPage() {
-  const { status, client, connect, check } = useEngine();
+  const { status, error: connectionError, client, connect, check } = useEngine();
   const host = useRef(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -44,19 +46,54 @@ export function SourcesPage() {
     };
   }, [client, status, retry]);
 
+  useEffect(() => {
+    if (status !== "connected" || !ready) return;
+    let request;
+    try { request = JSON.parse(window.sessionStorage.getItem(PENDING_SOURCE_KEY) || "null"); }
+    catch { window.sessionStorage.removeItem(PENDING_SOURCE_KEY); return; }
+    if (!request) return;
+    window.sessionStorage.removeItem(PENDING_SOURCE_KEY);
+    if (Date.now() - request.createdAt > 5 * 60 * 1000 || !["subtitle", "voiceover"].includes(request.mode)) return;
+    document.dispatchEvent(new CustomEvent("reupai:assistant-source", { detail: {
+      url: request.url, mode: request.mode,
+      complete: (result) => { if (!result?.ok) setError(result?.message || "Chưa mở được cấu hình video."); },
+    } }));
+  }, [status, ready]);
+
   if (status !== "connected") {
     const needsPermission = status === "authorization_required" || status === "permission_denied";
     const waiting = status === "checking" || status === "authorizing";
-    return <section className="panel state-panel"><h2>{waiting ? "Đang kết nối Local Engine…" : needsPermission ? "Cần cấp quyền Local Engine" : "Local Engine offline"}</h2><p>Kết nối Local Engine để xem nguồn, tải video và xử lý Vietsub / Voice trên máy của bạn.</p><button className="btn primary" disabled={waiting} onClick={needsPermission ? connect : check}>{needsPermission ? "Kết nối ReupAI" : "Kiểm tra lại"}</button></section>;
+    const updateRequired = status === "update_required";
+    const title = waiting ? "Đang tìm Local Engine trên máy" : updateRequired ? "Cần cập nhật Local Engine" : needsPermission ? "Cần kết nối với Local Engine" : "Chưa kết nối được Local Engine";
+    const description = waiting
+      ? "ReupAI đang tự kiểm tra phần mềm và quyền truy cập."
+      : updateRequired
+        ? "Phiên bản đang chạy chưa hỗ trợ kết nối tự động với website."
+        : needsPermission
+          ? "Phần mềm đã phản hồi. Hãy kết nối để mở thư viện và xử lý video."
+          : "Hãy mở ReupAI Local Engine trên máy này. Nếu phần mềm đã chạy, thử kiểm tra lại hoặc cấp quyền truy cập mạng cục bộ cho trình duyệt.";
+    return <section className="engine-connection-card" role="status" aria-live="polite">
+      <div className="engine-connection-icon" aria-hidden="true">{waiting ? "◌" : "↗"}</div>
+      <div className="engine-connection-content">
+        <span className="engine-connection-kicker">KẾT NỐI TRÊN MÁY CỦA BẠN</span>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        {connectionError && !waiting && status !== "disconnected" && <small className="engine-connection-detail">{connectionError.message}</small>}
+        <div className="engine-connection-actions">
+          <button className="btn primary" type="button" disabled={waiting} onClick={needsPermission ? connect : check}>{waiting ? "Đang kiểm tra…" : needsPermission ? "Kết nối ngay" : "Kiểm tra lại"}</button>
+          <Link className="engine-connection-link" href="/local-engine">{updateRequired ? "Tải bản mới" : "Tải phần mềm / Xem hướng dẫn"} <span aria-hidden="true">→</span></Link>
+        </div>
+      </div>
+    </section>;
   }
 
   return <div className="native-sources-product">
     <style>{`
       .source-runtime-host #processConfigDialog .process-config-preview {
-        width: fit-content; max-width: 100%; margin: 18px auto;
+        width: 100%; max-width: 100%; margin: 0;
       }
       .source-runtime-host #processConfigDialog .process-config-preview video {
-        max-height: min(58vh, 560px); max-width: 100%; width: auto; height: auto;
+        max-height: min(46vh, 520px); max-width: 100%; width: auto; height: auto; object-fit: contain;
       }
       .source-runtime-host #processConfigPreviewEmpty {
         line-height: 1.6;

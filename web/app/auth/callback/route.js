@@ -5,7 +5,7 @@ export async function GET(request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") || "/app";
-  const destination = new URL(next.startsWith("/") ? next : "/app", url.origin);
+  const destination = new URL(next.startsWith("/") && !next.startsWith("//") ? next : "/app", url.origin);
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
     destination.pathname = "/sign-in";
     destination.searchParams.set("error", "account_not_configured");

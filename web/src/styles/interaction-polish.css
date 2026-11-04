@@ -1,0 +1,64 @@
+/* Keep page controls comfortable to tap without moving the surrounding layout. */
+.bottom-pages {
+  gap: 8px;
+}
+
+.bottom-pages > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bottom-page-btn,
+.theme-xports .bottom-page-btn {
+  min-width: 48px;
+  min-height: 48px;
+  height: 48px;
+  padding-inline: 14px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.bottom-page-btn:not(:disabled):hover {
+  border-color: #ff5267;
+  box-shadow: 0 0 0 3px rgba(255, 38, 70, .12);
+}
+
+.bottom-page-btn:not(:disabled):active {
+  transform: scale(.96);
+}
+
+.bottom-page-btn:focus-visible {
+  outline: 2px solid #ff5267;
+  outline-offset: 3px;
+}
+
+.bottom-page-btn:disabled {
+  cursor: default;
+  opacity: .55;
+}
+
+.bottom-page-btn.is-pending {
+  border-color: #ff5267;
+  box-shadow: 0 0 0 3px rgba(255, 38, 70, .18);
+}
+
+#videos,
+.panel .control-bar,
+.panel .panel-head {
+  scroll-margin-top: 20px;
+}
+
+#videos.is-page-loading > .compact-video-card {
+  opacity: .66;
+  transition: opacity 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-page-btn,
+  .theme-xports .bottom-page-btn,
+  #videos.is-page-loading > .compact-video-card {
+    transition: none;
+  }
+}

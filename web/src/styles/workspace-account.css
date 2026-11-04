@@ -1,0 +1,63 @@
+.workspace-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.account-signout-wrap { position: relative; flex: 0 0 auto; }
+
+.account-signout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 91, 109, .42);
+  border-radius: 8px;
+  background: rgba(121, 17, 34, .14);
+  color: #ffb5bf;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.account-signout:hover { border-color: #ff536c; background: rgba(222, 24, 52, .2); color: #fff; }
+.account-signout:focus-visible { outline: 2px solid #ff536c; outline-offset: 3px; }
+.account-signout:disabled { cursor: wait; opacity: .7; }
+
+.account-signout-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: min(300px, 85vw);
+  padding: 8px 10px;
+  border: 1px solid #9d3144;
+  border-radius: 7px;
+  background: #231119;
+  color: #ffb5bf;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 940px) {
+  .theme-xports .topbar { flex-wrap: wrap; }
+  .workspace-account-actions { width: 100%; justify-content: space-between; }
+  .theme-xports .workspace-account-actions .engine-status-control { width: auto; min-width: 0; flex: 1 1 auto; }
+}
+
+@media (max-width: 520px) {
+  .workspace-account-actions { align-items: flex-start; flex-wrap: wrap; gap: 7px; }
+  .theme-xports .workspace-account-actions .engine-status-control { width: 100%; flex: 1 1 100%; }
+  .account-signout-wrap { margin-left: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) { .account-signout { transition: none; } }

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">ReupAI</title>
+  <rect width="512" height="512" rx="116" fill="#0d0b11"/>
+  <rect x="68" y="68" width="376" height="376" rx="91" fill="#19070c" stroke="#ff3151" stroke-width="16"/>
+  <rect x="107" y="137" width="26" height="38" rx="7" fill="#ff3151"/>
+  <rect x="107" y="237" width="26" height="38" rx="7" fill="#ff3151"/>
+  <rect x="107" y="337" width="26" height="38" rx="7" fill="#ff3151"/>
+  <path d="M204 160c0-11 12-18 22-12l150 94c11 7 11 21 0 28l-150 94c-10 6-22-1-22-12V160Z" fill="#fff"/>
+  <path d="M204 160c0-11 12-18 22-12l37 23v170l-37 23c-10 6-22-1-22-12V160Z" fill="#ff3151"/>
+</svg>

@@ -1,0 +1,376 @@
+/* Video setup workspace. These rules are scoped so the processing form keeps its existing behavior. */
+body.theme-xports #processConfigDialog {
+  width: min(1240px, calc(100vw - 28px));
+  height: min(96dvh, 1100px);
+  max-height: 96dvh;
+  border: 1px solid rgba(255, 42, 65, .55);
+  border-radius: 22px;
+  background: radial-gradient(circle at 82% 0, rgba(110, 8, 19, .16), transparent 34%), #0b0d12;
+  box-shadow: 0 36px 110px rgba(0, 0, 0, .74), 0 0 55px rgba(239, 19, 44, .12);
+}
+
+body.theme-xports #processConfigDialog::backdrop {
+  background: radial-gradient(circle at 10% 75%, rgba(182, 0, 25, .23), transparent 34%), radial-gradient(circle at 93% 18%, rgba(174, 0, 25, .2), transparent 30%), rgba(2, 2, 6, .85);
+  backdrop-filter: blur(8px);
+}
+
+body.theme-xports #processConfigDialog .process-config-dialog {
+  height: 100%;
+  padding: 26px 28px 0;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  scroll-behavior: auto;
+}
+
+#processConfigDialog .process-config-head {
+  justify-content: flex-start;
+  gap: 22px;
+  margin-bottom: 18px;
+}
+
+#processConfigDialog .process-config-back {
+  min-width: 116px;
+  min-height: 44px;
+  border: 1px solid rgba(195, 206, 225, .23);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .035);
+  color: #f6f7fa;
+  font-weight: 750;
+}
+
+#processConfigDialog .process-config-back:hover,
+#processConfigDialog .process-preview-tools .btn:hover,
+#processConfigDialog .process-preset-bar .btn.secondary:hover {
+  border-color: rgba(255, 53, 75, .7);
+  background: rgba(245, 35, 57, .11);
+}
+
+#processConfigDialog .process-config-heading h3 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
+#processConfigDialog .process-config-heading p {
+  margin-top: 5px;
+  color: #ff5c70;
+  font-size: 12px;
+}
+
+#processConfigDialog .process-config-showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid rgba(245, 30, 53, .58);
+  border-radius: 17px;
+  background: linear-gradient(135deg, rgba(81, 8, 19, .23), rgba(13, 15, 21, .95) 33%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .025), 0 12px 32px rgba(0, 0, 0, .27);
+}
+
+body.theme-xports #processConfigDialog .process-config-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  min-width: 0;
+  min-height: clamp(300px, 43dvh, 520px);
+  margin: 0;
+  border: 1px solid rgba(201, 216, 230, .2);
+  border-radius: 11px;
+  background: radial-gradient(ellipse at center, #1b2028 0, #080b10 78%);
+}
+
+#processConfigDialog .process-preview-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  max-width: 100%;
+  margin: auto;
+  line-height: 0;
+}
+#processConfigDialog .process-blur-preview-overlay {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(9, 12, 20, .04);
+}
+#processConfigDialog .process-blur-preview-overlay[hidden] { display: none; }
+#processConfigDialog #processPreviewCanvas { z-index: 3; }
+
+#processConfigDialog .process-config-preview video {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(46dvh, 520px);
+  object-fit: contain;
+  border-radius: 7px;
+}
+
+#processConfigDialog .process-preview-stage[data-aspect="landscape"] video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+#processConfigDialog .process-preview-stage[data-aspect="portrait"] video {
+  width: auto;
+  max-width: min(100%, 330px);
+}
+
+#processConfigDialog .process-video-info {
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(198, 210, 227, .17);
+  border-radius: 11px;
+  background: linear-gradient(155deg, rgba(41, 11, 19, .38), rgba(8, 10, 14, .94) 54%);
+}
+
+#processConfigDialog .process-video-info h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  color: #fff;
+  font-size: 14px;
+}
+
+#processConfigDialog .process-video-info h4 .ui-icon { color: #ff334e; }
+#processConfigDialog .process-video-info dl { margin: 0; }
+#processConfigDialog .process-video-info dl > div {
+  display: grid;
+  grid-template-columns: minmax(90px, .8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(205, 215, 229, .09);
+}
+#processConfigDialog .process-video-info dt { color: #9fa7b5; font-size: 11px; }
+#processConfigDialog .process-video-info dd { min-width: 0; margin: 0; color: #f3f4f6; font-size: 12px; overflow-wrap: anywhere; }
+#processConfigDialog .process-video-info p { margin: 16px 0 0; color: #9fa7b5; font-size: 11px; line-height: 1.55; }
+
+#processConfigDialog .process-preview-tools,
+#processConfigDialog .process-preset-bar,
+#processConfigDialog .process-settings-card,
+#processConfigDialog .process-advanced-shell {
+  border: 1px solid rgba(245, 29, 53, .4);
+  border-radius: 15px;
+  background: linear-gradient(130deg, rgba(48, 8, 16, .33), rgba(8, 10, 15, .97) 42%);
+}
+
+#processConfigDialog .process-section-heading { display: flex; flex-direction: column; gap: 4px; min-width: 145px; }
+#processConfigDialog .process-section-heading strong { color: #fff; font-size: 14px; }
+#processConfigDialog .process-section-heading small { color: #aeb5c1; font-size: 10px; line-height: 1.4; }
+#processConfigDialog .process-settings-card > .process-section-heading {
+  position: relative;
+  min-height: 40px;
+  justify-content: center;
+  padding-left: 47px;
+}
+#processConfigDialog .process-settings-card > .process-section-heading::before {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: rgba(255, 35, 59, .15);
+  color: #ff3450;
+  font-size: 21px;
+  content: "▣";
+}
+#processConfigDialog .process-settings-card:nth-child(2) > .process-section-heading::before { content: "♫"; }
+
+#processConfigDialog .process-preview-tools {
+  margin: 10px 0;
+  padding: 13px 15px;
+  gap: 9px;
+}
+#processConfigDialog .process-preview-tools .process-section-heading { margin-right: 6px; }
+#processConfigDialog .process-preview-tools .btn {
+  min-height: 42px;
+  padding-inline: 13px;
+  border: 1px solid rgba(196, 208, 226, .18);
+  border-radius: 9px;
+  background: #11151d;
+  color: #f5f6f9;
+  font-size: 12px;
+  touch-action: manipulation;
+}
+#processConfigDialog .process-preview-tools .btn.active {
+  border-color: #ff354e;
+  background: linear-gradient(130deg, #9e061c, #e31532);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(241, 20, 46, .23);
+}
+#processConfigDialog .process-preview-tools > small { flex-basis: 100%; padding-left: 2px; }
+
+body.theme-xports #processConfigDialog .process-preset-bar {
+  display: grid;
+  grid-template-columns: minmax(145px, .8fr) minmax(150px, 1.1fr) minmax(150px, 1fr) auto auto;
+  gap: 12px;
+  align-items: end;
+  margin: 0 0 10px;
+  padding: 14px 16px;
+}
+#processConfigDialog .process-preset-bar .process-section-heading { align-self: center; }
+#processConfigDialog .process-preset-bar label { color: #dce0e8; }
+#processConfigDialog .process-preset-bar .btn { font-size: 12px; }
+#processConfigDialog .process-preset-bar input,
+#processConfigDialog .process-preset-bar select,
+#processConfigDialog .process-preset-bar .btn { min-height: 42px; }
+#processConfigDialog .process-preset-bar small#processPresetStatus { margin-top: -4px; }
+
+#processConfigDialog .process-settings-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+#processConfigDialog .process-settings-card { min-width: 0; min-height: 100%; padding: 19px; }
+#processConfigDialog .process-settings-card > .process-section-heading { min-height: 44px; margin-bottom: 16px; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+  align-content: start;
+}
+#processConfigDialog .process-settings-card .process-config-grid > label { min-width: 0; align-content: start; }
+#processConfigDialog .process-settings-card .process-config-grid > label { font-size: 12px; }
+#processConfigDialog .process-settings-card .process-config-grid select {
+  width: 100%;
+  min-height: 40px;
+  border-color: rgba(196, 208, 226, .2);
+  border-radius: 8px;
+  background: #131720;
+}
+#processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(130px, .8fr) minmax(100px, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+#processConfigDialog .process-settings-card .process-config-grid input[type="range"] { accent-color: #ff2340; cursor: pointer; }
+#processConfigDialog .process-settings-card .process-config-grid output { color: #f4f5f8; min-width: 38px; text-align: right; }
+#processConfigDialog .process-settings-card .process-check-option { grid-column: 1 / -1; min-height: 56px; }
+#processConfigDialog .process-subtitle-style-field { grid-column: 1 / -1; }
+#processConfigDialog #processVoiceField { grid-column: 1 / -1; }
+
+#processConfigDialog .process-advanced-shell { margin-top: 10px; padding: 8px 12px; }
+#processConfigDialog .process-config-advanced {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+#processConfigDialog .process-config-advanced + .process-config-advanced { border-top: 1px solid rgba(197, 209, 227, .12); }
+#processConfigDialog .process-config-advanced summary {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  min-height: 56px;
+  padding: 12px 10px;
+  list-style: none;
+  color: #f8f9fb;
+  touch-action: manipulation;
+}
+#processConfigDialog .process-config-advanced summary::-webkit-details-marker { display: none; }
+#processConfigDialog .process-config-advanced summary::before {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(245, 32, 54, .12);
+  color: #ff3651;
+  font-size: 19px;
+  content: "✦";
+}
+#processConfigDialog .process-config-advanced:nth-child(1) summary::before { content: "♫"; }
+#processConfigDialog .process-config-advanced:nth-child(2) summary::before { content: "▦"; }
+#processConfigDialog .process-config-advanced:nth-child(3) summary::before { content: "▧"; }
+#processConfigDialog .process-config-advanced:nth-child(4) summary::before { content: "▣"; }
+#processConfigDialog .process-config-advanced summary strong { min-width: 130px; font-size: 13px; }
+#processConfigDialog .process-config-advanced summary small { color: #a4acb9; font-size: 11px; }
+#processConfigDialog .process-config-advanced summary::after { margin-left: auto; color: #e1e4e9; font-size: 18px; content: "⌄"; transition: transform .18s ease; }
+#processConfigDialog .process-config-advanced[open] summary::after { transform: rotate(180deg); }
+#processConfigDialog .process-config-advanced[open] { padding-bottom: 16px; }
+#processConfigDialog .process-config-advanced > :not(summary) { margin-left: 55px; margin-right: 10px; }
+#processConfigDialog .process-config-advanced > p { margin-top: 3px; margin-bottom: 12px; }
+
+#processConfigDialog .process-config-note { margin: 10px 0 0; color: #929aa7; }
+body.theme-xports #processConfigDialog .process-config-actions {
+  justify-content: space-between;
+  gap: 16px;
+  margin: 12px -28px 0;
+  padding: 13px 28px max(16px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(245, 29, 53, .3);
+  background: rgba(13, 9, 13, .96);
+  backdrop-filter: blur(14px);
+}
+#processConfigDialog .process-config-actions-main { display: flex; gap: 10px; }
+#processConfigDialog .process-config-actions .btn { min-height: 44px; min-width: 108px; border-radius: 9px; touch-action: manipulation; }
+#processConfigDialog #runProcessConfig { min-width: 172px; border: 1px solid #ff3d55; background: linear-gradient(120deg, #f11132, #d90629); color: #fff; box-shadow: 0 7px 20px rgba(237, 14, 45, .25); }
+#processConfigDialog #runProcessConfig:hover { filter: brightness(1.12); }
+#processConfigDialog .btn:focus-visible,
+#processConfigDialog summary:focus-visible,
+#processConfigDialog input:focus-visible,
+#processConfigDialog select:focus-visible { outline: 2px solid #ff4e65; outline-offset: 2px; }
+
+@media (max-width: 980px) {
+  #processConfigDialog .process-config-showcase { grid-template-columns: minmax(0, 1fr); }
+  #processConfigDialog .process-video-info dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+  body.theme-xports #processConfigDialog .process-preset-bar { grid-template-columns: 1fr 1fr; }
+  #processConfigDialog .process-preset-bar .process-section-heading { grid-column: 1 / -1; }
+  #processConfigDialog .process-preset-bar .btn { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  body.theme-xports #processConfigDialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); border-radius: 13px; }
+  body.theme-xports #processConfigDialog .process-config-dialog { padding: 15px 15px 0; }
+  #processConfigDialog .process-config-head { gap: 10px; align-items: center; }
+  #processConfigDialog .process-config-back { min-width: 88px; padding-inline: 10px; }
+  #processConfigDialog .process-config-heading h3 { font-size: 18px; }
+  #processConfigDialog .process-config-heading p { font-size: 10px; }
+  #processConfigDialog .process-config-showcase { padding: 8px; gap: 8px; }
+  body.theme-xports #processConfigDialog .process-config-preview { min-height: 220px; }
+  #processConfigDialog .process-config-preview video { max-height: 34dvh; }
+  #processConfigDialog .process-video-info { padding: 14px; }
+  #processConfigDialog .process-video-info dl { grid-template-columns: 1fr; }
+  #processConfigDialog .process-settings-layout { grid-template-columns: 1fr; }
+  #processConfigDialog .process-preview-tools .process-section-heading { flex-basis: 100%; }
+  #processConfigDialog .process-preview-tools .btn { flex: 1 1 130px; }
+  #processConfigDialog .process-config-advanced summary { gap: 9px; }
+  #processConfigDialog .process-config-advanced summary strong { min-width: 105px; }
+  #processConfigDialog .process-config-advanced summary small { flex: 1; }
+  #processConfigDialog .process-config-advanced > :not(summary) { margin-left: 8px; margin-right: 8px; }
+  body.theme-xports #processConfigDialog .process-config-actions { margin-inline: -15px; padding-inline: 15px; }
+  #processConfigDialog .process-config-actions .btn { min-width: 0; }
+  #processConfigDialog .process-config-actions-main { flex: 1; }
+  #processConfigDialog .process-config-actions-main .btn { flex: 1; }
+}
+
+@media (max-width: 440px) {
+  #processConfigDialog .process-settings-card .process-config-grid { grid-template-columns: 1fr; }
+  #processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) { grid-template-columns: minmax(0, 1fr) auto; }
+  #processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) input { grid-column: 1 / -1; grid-row: 2; }
+  #processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) output { grid-column: 2; grid-row: 1; }
+  #processConfigDialog .process-config-advanced summary small { display: none; }
+  body.theme-xports #processConfigDialog .process-preset-bar { grid-template-columns: 1fr 1fr; }
+  #processConfigDialog .process-preset-bar label, #processConfigDialog .process-preset-bar input { grid-column: 1 / -1; }
+  #processConfigDialog .process-config-actions { flex-wrap: wrap; }
+  #processConfigDialog .process-config-actions > #resetProcessConfig { flex: 1 1 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.theme-xports #processConfigDialog .process-config-dialog { scroll-behavior: auto; }
+  #processConfigDialog .process-config-advanced summary::after { transition: none; }
+}

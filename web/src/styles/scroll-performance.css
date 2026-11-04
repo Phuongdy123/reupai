@@ -1,0 +1,27 @@
+/* Keep user-driven scrolling on the browser's native, refresh-synced path. */
+html,
+body {
+  scroll-behavior: auto;
+}
+
+/* Large translucent layers force expensive full-screen repaints while scrolling. */
+.theme-xports .topbar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.theme-xports #processConfigDialog::backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  * {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

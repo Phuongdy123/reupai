@@ -5,10 +5,10 @@ import { AppShell } from "./app-shell";
 import { EngineProvider } from "./engine-provider";
 import { FeedbackProvider } from "./feedback-provider";
 
-const PUBLIC_ROUTES = new Set(["/", "/sign-in", "/sign-up", "/pending"]);
+const PUBLIC_ROUTES = new Set(["/", "/sign-in", "/sign-up", "/pending", "/plans", "/terms", "/privacy"]);
 
 export function SiteFrame({ children }) {
   const pathname = usePathname();
-  if (PUBLIC_ROUTES.has(pathname) || pathname.startsWith("/auth/")) return <FeedbackProvider>{children}</FeedbackProvider>;
+  if (PUBLIC_ROUTES.has(pathname) || pathname.startsWith("/auth/") || pathname.startsWith("/giai-phap")) return <FeedbackProvider>{children}</FeedbackProvider>;
   return <FeedbackProvider><EngineProvider><AppShell>{children}</AppShell></EngineProvider></FeedbackProvider>;
 }

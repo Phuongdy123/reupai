@@ -101,6 +101,17 @@ body.theme-xports {
     transform: skewY(-35deg);
 }
 
+.theme-xports .sidebar .brand-mark {
+    overflow: hidden;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    box-shadow: none;
+}
+
+.theme-xports .sidebar .brand-mark::after { display: none; }
+.theme-xports .sidebar .brand-mark img { width: 100%; height: 100%; object-fit: cover; }
+
 .theme-xports .brand strong {
     font-size: 19px;
     font-weight: 900;

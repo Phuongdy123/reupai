@@ -4,7 +4,20 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEngine } from "./engine-provider";
 import { Icon } from "./icon";
-import { ACTIVE_JOBS, EngineGate, ErrorMessage, HistoryTable, JOB_LABELS, Loading, jobVideoId, modeLabel, numberText, progressValue, stageLabel } from "./library-ui";
+import { WorkspaceAssistant } from "./workspace-assistant";
+import { planName, quotaText } from "../lib/plan-display";
+import { ACTIVE_JOBS, ErrorMessage, JOB_LABELS, VideoCover, jobVideoId, modeLabel, numberText, outputPath, progressValue, sourcePath, stageLabel } from "./library-ui";
+
+function recentCards(items) {
+  const seen = new Set();
+  return items.filter((job) => {
+    const id = jobVideoId(job);
+    const key = `${id}:${job.mode || "subtitle"}`;
+    if (!id || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
 
 export function Dashboard() {
   const { status, client, connect, check } = useEngine();
@@ -12,6 +25,8 @@ export function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [error, setError] = useState(null);
   const [stopping, setStopping] = useState(null);
+  const [recentMedia, setRecentMedia] = useState({});
+  const [billing, setBilling] = useState(null);
   const jobsRequest = useRef(false);
   const dashboardRequest = useRef(false);
   const loadJobs = useCallback(async () => {
@@ -33,6 +48,11 @@ export function Dashboard() {
   }, [client, status]);
   useEffect(() => { load(); loadJobs(); }, [load, loadJobs]);
   useEffect(() => {
+    let active = true;
+    fetch("/api/billing/me", { cache: "no-store" }).then((response) => response.json()).then((value) => { if (active) setBilling(value); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
     if (status !== "connected") return undefined;
     const pollJobs = () => { if (document.visibilityState === "visible") loadJobs(); };
     const pollDashboard = () => { if (document.visibilityState === "visible") load(); };
@@ -42,6 +62,29 @@ export function Dashboard() {
     document.addEventListener("visibilitychange", onVisible);
     return () => { window.clearInterval(jobTimer); window.clearInterval(dataTimer); document.removeEventListener("visibilitychange", onVisible); };
   }, [load, loadJobs, status]);
+  const recentIds = recentCards(data?.recent_jobs || []).map(jobVideoId).join(",");
+  useEffect(() => {
+    if (status !== "connected" || !recentIds) return undefined;
+    let active = true;
+    Promise.allSettled([client.json("/api/library/downloads"), client.json("/api/library/outputs")]).then(([downloadResult, outputResult]) => {
+      if (!active) return;
+      const downloads = downloadResult.status === "fulfilled" ? downloadResult.value.videos || [] : [];
+      const outputs = outputResult.status === "fulfilled" ? outputResult.value.outputs || [] : [];
+      const wanted = new Set(recentIds.split(","));
+      const media = {};
+      for (const item of [...downloads, ...outputs]) {
+        if (!wanted.has(item.video_id)) continue;
+        const previous = media[item.video_id] || {};
+        media[item.video_id] = {
+          title: previous.title || (item.title !== item.video_id ? item.title : ""),
+          cover_url: previous.cover_url || item.cover_url || "",
+          previewPath: previous.previewPath || (item.mode ? outputPath(item) : sourcePath(item)),
+        };
+      }
+      setRecentMedia(media);
+    });
+    return () => { active = false; };
+  }, [client, recentIds, status]);
   const stopJob = async (job) => {
     const id = jobVideoId(job);
     if (!id) return;
@@ -53,20 +96,39 @@ export function Dashboard() {
     } catch (requestError) { setError(requestError.message || "Không thể dừng job."); }
     finally { setStopping(null); }
   };
-  if (status !== "connected") return <EngineGate status={status} connect={connect} check={check} title="Dashboard" />;
-  const stats = data?.stats || {};
-  return <>
-    <ErrorMessage error={error} retry={load} />
-    {!data && !error && <Loading />}
-    <div className="stats-grid">{[
-      ["play", "Video trong DB", stats.total_videos], ["download", "Đã tải", stats.downloaded], ["spark", "Thành phẩm", stats.outputs], ["settings", "Đang xử lý", jobs.length],
-    ].map(([icon, label, value]) => <article className="stat-card" key={label}><span><Icon name={icon} size={22} /></span><small>{label}</small><strong>{value == null ? "—" : numberText(value)}</strong></article>)}</div>
-    <section className="panel"><div className="panel-head"><div><h2>Đang xử lý realtime</h2><p>Tự cập nhật tiến độ mỗi 2 giây.</p></div><span className="status processing">{jobs.length} job</span></div>
-      {jobs.length ? jobs.map((job) => <article className="live-job" key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}`}><div className="live-job-head"><div><strong>{jobVideoId(job)}</strong><span>{modeLabel(job.mode)} · {job.channel_key}</span></div><span className={`status ${job.status}`}>{JOB_LABELS[job.status] || job.status}</span></div><div className="live-job-stage"><span>{stageLabel(job.stage)}</span><strong>{progressValue(job.progress)}%</strong></div><div className="live-progress"><div className="live-progress-bar" style={{ width: `${progressValue(job.progress)}%` }} /></div><div className="library-actions" style={{ marginTop: 10 }}><Link href={sourceHrefForJob(job)} className="text-link">Chi tiết video</Link>{ACTIVE_JOBS.has(job.status) && <button className="btn danger" disabled={stopping === jobVideoId(job)} onClick={() => stopJob(job)}>{stopping === jobVideoId(job) ? "Đang dừng…" : "Dừng xử lý"}</button>}</div></article>) : <div className="empty-state compact">Hiện không có pipeline nào đang chạy.</div>}
+  const stats = status === "connected" ? data?.stats || {} : {};
+  return <div className="dashboard-workspace">
+    <section className="dashboard-welcome">
+      <div><span className="workspace-eyebrow">KHÔNG GIAN SÁNG TẠO</span><h2>Từ ý tưởng đến <span>video của bạn.</span></h2><p>Tạo phụ đề, thêm giọng đọc và hoàn thiện câu chuyện tiếp theo.</p></div>
+      <Link className="btn primary dashboard-create" href="/sources"><Icon name="plus" size={18} /> Tạo video mới</Link>
     </section>
-    <div className="dashboard-grid"><section className="panel"><div className="panel-head"><div><h2>Tình trạng hệ thống</h2><p>Dữ liệu local từ SQLite và thư viện file.</p></div><button className="btn secondary" onClick={() => { load(); loadJobs(); }}><Icon name="refresh" size={15} />Làm mới</button></div><div className="status-list"><div><span>Nguồn đang bật</span><strong>{stats.total_sources == null ? "—" : numberText(stats.total_sources)}</strong></div><div><span>Job hoàn tất</span><strong>{stats.completed_jobs == null ? "—" : numberText(stats.completed_jobs)}</strong></div><div><span>Job lỗi</span><strong className="danger-text">{stats.failed_jobs == null ? "—" : numberText(stats.failed_jobs)}</strong></div><div><span>Dung lượng được index</span><strong>{stats.storage || "—"}</strong></div></div></section>
-      <section className="panel"><div className="panel-head"><div><h2>Thao tác nhanh</h2><p>Đi tới khu vực cần làm việc.</p></div></div><div className="quick-actions">{[["/sources", "play", "Lấy video nguồn", "Bilibili / Douyin → Vietsub / Voice"], ["/downloads", "download", "Video đã tải", "Quản lý video nguồn trên máy"], ["/outputs", "spark", "Thành phẩm", "Xem và tải video hoàn tất"]].map(([href, icon, label, description]) => <Link className="quick-card" href={href} key={href}><span><Icon name={icon} size={22} /></span><strong>{label}</strong><small>{description}</small></Link>)}</div></section></div>
-    <section className="panel"><div className="panel-head"><div><h2>Job gần đây</h2><p>Lịch sử mới nhất trong database.</p></div><Link className="text-link" href="/history">Xem tất cả →</Link></div>{data?.recent_jobs?.length ? <HistoryTable items={data.recent_jobs} onStop={stopJob} stopping={stopping} /> : <div className="empty-state">Chưa có job nào. Chạy Vietsub hoặc Voice ở “Nguồn video” để tạo job đầu tiên.</div>}</section>
-  </>;
+    <section className="dashboard-overview" aria-label="Tổng quan công việc">
+      <div className="dashboard-overview-grid">{[
+        ["play", "Video nguồn", stats.total_videos], ["download", "Đã tải", stats.downloaded], ["spark", "Thành phẩm", stats.outputs], ["settings", "Đang xử lý", status === "connected" ? jobs.length : null],
+      ].map(([icon, label, value]) => <article className="dashboard-overview-card" key={label}><span><Icon name={icon} size={18} /></span><div><small>{label}</small><strong>{value == null ? "—" : numberText(value)}</strong></div></article>)}</div>
+      <div className={`dashboard-billing-card plan-${billing?.plan || "free"}`}><div><strong className="dashboard-plan-name">{planName(billing)}{billing?.plan === "pro" && <span className="dashboard-plan-badge pro" aria-label="Gói Pro">✦ PRO</span>}{billing?.plan === "free" && <span className="dashboard-plan-badge free" aria-label="Gói Free">✦ FREE</span>}</strong><span>{quotaText(billing)}</span></div><Link href="/plans">Quản lý gói <span aria-hidden="true">↗</span></Link></div>
+      {status !== "connected" && <div className="dashboard-overview-alert"><Icon name="desktop" size={20} /><span><strong>Kết nối để bắt đầu tạo video</strong><small>Mở Local Engine trên máy để tải và xử lý video của bạn.</small></span><div className="dashboard-engine-actions"><Link href="/local-engine">Hướng dẫn</Link><button type="button" disabled={status === "checking" || status === "authorizing"} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{status === "checking" || status === "authorizing" ? "Đang kiểm tra…" : "Kết nối lại"}</button></div></div>}
+      {status === "connected" && jobs.length > 0 && <div className="dashboard-active-jobs">{jobs.slice(0, 2).map((job) => <div className="dashboard-active-job" key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}`}><div><strong>{jobVideoId(job)}</strong><small>{stageLabel(job.stage)} · {modeLabel(job.mode)}</small></div><span>{progressValue(job.progress)}%</span><div className="dashboard-active-track"><i style={{ width: `${progressValue(job.progress)}%` }} /></div>{ACTIVE_JOBS.has(job.status) && <button type="button" disabled={stopping === jobVideoId(job)} onClick={() => stopJob(job)}>{stopping === jobVideoId(job) ? "Đang dừng…" : "Dừng"}</button>}</div>)}{jobs.length > 2 && <Link href="/history">Xem thêm {jobs.length - 2} job →</Link>}</div>}
+    </section>
+    <WorkspaceAssistant client={client} connected={status === "connected"} check={check} />
+    <DashboardRecentJobs client={client} items={status === "connected" ? data?.recent_jobs || [] : []} media={recentMedia} loading={status === "connected" && !data && !error} />
+    <DashboardSuggestions />
+    {status === "connected" && <ErrorMessage error={error} retry={load} />}
+  </div>;
+}
+function DashboardSuggestions() {
+  const links = [["/sources", "Lồng tiếng AI", "Tạo bản Voice tự nhiên", "art-0"], ["/sources", "Vietsub video", "Dịch và tạo phụ đề", "art-1"], ["/sources", "Chọn giọng đọc", "Xử lý video bằng AI", "art-2"], ["/outputs", "Xem thành phẩm", "Mở và tải kết quả", "art-3"]];
+  return <section className="dashboard-shortcuts" aria-label="Gợi ý bắt đầu"><div className="dashboard-section-title"><h2>Có thể bạn muốn thử</h2><Link href="/sources">Xem nguồn video →</Link></div><div className="dashboard-shortcut-grid">{links.map(([href, title, description, art]) => <Link className="dashboard-shortcut-card dashboard-image-card" href={href} key={art}><span className={`dashboard-feature-art ${art}`} aria-hidden="true" /><span className="dashboard-feature-copy"><strong>{title}</strong><small>{description}</small></span><span className="dashboard-shortcut-arrow">↗</span></Link>)}</div></section>;
+}
+function DashboardRecentJobs({ client, items, media, loading }) {
+  const cards = recentCards(items);
+  return <section className="dashboard-recents" aria-label="Công việc gần đây">
+    <div className="dashboard-section-title"><h2>Lịch sử gần đây</h2><Link href="/history">Xem tất cả →</Link></div>
+    {loading ? <div className="dashboard-recent-grid" role="status" aria-label="Đang tải video gần đây">{[0, 1, 2, 3].map((item) => <div key={item} className="workspace-skeleton-card" aria-hidden="true"><div /><span /><span /></div>)}</div> : cards.length ? <div className="dashboard-recent-grid">{cards.map((job, index) => <Link className="dashboard-recent-card" href={sourceHrefForJob(job)} key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}-${index}`}>
+      <div className={`dashboard-recent-art art-${index % 4}`}>{media[jobVideoId(job)]?.cover_url || media[jobVideoId(job)]?.previewPath ? <VideoCover client={client} video={{ ...job, ...media[jobVideoId(job)] }} previewPath={media[jobVideoId(job)]?.previewPath} /> : <Icon name={job.mode === "voiceover" ? "spark" : "play"} size={34} />}<span>{modeLabel(job.mode)}</span></div>
+      <strong>{media[jobVideoId(job)]?.title || job.title || job.video_title || jobVideoId(job) || "Video của bạn"}</strong>
+      <small>{stageLabel(job.stage)} · {JOB_LABELS[job.status] || job.status || "Đang chờ"}</small>
+    </Link>)}</div> : <div className="dashboard-recent-empty"><span><Icon name="play" size={27} /></span><div><strong>{loading ? "Đang tải công việc…" : "Chưa có video gần đây"}</strong><p>{loading ? "ReupAI đang đọc dữ liệu trên máy của bạn." : "Dán link video và tạo Vietsub hoặc Voice để bắt đầu."}</p></div><Link href="/sources">Tạo video đầu tiên →</Link></div>}
+  </section>;
 }
 function sourceHrefForJob(job) { return `/sources?${new URLSearchParams({ video: jobVideoId(job), mode: job.mode || "subtitle" })}`; }

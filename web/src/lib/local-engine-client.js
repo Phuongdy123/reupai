@@ -164,7 +164,7 @@ export class LocalEngineClient {
         throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
       }
       let status = await this.request("/api/status", { cache: "no-store" });
-      if (status.status === 401 && await this.refreshSession()) {
+      if (status.status === 401 && !this.grant && await this.requestDirectAuthorization()) {
         status = await this.request("/api/status", { cache: "no-store" });
       }
       if (status.status === 401) {
@@ -177,30 +177,35 @@ export class LocalEngineClient {
     } catch (error) {
       if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
       else if (error.code === "engine_update_required") this.emit("update_required", error);
-      else this.emit("error", error);
+      else this.emit(error.status === 403 ? "permission_denied" : "error", error);
       return false;
     }
+  }
+
+  async requestDirectAuthorization() {
+    const response = await fetchWithTimeout(`${this.baseUrl}/api/authorize/connect`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_origin: window.location.origin }),
+      timeoutMs: 8000,
+    });
+    if (response.status === 404) {
+      throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
+    }
+    if (!response.ok) throw await responseError(response, "Không thể cấp quyền Local Engine");
+    const data = await response.json();
+    this.setSessionToken(data.session_token);
+    this.setGrant(data.grant);
+    this.mediaTickets.clear();
+    this.mediaTicketRequests.clear();
+    return true;
   }
 
   async authorizeDirectly() {
     if (!isBrowser()) return false;
     this.emit("authorizing");
     try {
-      const response = await fetchWithTimeout(`${this.baseUrl}/api/authorize/connect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ client_origin: window.location.origin }),
-        timeoutMs: 8000,
-      });
-      if (response.status === 404) {
-        throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
-      }
-      if (!response.ok) throw await responseError(response, "Không thể cấp quyền Local Engine");
-      const data = await response.json();
-      this.setSessionToken(data.session_token);
-      this.setGrant(data.grant);
-      this.mediaTickets.clear();
-      this.mediaTicketRequests.clear();
+      await this.requestDirectAuthorization();
       return await this.check();
     } catch (error) {
       if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);

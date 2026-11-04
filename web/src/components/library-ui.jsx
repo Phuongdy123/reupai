@@ -139,11 +139,24 @@ export function Loading({ label = "Đang tải dữ liệu local" }) {
   return <div className="empty-state compact" role="status"><span className="spinner" /> Vui lòng chờ · {label}</div>;
 }
 export function Pager({ page, total, pageSize, onChange }) {
+  const pagerRef = useRef(null);
   const pages = Math.ceil(total / pageSize);
   if (pages < 2) return null;
   const numbers = new Set([1, pages, page - 1, page, page + 1]);
   const visible = [...numbers].filter((n) => n > 0 && n <= pages).sort((a, b) => a - b);
-  return <nav className="bottom-pages" aria-label="Phân trang"><button className="bottom-page-btn" disabled={page === 1} onClick={() => onChange(page - 1)}>Trước</button>{visible.map((n, i) => <span key={n}>{i > 0 && n - visible[i - 1] > 1 && <span className="bottom-page-dots">…</span>}<button className={`bottom-page-btn ${page === n ? "active" : ""}`} aria-current={page === n ? "page" : undefined} onClick={() => onChange(n)}>{n}</button></span>)}<button className="bottom-page-btn" disabled={page === pages} onClick={() => onChange(page + 1)}>Sau</button></nav>;
+  const goToPage = (nextPage) => {
+    if (nextPage === page) return;
+    onChange(nextPage);
+    const panel = pagerRef.current?.closest(".panel");
+    const target = panel?.querySelector(".control-bar, .panel-head") || pagerRef.current;
+    if (target) {
+      requestAnimationFrame(() => target.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      }));
+    }
+  };
+  return <nav ref={pagerRef} className="bottom-pages" aria-label="Phân trang"><button type="button" className="bottom-page-btn" disabled={page === 1} onClick={() => goToPage(page - 1)}>Trước</button>{visible.map((n, i) => <span key={n}>{i > 0 && n - visible[i - 1] > 1 && <span className="bottom-page-dots">…</span>}<button type="button" className={`bottom-page-btn ${page === n ? "active" : ""}`} aria-label={`Trang ${n}`} aria-current={page === n ? "page" : undefined} onClick={() => goToPage(n)}>{n}</button></span>)}<button type="button" className="bottom-page-btn" disabled={page === pages} onClick={() => goToPage(page + 1)}>Sau</button></nav>;
 }
 export function VideoCover({ client, video, children, previewPath }) {
   const coverRef = useRef(null);

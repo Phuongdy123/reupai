@@ -18,7 +18,7 @@ export function createServerSupabaseClient() {
 
 export function createAdminSupabaseClient() {
   const { url } = requireSupabaseConfig();
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) throw new Error("Quản trị tài khoản chưa được cấu hình trên server.");
-  return createServiceClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const secretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secretKey) throw new Error("Quản trị tài khoản chưa được cấu hình trên server.");
+  return createServiceClient(url, secretKey, { auth: { autoRefreshToken: false, persistSession: false } });
 }

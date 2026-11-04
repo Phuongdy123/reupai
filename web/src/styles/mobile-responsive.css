@@ -13,11 +13,17 @@
         min-width: 0;
     }
 
+    .theme-xports .app-shell {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: max-content minmax(0, 1fr);
+    }
+
     /* Keep navigation reachable without spending half the viewport on it. */
     .theme-xports .sidebar {
         position: sticky;
         top: 0;
         z-index: 40;
+        min-width: 0;
         padding: 8px 11px 9px;
         background: rgba(11, 15, 23, .97);
         backdrop-filter: blur(14px);
