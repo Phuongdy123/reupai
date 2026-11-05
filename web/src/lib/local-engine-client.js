@@ -51,6 +51,7 @@ export class LocalEngineClient {
     this.baseUrl = baseUrl.replace(/\/$/, "");
     this.listeners = new Set();
     this.connection = { status: "disconnected", error: null };
+    this.health = null;
     this.mediaTickets = new Map();
     this.mediaTicketRequests = new Map();
     this.refreshingSession = null;
@@ -78,7 +79,7 @@ export class LocalEngineClient {
   }
 
   emit(status, error = null) {
-    this.connection = { status, error };
+    this.connection = { status, error, version: this.health?.version || null, capabilities: this.health?.capabilities || {} };
     this.listeners.forEach((listener) => listener(this.connection));
     if (isBrowser()) window.dispatchEvent(new CustomEvent("reupai:connection", { detail: this.connection }));
   }
@@ -163,6 +164,7 @@ export class LocalEngineClient {
       const healthResponse = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: 8000 });
       if (!healthResponse.ok) throw await responseError(healthResponse, "Không thể kiểm tra Local Engine");
       const health = await healthResponse.json().catch(() => ({}));
+      this.health = health;
       if (!health?.capabilities?.direct_authorization) {
         throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
       }

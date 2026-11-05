@@ -1,5 +1,5 @@
 #define MyAppName "ReupAI Local Engine"
-#define MyAppVersion "0.2.16"
+#define MyAppVersion "0.2.35"
 #define MyAppPublisher "ReupAI"
 #define MyAppURL "https://www.reupai.cloud"
 #define MyAppExeName "ReupAI.exe"
@@ -84,6 +84,8 @@ begin
     11: Result := 'Không đọc được trạng thái Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
     12: Result := 'Không tìm thấy cửa sổ điều khiển Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
     13: Result := 'Local Engine chưa thoát sau 20 giây. Hãy đóng ứng dụng rồi cài đặt lại.';
+    14: Result := 'Bản Local Engine đang chạy chưa báo đủ trạng thái công việc. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
+    15: Result := 'Không xác nhận được tiến trình Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
   else
     Result := 'Không thể đóng Local Engine để cập nhật (mã ' + IntToStr(ExitCode) + '). Hãy thoát ứng dụng rồi cài đặt lại.';
   end;

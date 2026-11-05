@@ -9,7 +9,7 @@ function configured() {
 
 export async function updateSession(request) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/terms" || pathname === "/privacy" || pathname.startsWith("/giai-phap")) {
+  if (pathname === "/terms" || pathname === "/privacy" || pathname === "/local-engine" || pathname.startsWith("/giai-phap")) {
     return NextResponse.next({ request });
   }
   if (!configured()) {

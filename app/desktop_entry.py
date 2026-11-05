@@ -379,6 +379,7 @@ def run_desktop() -> int:
     menu = Menu(
         MenuItem("Mở ReupAI", open_web, default=True),
         MenuItem("Trạng thái Local Engine", open_engine),
+        MenuItem("Kiểm tra bản cập nhật", lambda *_: webbrowser.open("https://www.reupai.cloud/local-engine?updates=1")),
         MenuItem("Mở thư mục log", open_logs),
         Menu.SEPARATOR,
         MenuItem("Khởi động lại", restart_app),

@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$Incremental
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,8 +13,8 @@ if (-not (Test-Path -LiteralPath $Python)) {
 $EngineSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "app\local_engine.py") -Raw
 $InstallerSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "packaging\ReupAI.iss") -Raw
 $VersionSource = Get-Content -LiteralPath (Join-Path $ProjectRoot "packaging\version_info.txt") -Raw
-$EngineVersion = [regex]::Match($EngineSource, '(?m)^ENGINE_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$').Groups[1].Value
-$InstallerVersion = [regex]::Match($InstallerSource, '(?m)^#define MyAppVersion "([0-9]+\.[0-9]+\.[0-9]+)"$').Groups[1].Value
+$EngineVersion = [regex]::Match($EngineSource, '(?m)^ENGINE_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"\r?$').Groups[1].Value
+$InstallerVersion = [regex]::Match($InstallerSource, '(?m)^#define MyAppVersion "([0-9]+\.[0-9]+\.[0-9]+)"\r?$').Groups[1].Value
 if (-not $EngineVersion -or $EngineVersion -ne $InstallerVersion) {
     throw "Phiên bản Engine và installer không khớp: '$EngineVersion' / '$InstallerVersion'."
 }
@@ -37,13 +38,16 @@ if ($LASTEXITCODE -ne 0) { throw "Không tạo được icon Windows." }
 
 Push-Location $ProjectRoot
 try {
-    & $Python -m PyInstaller --noconfirm --clean "packaging\ReupAI.spec"
+    $PyInstallerArgs = @('-m', 'PyInstaller', '--noconfirm')
+    if (-not $Incremental) { $PyInstallerArgs += '--clean' }
+    & $Python @PyInstallerArgs "packaging\ReupAI.spec"
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build thất bại." }
 
     $Exe = Join-Path $ProjectRoot "dist\ReupAI\ReupAI.exe"
     if (-not (Test-Path -LiteralPath $Exe)) { throw "Build không tạo ReupAI.exe." }
     $RequiredBundleFiles = @(
         "_internal\app\assets\lat_chuyen_logo.png",
+        "_internal\app\assets\update-installer.ps1",
         "_internal\bin\ffmpeg.exe",
         "_internal\bin\ffprobe.exe"
     )

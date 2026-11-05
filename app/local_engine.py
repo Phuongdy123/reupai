@@ -13,6 +13,7 @@ import os
 import time
 import hashlib
 import json
+import threading
 from pathlib import Path
 from urllib.parse import quote, urlsplit, parse_qs, unquote
 from types import SimpleNamespace
@@ -30,7 +31,7 @@ os.environ.setdefault("REUP_LOCAL_ENGINE", "1")
 import uvicorn
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 
 from runtime_paths import (
     get_downloads_dir,
@@ -101,8 +102,9 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.16"
+ENGINE_VERSION = "0.2.35"
 ENGINE_CAPABILITIES = {
+    "verified_updates": True,
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
@@ -219,7 +221,43 @@ def _issue_browser_authorization(origin: str) -> dict[str, object]:
     }
 
 
+_update_manager = None
+_update_init_lock = threading.Lock()
+
+
+def get_update_manager():
+    global _update_manager
+    with _update_init_lock:
+        if _update_manager is None:
+            from services.engine_updates import UpdateManager
+            from services.engine_runtime import bundled_resource
+            _update_manager = UpdateManager(
+                ENGINE_VERSION, get_runtime_root() / "updates",
+                lambda: bool(list_active_jobs(limit=1) or active_download_count()),
+                install_dir=Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None,
+                helper=bundled_resource("app", "assets", "update-installer.ps1"),
+            )
+    return _update_manager
+
+
 app = FastAPI(title="ReupAI Local Engine", version=ENGINE_VERSION)
+@app.middleware("http")
+async def update_work_gate(request: Request, call_next):
+    path = request.url.path
+    is_work = path.startswith("/api/") and not (
+        path in {"/api/health", "/api/status"} or path.startswith("/api/updates")
+    )
+    if not is_work:
+        return await call_next(request)
+    updater = get_update_manager()
+    if not updater.enter_work():
+        return JSONResponse({"detail": "ReupAI đang cài bản cập nhật. Hãy chờ kết nối lại."}, status_code=503)
+    try:
+        return await call_next(request)
+    finally:
+        updater.leave_work()
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -241,6 +279,7 @@ def local_engine_startup():
     # has to be registered on the Local Engine app itself.
     acquire_instance_lock()
     ensure_job_schema()
+    threading.Thread(target=get_update_manager().check, daemon=True, name="reupai-release-check").start()
     interrupted = recover_interrupted_jobs()
     if interrupted:
         print(f"[Local Engine] marked interrupted jobs: {interrupted}")
@@ -248,6 +287,8 @@ def local_engine_startup():
 
 @app.on_event("shutdown")
 def local_engine_shutdown():
+    if _update_manager is not None:
+        _update_manager.cancelled.set()
     release_instance_lock()
 
 
@@ -447,6 +488,7 @@ def status(_: bool = Depends(require_token)):
     usage = shutil.disk_usage(get_runtime_root())
     return {
         "engine_running": True,
+        "pid": os.getpid(),
         "version": ENGINE_VERSION,
         "capabilities": ENGINE_CAPABILITIES,
         "active_jobs": len(list_active_jobs(limit=20)),
@@ -458,6 +500,33 @@ def status(_: bool = Depends(require_token)):
             "free_space": usage.free,
         },
     }
+
+
+@app.get("/api/updates")
+def update_status(_: bool = Depends(require_token)):
+    return get_update_manager().snapshot()
+
+
+@app.post("/api/updates/check")
+def update_check(_: bool = Depends(require_token)):
+    threading.Thread(target=get_update_manager().check, daemon=True).start()
+    return get_update_manager().snapshot()
+
+
+@app.post("/api/updates/start")
+def update_start(_: bool = Depends(require_token)):
+    try:
+        return get_update_manager().start()
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.post("/api/updates/cancel")
+def update_cancel(_: bool = Depends(require_token)):
+    try:
+        return get_update_manager().cancel()
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @app.get("/api/diagnostics")

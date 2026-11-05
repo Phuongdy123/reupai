@@ -40,6 +40,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
         if path=='/fixture': return self.send(FIXTURE.encode(),'text/html')
+        if path == '/api/engine/release':
+            return self.send(json.dumps({'release': self.server.engine_release} if self.server.engine_release else {'available':False}).encode(), 'application/json')
         if path == '/api/billing/me':
             self.server.billing_requests += 1
             return self.send(json.dumps({'error':'Fixture unavailable'} if self.server.billing_fail else self.server.billing_response).encode(),'application/json',503 if self.server.billing_fail else 200)
@@ -67,6 +69,7 @@ async def main():
     OUT.mkdir(parents=True,exist_ok=True)
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
     server.billing_requests=0; server.billing_fail=False
+    server.engine_release=None
     server.billing_response={'configured':True,'authenticated':True,'paymentsEnabled':True,'plan':'admin','unlimited':True,'proPrice':149000}
     threading.Thread(target=server.serve_forever,daemon=True).start()
     base=f'http://127.0.0.1:{server.server_port}'
@@ -200,6 +203,40 @@ async def main():
             await page.wait_for_timeout(180)
             assert await page.evaluate('processCount')==2
             checks.append('closing during file reading does not start a late job')
+            server.engine_release={'version':'0.2.36','size':450000000}
+            await page.goto(base+'/app',wait_until='networkidle')
+            await page.evaluate("""()=>{const client=window.reupEngineClient;
+                client.check=async()=>true;client.json=async()=>({});
+                client.request=async()=>new Response('{}',{headers:{'Content-Type':'application/json'}});
+                client.health={version:'0.2.34',capabilities:{}};client.emit('connected');}""")
+            await expect(page.locator('.engine-update-notice a')).to_have_attribute('href','/api/engine/download')
+            await expect(page.locator('.engine-update-notice')).to_contain_text('0.2.34')
+            checks.append('old Engine gets the stable installer download instead of an unsupported update call')
+            await page.evaluate("""()=>{
+              const client=window.reupEngineClient;
+              client.check=async()=>true;
+              client.request=async()=>new Response('{}',{headers:{'Content-Type':'application/json'}});
+              window.updateStarts=0;window.fixtureUpdate={state:'available'};
+              client.json=async(path,options)=>{
+                if(path==='/api/updates/start'){window.updateStarts++;window.fixtureUpdate={state:'waiting',progress:100};return window.fixtureUpdate;}
+                if(path==='/api/updates/cancel'){window.fixtureUpdate={state:'cancelled'};return window.fixtureUpdate;}
+                if(path==='/api/updates')return window.fixtureUpdate;
+                return {};
+              };
+              client.health={version:'0.2.35',capabilities:{verified_updates:true}};client.emit('connected');
+            }""")
+            await page.locator('.engine-update-notice button',has_text='Cập nhật ngay').click()
+            await expect(page.locator('.engine-update-notice')).to_contain_text('Chờ công việc')
+            await expect(page.locator('.engine-update-notice button',has_text='Đang cập nhật')).to_be_disabled()
+            assert await page.evaluate('updateStarts')==1
+            await page.locator('.engine-update-notice button',has_text='Hủy').click()
+            await expect(page.locator('.engine-update-notice')).to_contain_text('Đã hủy')
+            await page.locator('.engine-update-notice button',has_text='Cập nhật ngay').click()
+            await page.evaluate("()=>{window.reupEngineClient.health.version='0.2.36';window.reupEngineClient.emit('connected');}")
+            await expect(page.locator('.engine-update-notice')).to_contain_text('Cập nhật thành công')
+            await page.locator('.engine-update-notice button',has_text='Đóng').click()
+            await expect(page.locator('.engine-update-notice')).to_have_count(0)
+            checks.append('new Engine update shows waiting, prevents repeated starts, supports cancellation and confirms reconnection')
             assert not errors,errors
             await browser.close()
     finally: server.shutdown()
