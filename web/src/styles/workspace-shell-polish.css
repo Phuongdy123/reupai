@@ -1,0 +1,249 @@
+/* Unified navigation controls: these are part of the shared workspace shell. */
+.theme-xports .sidebar-mobile-close,
+.theme-xports .sidebar-mobile-toggle,
+.theme-xports .sidebar-backdrop {
+  display: none;
+}
+
+.theme-xports .sidebar-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  margin: 12px 0 4px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #858e9d;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: color .16s ease, background-color .16s ease, border-color .16s ease;
+}
+
+.theme-xports .sidebar-collapse:hover {
+  border-color: rgba(148, 160, 181, .14);
+  color: #f1f3f6;
+  background: rgba(255, 255, 255, .045);
+}
+
+.theme-xports .app-shell.is-collapsed {
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.theme-xports .app-shell.is-collapsed .sidebar {
+  align-items: center;
+  padding-inline: 10px;
+}
+
+.theme-xports .app-shell.is-collapsed .brand {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.theme-xports .app-shell.is-collapsed .brand-copy,
+.theme-xports .app-shell.is-collapsed .nav-label,
+.theme-xports .app-shell.is-collapsed .nav-item > span:last-child,
+.theme-xports .app-shell.is-collapsed .sidebar-user-info,
+.theme-xports .app-shell.is-collapsed .logout-icon,
+.theme-xports .app-shell.is-collapsed .sidebar-collapse > span {
+  display: none;
+}
+
+.theme-xports .app-shell.is-collapsed .nav,
+.theme-xports .app-shell.is-collapsed .nav-group {
+  width: 100%;
+}
+
+.theme-xports .app-shell.is-collapsed .nav-group { gap: 5px; }
+.theme-xports .app-shell.is-collapsed .nav-item { justify-content: center; padding: 0; }
+.theme-xports .app-shell.is-collapsed .nav-item > span:first-child { width: 100%; }
+.theme-xports .app-shell.is-collapsed .sidebar-collapse { justify-content: center; padding: 0; }
+.theme-xports .app-shell.is-collapsed .sidebar-user { justify-content: center; padding-inline: 0; }
+
+.theme-xports .dashboard-workspace { width: min(100%, 1200px); }
+.theme-xports .dashboard-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 158px;
+  margin: 0 0 18px;
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid rgba(255, 74, 96, .24);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 92% 0%, rgba(186, 20, 46, .19), transparent 38%),
+    linear-gradient(125deg, rgba(20, 22, 29, .98), rgba(12, 14, 20, .98) 70%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .035), 0 15px 36px rgba(0, 0, 0, .18);
+}
+
+.theme-xports .dashboard-welcome > div { min-width: 0; }
+.theme-xports .dashboard-welcome .workspace-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ff7184;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: .14em;
+}
+.theme-xports .dashboard-welcome h2 {
+  margin: 10px 0 7px;
+  color: #f6f6f8;
+  font-size: clamp(25px, 3vw, 36px);
+  font-weight: 800;
+  letter-spacing: -.045em;
+  line-height: 1.12;
+}
+.theme-xports .dashboard-welcome h2 span { color: #ff4d66; }
+.theme-xports .dashboard-welcome p {
+  max-width: 60ch;
+  margin: 0;
+  color: #aeb4c0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.theme-xports .dashboard-create { flex: 0 0 auto; min-height: 44px; padding-inline: 17px; border-radius: 10px; }
+.theme-xports .dashboard-overview { margin-bottom: 20px; }
+.theme-xports .dashboard-billing-card { margin-top: 12px; }
+.theme-xports .dashboard-recents,
+.theme-xports .dashboard-shortcuts { margin-bottom: 27px; }
+
+@media (max-width: 760px) {
+  .theme-xports .app-shell,
+  .theme-xports .app-shell.is-collapsed {
+    display: block;
+    min-height: 100vh;
+  }
+
+  .theme-xports .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1002;
+    display: flex;
+    width: min(304px, 88vw);
+    height: 100dvh;
+    min-height: 0;
+    align-items: stretch;
+    padding: max(18px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    border-right: 1px solid rgba(255, 255, 255, .12);
+    box-shadow: 24px 0 70px rgba(0, 0, 0, .56);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform .2s ease, visibility .2s ease;
+    will-change: transform;
+  }
+
+  .theme-xports .app-shell.is-nav-open .sidebar {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .theme-xports .sidebar-mobile-close {
+    position: absolute;
+    top: max(12px, env(safe-area-inset-top));
+    right: 12px;
+    z-index: 2;
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid rgba(148, 160, 181, .22);
+    border-radius: 10px;
+    color: #d8dce4;
+    background: #171b25;
+    font: inherit;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .theme-xports .sidebar .brand { padding-right: 45px; }
+  .theme-xports .sidebar .nav {
+    display: flex;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    padding: 10px 2px 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .theme-xports .sidebar .nav-group { display: grid; width: 100%; gap: 4px; }
+  .theme-xports .app-shell.is-collapsed .sidebar .brand-copy { display: block; }
+  .theme-xports .app-shell.is-collapsed .sidebar .nav-label { display: block; }
+  .theme-xports .app-shell.is-collapsed .sidebar .nav-item > span:last-child { display: inline; }
+  .theme-xports .app-shell.is-collapsed .sidebar .sidebar-user-info { display: block; }
+  .theme-xports .app-shell.is-collapsed .sidebar .logout-icon { display: inline-flex; }
+  .theme-xports .sidebar .nav-label { display: block; padding: 2px 12px 5px; }
+  .theme-xports .sidebar .nav-item { flex: 0 0 auto; justify-content: flex-start; min-height: 44px; white-space: normal; }
+  .theme-xports .sidebar .sidebar-user { display: flex; flex: 0 0 auto; }
+  .theme-xports .sidebar .sidebar-user-info { display: block; }
+  .theme-xports .sidebar .logout-icon { display: inline-flex; }
+  .theme-xports .sidebar-collapse { display: none; }
+
+  .theme-xports .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1001;
+    display: block;
+    border: 0;
+    background: rgba(2, 4, 8, .7);
+    backdrop-filter: blur(3px);
+    animation: workspace-backdrop-in .18s ease-out both;
+  }
+
+  .theme-xports .sidebar-mobile-toggle {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    place-items: center;
+    border: 1px solid rgba(148, 160, 181, .19);
+    border-radius: 10px;
+    color: #dce0e8;
+    background: #151922;
+    cursor: pointer;
+  }
+
+  .theme-xports .main { min-height: 100vh; padding-inline: 18px; }
+  .theme-xports .topbar { align-items: center; gap: 12px; }
+  .theme-xports .workspace-page-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .theme-xports .workspace-page-heading > div { min-width: 0; }
+  .theme-xports .workspace-page-heading h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .theme-xports .workspace-account-actions { width: auto; flex-wrap: nowrap; }
+  .theme-xports .app-shell.is-dashboard .topbar { display: flex; min-height: 62px; padding-block: 9px; }
+  .theme-xports .app-shell.is-dashboard .workspace-page-heading { flex: 0 0 auto; }
+  .theme-xports .app-shell.is-dashboard .workspace-account-actions { flex: 1 1 auto; justify-content: flex-end; }
+  .theme-xports .dashboard-workspace { width: 100%; }
+  .theme-xports .dashboard-welcome { align-items: flex-start; flex-direction: column; gap: 17px; min-height: 0; padding: 20px; }
+  .theme-xports .dashboard-create { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 520px) {
+  .theme-xports .main { padding-inline: 13px; }
+  .theme-xports .app-shell.is-dashboard .workspace-account-actions { gap: 5px; }
+  .theme-xports .app-shell.is-dashboard .quick-nav-trigger { width: 36px; min-height: 36px; justify-content: center; padding: 0; }
+  .theme-xports .app-shell.is-dashboard .topbar-avatar { width: 38px; height: 38px; }
+  .theme-xports .dashboard-welcome h2 { font-size: clamp(25px, 8vw, 32px); }
+  .theme-xports .dashboard-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@keyframes workspace-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-xports .sidebar,
+  .theme-xports .sidebar-collapse { transition: none; }
+  .theme-xports .sidebar-backdrop { animation: none; }
+}
