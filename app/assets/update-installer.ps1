@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$Installer,
     [Parameter(Mandatory=$true)][string]$InstallDir,
     [Parameter(Mandatory=$true)][string]$ExpectedHash,
@@ -7,7 +7,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 try {
-    if ((Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash -ine $ExpectedHash) {
+    $hashEngine = [Security.Cryptography.SHA256]::Create()
+    $inputStream = [IO.File]::OpenRead($Installer)
+    try { $actualHash = [BitConverter]::ToString($hashEngine.ComputeHash($inputStream)).Replace('-', '') }
+    finally { $inputStream.Dispose(); $hashEngine.Dispose() }
+    if ($actualHash -ine $ExpectedHash) {
         throw 'Bộ cài không khớp mã kiểm tra.'
     }
     $setupLog = Join-Path (Split-Path -Parent $ResultPath) 'install.log'
