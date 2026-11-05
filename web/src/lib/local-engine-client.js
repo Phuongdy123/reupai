@@ -20,15 +20,18 @@ function mapPath(path) {
 
 async function fetchWithTimeout(url, options = {}, fallbackTimeout = DEFAULT_REQUEST_TIMEOUT_MS) {
   const { timeoutMs, signal, ...fetchOptions } = options;
-  if (signal) return window.fetch(url, { ...fetchOptions, signal });
   const duration = Number(timeoutMs ?? fallbackTimeout);
-  if (!Number.isFinite(duration) || duration <= 0) return window.fetch(url, fetchOptions);
+  if (!Number.isFinite(duration) || duration <= 0) return window.fetch(url, { ...fetchOptions, signal });
   const controller = new AbortController();
+  const onAbort = () => controller.abort(signal.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
   const timer = window.setTimeout(() => controller.abort(), duration);
   try {
     return await window.fetch(url, { ...fetchOptions, signal: controller.signal });
   } finally {
     window.clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 

@@ -1,7 +1,10 @@
 // Generated from the mature local Sources UI by web/scripts/sync-source-ui.mjs.
 // All API and media transport is supplied by the shared LocalEngineClient.
+import { createSingleFlight } from "../lib/single-flight.js";
+
 export function startSourcesRuntime(environment) {
-const { document, window, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, fetch, history } = environment;
+const { document, window, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, fetch, history, signal } = environment;
+const runAction = createSingleFlight();
 let currentVideos = [];
 let currentSort = 'new';
 let currentPage = 1;
@@ -2042,7 +2045,11 @@ function buildCard(
 }
 
 
-async function downloadVideo(
+function downloadVideo(video, card) {
+    return runAction(`download:${video.video_id}`, () => performDownloadVideo(video, card));
+}
+
+async function performDownloadVideo(
     video,
     card
 ) {
@@ -2119,6 +2126,8 @@ async function downloadVideo(
             await response.blob()
         );
 
+        if (signal?.aborted) return;
+
         const objectUrl = (
             URL.createObjectURL(
                 blob
@@ -2189,22 +2198,28 @@ function processConfigDefaults() {
 }
 
 
-async function ensureProcessConfigDialog() {
-    const { createProcessConfigDialog } = await import('./process-config-dialog');
-    return createProcessConfigDialog({ document, uiIcon });
-}
-
-async function openProcessConfig(video, card, mode) {
-    const [{ openProcessConfig: openController }, dialogModule] = await Promise.all([
-        import('./process-config-controller'),
-        import('./process-config-dialog'),
-    ]);
-    return openController(video, card, mode, {
-        document, downloadVideo, formatDuration, formatVideoRatio, localStorage,
-        processConfigDefaults, processVideo, uiIcon, window,
-        ensureProcessConfigDialog: async () => dialogModule.createProcessConfigDialog({ document, uiIcon }),
+function openProcessConfig(video, card, mode) {
+    return runAction('open-config', async () => {
+        try {
+            const existing = document.getElementById('processConfigDialog');
+            if (existing?.open) { existing.focus(); return; }
+            const [{ openProcessConfig: openController }, dialogModule] = await Promise.all([
+                import('./process-config-controller'), import('./process-config-dialog'),
+            ]);
+            if (signal?.aborted || !card.isConnected) return;
+            return await openController(video, card, mode, {
+                document, downloadVideo, formatDuration, formatVideoRatio, localStorage,
+                processConfigDefaults, processVideo, uiIcon, window, runtimeSignal: signal,
+                ensureProcessConfigDialog: async () => dialogModule.createProcessConfigDialog({ document, uiIcon }),
+            });
+        } catch (error) {
+            if (!signal?.aborted) alert(error.message || 'Chưa mở được thiết lập. Hãy thử lại.');
+        }
     });
 }
+
+let processingDetailsPopup = null;
+let processingDetailsPopupCard = null;
 
 function ensureProcessDetailsPopup() {
 
@@ -2436,7 +2451,15 @@ function updateInlineProcessStatus(
 }
 
 
-async function processVideo(
+function processVideo(video, card, mode, config = {}) {
+    if (video.processing) return Promise.resolve();
+    // Downloading from the dialog can rebuild the cards underneath it.
+    const currentCard = document.querySelector(`[data-video-id="${CSS.escape(video.video_id)}"]`) || card;
+    if (signal?.aborted || !currentCard.isConnected) return Promise.resolve();
+    return runAction(`process:${video.video_id}`, () => performProcessVideo(video, currentCard, mode, config));
+}
+
+async function performProcessVideo(
     video,
     card,
     mode,
@@ -5655,7 +5678,7 @@ async function saveCurrentSource() {
             platform
         )
         || !isChannelSourceUrl(
-            url,
+            sourceUrl,
             platform
         )
     ) {

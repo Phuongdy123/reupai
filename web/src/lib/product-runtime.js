@@ -155,7 +155,7 @@ export async function mountProductRuntime(host, client, startRuntime) {
     host.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
   };
   try {
-    runtime = startRuntime({ document: scopedDocument, window: scopedWindow, localStorage, setTimeout: timed, clearTimeout: clearTimed, setInterval: (handler, delay) => { const id = nativeWindow.setInterval(() => { if (!disposed && nativeDocument.visibilityState === "visible") handler(); }, delay); intervals.add(id); return id; }, clearInterval: (id) => { nativeWindow.clearInterval(id); intervals.delete(id); }, fetch: facade.request, history: nativeWindow.history });
+    runtime = startRuntime({ signal: controller.signal, document: scopedDocument, window: scopedWindow, localStorage, setTimeout: timed, clearTimeout: clearTimed, setInterval: (handler, delay) => { const id = nativeWindow.setInterval(() => { if (!disposed && nativeDocument.visibilityState === "visible") handler(); }, delay); intervals.add(id); return id; }, clearInterval: (id) => { nativeWindow.clearInterval(id); intervals.delete(id); }, fetch: facade.request, history: nativeWindow.history });
     adapt(host);
     Promise.resolve(runtime.ready).then(() => {
       if (!disposed) host.dispatchEvent(new CustomEvent("product-runtime:ready"));

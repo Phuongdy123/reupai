@@ -1,4 +1,19 @@
 /* Unified navigation controls: these are part of the shared workspace shell. */
+.workspace-skip {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 2000;
+  padding: 12px 16px;
+  border: 1px solid #ff526e;
+  border-radius: 9px;
+  color: #fff;
+  background: #23141c;
+  text-decoration: none;
+  transform: translateY(-160%);
+}
+.workspace-skip:focus { transform: translateY(0); }
+
 .theme-xports .sidebar-mobile-close,
 .theme-xports .sidebar-mobile-toggle,
 .theme-xports .sidebar-backdrop {
@@ -115,7 +130,7 @@
 .theme-xports .dashboard-recents,
 .theme-xports .dashboard-shortcuts { margin-bottom: 27px; }
 
-@media (max-width: 760px) {
+@media (max-width: 940px) {
   .theme-xports .app-shell,
   .theme-xports .app-shell.is-collapsed {
     display: block;
@@ -145,6 +160,11 @@
     transform: translateX(0);
     visibility: visible;
   }
+  .theme-xports .app-shell.is-collapsed .sidebar { align-items: stretch; padding-inline: 14px; }
+  .theme-xports .app-shell.is-collapsed .sidebar .brand { justify-content: flex-start; padding-left: 9px; }
+  .theme-xports .app-shell.is-collapsed .sidebar .nav-item { justify-content: flex-start; padding-inline: 12px; }
+  .theme-xports .app-shell.is-collapsed .sidebar .nav-item > span:first-child { width: 21px; }
+  .theme-xports .app-shell.is-collapsed .sidebar .sidebar-user { justify-content: flex-start; }
 
   .theme-xports .sidebar-mobile-close {
     position: absolute;

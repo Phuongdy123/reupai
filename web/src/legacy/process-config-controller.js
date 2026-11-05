@@ -1,7 +1,13 @@
 // Loaded only when the user opens video processing settings.
 export async function openProcessConfig(video, card, mode, dependencies) {
-    const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window } = dependencies;
+    const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
     const dialog = await ensureProcessConfigDialog();
+    dialog._configAbort?.abort();
+    const lifetime = new AbortController();
+    dialog._configAbort = lifetime;
+    const signal = runtimeSignal ? AbortSignal.any([runtimeSignal, lifetime.signal]) : lifetime.signal;
+    const isCurrent = () => !signal.aborted && dialog.isConnected && dialog.open;
+    const requestJson = (path, options = {}) => window.reupEngineClient.json(path, { ...options, signal });
     const defaults = processConfigDefaults();
     dialog._presetDirtySections = new Set();
     dialog.dataset.presetApplying = '1';
@@ -145,7 +151,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             await downloadVideo(video, card);
             downloadButton.hidden = !!video.downloaded;
             if (!video.downloaded) return;
-            preview.src = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
+            if (!isCurrent()) return;
+            const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
+            if (!isCurrent()) return;
+            preview.src = sourceUrl;
             preview.load();
         } catch (error) {
             alert(error.message);
@@ -161,6 +170,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const canvas = dialog.querySelector('#processPreviewCanvas');
     const blurOverlay = dialog.querySelector('#processBlurPreviewOverlay');
     const autoBlurButton = dialog.querySelector('#processAutoBlurPreview');
+    autoBlurButton.disabled = false;
     const autoBlurStatus = dialog.querySelector('#processAutoBlurStatus');
     const pickButtons = [...dialog.querySelectorAll('.process-pick-btn')];
     const pickerToggle = dialog.querySelector('#toggleProcessPicker');
@@ -189,7 +199,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         canvas.style.visibility = '';
         drawSelection();
     };
-    dialog.onclose = stopBlurPreview;
+    dialog.onclose = () => {
+        if (dialog.open) return;
+        lifetime.abort();
+        dialog._assistantRequestSeq = (dialog._assistantRequestSeq || 0) + 1;
+        stopBlurPreview();
+        preview.pause();
+        preview.removeAttribute('src');
+        preview.load();
+    };
 
     const syncSelectionFromFields = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
@@ -296,7 +314,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             ? 'Đang bật kéo vùng. Bấm lại để xem video và dùng thanh điều khiển bình thường.'
             : 'Chọn loại vùng trước, sau đó bấm “Bật kéo vùng” nếu muốn kéo trên video.';
     };
-    pickerToggle?.addEventListener('click', () => setPickingEnabled(!pickingEnabled));
+    if (pickerToggle) pickerToggle.onclick = () => setPickingEnabled(!pickingEnabled);
 
     if (stage && canvas) {
         canvas.onpointerdown = event => {
@@ -376,11 +394,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         autoBlurStatus.textContent = 'AI đang tìm vị trí phụ đề gốc trên video…';
         try {
             const channel = encodeURIComponent(video.channel || '2d_animation');
-            const result = await window.reupEngineClient.json(
+            const result = await requestJson(
                 `/api/preview/subtitle-region/${encodeURIComponent(video.video_id)}?channel=${channel}`,
                 { timeoutMs: 180000 },
             );
-            if (!dialog.open) return;
+            if (!isCurrent() || !dialog.open) return;
             const detected = result.blur || {};
             const scaleY = preview.videoHeight / Math.max(1, Number(result.video?.height || preview.videoHeight));
             selectedRect = {
@@ -406,16 +424,19 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             autoBlurStatus.textContent = 'Đang xem thử mô phỏng dải mờ trên video trong 8 giây…';
             await preview.play();
         } catch (error) {
+            if (!isCurrent()) return;
             stopBlurPreview();
             autoBlurStatus.textContent = error?.status === 404
                 ? 'Cần cập nhật Local Engine để dùng chức năng xem thử vùng mờ AI.'
                 : (error?.message || 'Chưa xem thử được. Bạn có thể tự kéo vùng mờ trên video.');
         } finally {
-            autoBlurButton.disabled = false;
+            if (isCurrent()) autoBlurButton.disabled = false;
         }
     };
     preview.crossOrigin = 'anonymous';
-    try { preview.src = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`); } catch { preview.onerror(); }
+    window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`)
+        .then(url => { if (isCurrent()) preview.src = url; })
+        .catch(() => { if (isCurrent()) preview.onerror(); });
 
     dialog.querySelector('#resetProcessConfig').onclick = () => {
         if (typeof collectPresetConfig === 'function') dialog._undoConfig = collectPresetConfig();
@@ -466,14 +487,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     const writePresets = async presets => {
         try {
-        await window.reupEngineClient.json('/api/library/ui-state/process_presets_v2', {
+        await requestJson('/api/library/ui-state/process_presets_v2', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ value: presets }),
         });
         localStorage.setItem(presetStoreKey, JSON.stringify(presets));
         return true;
         } catch (error) {
-            presetStatus.textContent = 'Không lưu được preset: ' + error.message;
+            if (isCurrent()) presetStatus.textContent = 'Không lưu được preset: ' + error.message;
             return false;
         }
     };
@@ -617,12 +638,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             dialog._logoFilename = null;
             return;
         }
-        dialog._logoData = await new Promise(resolve => {
+        const logoData = await new Promise(resolve => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || ''));
             reader.onerror = () => resolve(null);
             reader.readAsDataURL(file);
         });
+        if (!isCurrent()) return;
+        dialog._logoData = logoData;
         dialog._logoFilename = file.name;
     };
 
@@ -634,6 +657,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const aiSettings = dialog.querySelector('#processAiSettings');
     const aiApply = dialog.querySelector('#processAiApply');
     const aiGenerate = dialog.querySelector('#processAiGenerate');
+    aiGenerate.disabled = false;
+    aiGenerate.textContent = 'Gợi ý cấu hình';
     dialog._assistantRequestSeq = (dialog._assistantRequestSeq || 0) + 1;
     let aiImageData = null;
     let aiSuggestion = null;
@@ -656,6 +681,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             reader.onerror = () => reject(new Error('Không đọc được ảnh.'));
             reader.readAsDataURL(file);
         }).catch(() => null);
+        if (!isCurrent()) return;
         aiImageName.textContent = aiImageData ? file.name : 'Không đọc được ảnh.';
     };
     dialog.querySelector('#processAiFrame').onclick = () => {
@@ -688,7 +714,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         aiApply.hidden = true;
         aiSuggestion = null;
         try {
-            const response = await window.reupEngineClient.json('/api/assistant', {
+            const response = await requestJson('/api/assistant', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -702,7 +728,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 }),
                 timeoutMs: 70000,
             });
-            if (dialog._assistantRequestSeq !== requestSeq) return;
+            if (!isCurrent() || dialog._assistantRequestSeq !== requestSeq) return;
             aiAnswer.textContent = response.answer || 'Gemini chưa có gợi ý.';
             aiSuggestion = response.settings || {};
             const labels = {
@@ -719,12 +745,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             });
             aiApply.hidden = !aiSettings.childElementCount;
         } catch (error) {
-            if (dialog._assistantRequestSeq !== requestSeq) return;
+            if (!isCurrent() || dialog._assistantRequestSeq !== requestSeq) return;
             aiAnswer.textContent = error?.status === 404
                 ? 'Local Engine hiện tại chưa có Trợ lý AI. Hãy cập nhật ứng dụng trên máy.'
                 : (error?.message || 'Chưa thể hỏi Gemini. Kiểm tra kết nối trong Cài đặt.');
         } finally {
-            if (dialog._assistantRequestSeq === requestSeq) {
+            if (isCurrent() && dialog._assistantRequestSeq === requestSeq) {
                 aiGenerate.disabled = false;
                 aiGenerate.textContent = 'Gợi ý cấu hình';
             }
@@ -756,8 +782,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         aiApply.hidden = true;
     };
 
+    let submitting = false;
     dialog.querySelector('form').onsubmit = async event => {
         event.preventDefault();
+        if (submitting || !isCurrent()) return;
+        submitting = true;
+        const submitButton = dialog.querySelector('#runProcessConfig');
+        submitButton.disabled = true;
+        configForm.setAttribute('aria-busy', 'true');
+        try {
         const selectedPreset = presetSelect.value;
         if (selectedPreset && dialog._presetDirtySections.size) {
             const sections = [...dialog._presetDirtySections].join(', ');
@@ -789,6 +822,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 reader.onerror = () => resolve(null);
                 reader.readAsDataURL(logoFile);
             });
+            if (!isCurrent()) return;
             dialog._logoData = logoData;
             dialog._logoFilename = logoFile.name;
         }
@@ -847,13 +881,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             logo_data: logoData,
             logo_filename: logoFile?.name || dialog._logoFilename || null,
         };
+        if (!isCurrent()) return;
         dialog.close();
         processVideo(video, card, mode, config);
+        } finally {
+            submitting = false;
+            submitButton.disabled = false;
+            configForm.removeAttribute('aria-busy');
+        }
     };
     dialog.showModal();
 }
-
-
-let processingDetailsPopup = null;
-let processingDetailsPopupCard = null;
-
