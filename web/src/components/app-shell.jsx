@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useEngine } from "./engine-provider";
+import { useBilling } from "./billing-provider";
 import { Icon } from "./icon";
 import { IconSprite } from "./icon-sprite";
 import { createClient } from "../lib/supabase/client";
@@ -85,7 +86,7 @@ export function AppShell({ children }) {
   const pathname = usePathname();
   const [title, subtitle] = pages[pathname] || ["ReupAI", "Video workspace"];
   const [identity, setIdentity] = useState(null);
-  const [billing, setBilling] = useState(null);
+  const { account: billing } = useBilling();
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickQuery, setQuickQuery] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
@@ -139,14 +140,6 @@ export function AppShell({ children }) {
         avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || "",
       });
     }).catch(() => {});
-    return () => { active = false; };
-  }, []);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/billing/me", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
-      .then((data) => { if (active && data?.authenticated) setBilling(data); })
-      .catch(() => {});
     return () => { active = false; };
   }, []);
   useEffect(() => {

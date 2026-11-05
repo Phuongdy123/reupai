@@ -40,6 +40,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path=urlparse(self.path).path
         if path=='/fixture': return self.send(FIXTURE.encode(),'text/html')
+        if path == '/api/billing/me':
+            self.server.billing_requests += 1
+            return self.send(json.dumps({'error':'Fixture unavailable'} if self.server.billing_fail else self.server.billing_response).encode(),'application/json',503 if self.server.billing_fail else 200)
         if path.startswith('/api/'):
             return self.send(json.dumps({'authenticated':True,'plan':'admin','unlimited':True}).encode(),'application/json')
         if path.startswith('/_next/static/'):
@@ -55,14 +58,16 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_file(): self.send_error(404);return
         mime='text/x-component' if target.suffix=='.rsc' else 'text/javascript' if target.suffix=='.js' else mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
         self.send(target.read_bytes(),mime)
-    def send(self,data,mime):
-        self.send_response(200);self.send_header('Content-Type',mime);self.end_headers()
+    def send(self,data,mime,status=200):
+        self.send_response(status);self.send_header('Content-Type',mime);self.end_headers()
         try: self.wfile.write(data)
         except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError): pass
 
 async def main():
     OUT.mkdir(parents=True,exist_ok=True)
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    server.billing_requests=0; server.billing_fail=False
+    server.billing_response={'configured':True,'authenticated':True,'paymentsEnabled':True,'plan':'admin','unlimited':True,'proPrice':149000}
     threading.Thread(target=server.serve_forever,daemon=True).start()
     base=f'http://127.0.0.1:{server.server_port}'
     checks=[]
@@ -78,6 +83,7 @@ async def main():
             page=await context.new_page(); errors=[]
             page.on('pageerror',lambda error:errors.append(str(error)))
             await page.goto(base+'/app',wait_until='networkidle')
+            assert server.billing_requests==1, f'duplicate billing requests: {server.billing_requests}'
             await expect(page.locator('.sidebar-mobile-close')).to_be_hidden()
             await page.locator('.sidebar-collapse').click()
             await expect(page.locator('.app-shell')).to_have_class(__import__('re').compile('is-collapsed'))
@@ -112,6 +118,41 @@ async def main():
             await page.wait_for_url(base+'/downloads')
             await expect(page.locator('.topbar h1')).to_have_text('Video đã tải')
             checks.append('client navigation from dashboard to downloads')
+            await page.locator('.sidebar .nav-item[href="/profile"]').click()
+            await page.wait_for_url(base+'/profile')
+            await page.locator('.sidebar .nav-item[href="/plans"]').click()
+            await page.wait_for_url(base+'/plans')
+            await expect(page.locator('.plans-account').first).to_contain_text('ReupAI Admin')
+            await page.locator('.plans-nav a[href="/app"]').click()
+            await page.wait_for_url(base+'/app')
+            await expect(page.locator('.plan-status-admin')).to_be_visible()
+            assert server.billing_requests==1, f'billing cache was lost on navigation: {server.billing_requests}'
+            checks.append('one billing request shared across dashboard, shell, profile and plans navigation')
+            server.billing_response={**server.billing_response,'plan':'pro','proUntil':'2030-01-01T00:00:00Z'}
+            await page.evaluate("window.dispatchEvent(new CustomEvent('reupai:billing-changed'))")
+            await expect(page.locator('.plan-status-pro')).to_be_visible()
+            await expect(page.locator('.dashboard-plan-name')).to_contain_text('ReupAI Pro')
+            checks.append('entitlement refresh updates both dashboard and account badge')
+            server.billing_fail=True
+            await page.evaluate("window.dispatchEvent(new CustomEvent('reupai:billing-changed'))")
+            await expect(page.locator('.billing-load-notice')).to_be_visible()
+            await expect(page.locator('.plan-status-pro')).to_be_visible()
+            await expect(page.locator('.plan-status-free')).to_have_count(0)
+            server.billing_fail=False
+            await page.locator('.billing-load-notice button').click()
+            await expect(page.locator('.billing-load-notice')).to_have_count(0)
+            checks.append('failed refresh retains Pro and manual retry clears the error')
+            server.billing_response={**server.billing_response,'orders':[{'order_code':123,'status':'paid','amount':149000}]}
+            await page.goto(base+'/plans?order=123',wait_until='networkidle')
+            await expect(page.locator('.plans-banner.success')).to_be_visible()
+            paid_reads=server.billing_requests
+            await page.wait_for_timeout(4300)
+            assert server.billing_requests==paid_reads, 'paid order should stop polling'
+            await page.locator('.plans-nav a[href="/app"]').click()
+            await page.wait_for_url(base+'/app')
+            await expect(page.locator('.plan-status-pro')).to_be_visible()
+            assert server.billing_requests==paid_reads, 'workspace should use the confirmed paid plan'
+            checks.append('confirmed payment stops polling and retains Pro when returning to workspace')
             await page.goto(base+'/fixture'); await page.wait_for_function('window.fixtureReady')
             for _ in range(3):
                 await page.evaluate('openConfig()')

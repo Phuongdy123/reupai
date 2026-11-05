@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEngine } from "./engine-provider";
+import { BillingNotice, useBilling } from "./billing-provider";
 import { Icon } from "./icon";
 import { WorkspaceAssistant } from "./workspace-assistant";
 import { planName, quotaText } from "../lib/plan-display";
@@ -26,7 +27,7 @@ export function Dashboard() {
   const [error, setError] = useState(null);
   const [stopping, setStopping] = useState(null);
   const [recentMedia, setRecentMedia] = useState({});
-  const [billing, setBilling] = useState(null);
+  const { account: billing, error: billingError, refresh: refreshBilling } = useBilling();
   const jobsRequest = useRef(false);
   const dashboardRequest = useRef(false);
   const loadJobs = useCallback(async () => {
@@ -47,11 +48,6 @@ export function Dashboard() {
     finally { dashboardRequest.current = false; }
   }, [client, status]);
   useEffect(() => { load(); loadJobs(); }, [load, loadJobs]);
-  useEffect(() => {
-    let active = true;
-    fetch("/api/billing/me", { cache: "no-store" }).then((response) => response.json()).then((value) => { if (active) setBilling(value); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
   const recentIds = recentCards(data?.recent_jobs || []).map(jobVideoId).join(",");
   useEffect(() => {
     if (status !== "connected" || !recentIds) return undefined;
@@ -107,7 +103,8 @@ export function Dashboard() {
       <div className="dashboard-overview-grid">{[
         ["play", "Video nguồn", stats.total_videos], ["download", "Đã tải", stats.downloaded], ["spark", "Thành phẩm", stats.outputs], ["settings", "Đang xử lý", status === "connected" ? jobs.length : null],
       ].map(([icon, label, value]) => <article className="dashboard-overview-card" key={label}><span><Icon name={icon} size={18} /></span><div><small>{label}</small><strong>{value == null ? "—" : numberText(value)}</strong></div></article>)}</div>
-      <div className={`dashboard-billing-card plan-${billing?.plan || "free"}`}><div><strong className="dashboard-plan-name">{planName(billing)}{billing?.plan === "pro" && <span className="dashboard-plan-badge pro" aria-label="Gói Pro">✦ PRO</span>}{billing?.plan === "free" && <span className="dashboard-plan-badge free" aria-label="Gói Free">✦ FREE</span>}</strong><span>{quotaText(billing)}</span></div><Link href="/plans">Quản lý gói <span aria-hidden="true">↗</span></Link></div>
+      <div className={`dashboard-billing-card plan-${billing?.plan || "free"}`}><div><strong className="dashboard-plan-name">{billing ? planName(billing) : billingError ? "Chưa đọc được gói" : "Đang tải gói…"}{billing?.plan === "pro" && <span className="dashboard-plan-badge pro" aria-label="Gói Pro">✦ PRO</span>}{billing?.plan === "free" && <span className="dashboard-plan-badge free" aria-label="Gói Free">✦ FREE</span>}</strong><span>{quotaText(billing)}</span></div><Link href="/plans">Quản lý gói <span aria-hidden="true">↗</span></Link></div>
+      <BillingNotice error={billingError} refresh={refreshBilling} />
       {status !== "connected" && <div className="dashboard-overview-alert"><Icon name="desktop" size={20} /><span><strong>Kết nối để bắt đầu tạo video</strong><small>Mở Local Engine trên máy để tải và xử lý video của bạn.</small></span><div className="dashboard-engine-actions"><Link href="/local-engine">Hướng dẫn</Link><button type="button" disabled={status === "checking" || status === "authorizing"} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{status === "checking" || status === "authorizing" ? "Đang kiểm tra…" : "Kết nối lại"}</button></div></div>}
       {status === "connected" && jobs.length > 0 && <div className="dashboard-active-jobs">{jobs.slice(0, 2).map((job) => <div className="dashboard-active-job" key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}`}><div><strong>{jobVideoId(job)}</strong><small>{stageLabel(job.stage)} · {modeLabel(job.mode)}</small></div><span>{progressValue(job.progress)}%</span><div className="dashboard-active-track"><i style={{ width: `${progressValue(job.progress)}%` }} /></div>{ACTIVE_JOBS.has(job.status) && <button type="button" disabled={stopping === jobVideoId(job)} onClick={() => stopJob(job)}>{stopping === jobVideoId(job) ? "Đang dừng…" : "Dừng"}</button>}</div>)}{jobs.length > 2 && <Link href="/history">Xem thêm {jobs.length - 2} job →</Link>}</div>}
     </section>

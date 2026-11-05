@@ -13,6 +13,8 @@
   transform: translateY(-160%);
 }
 .workspace-skip:focus { transform: translateY(0); }
+.billing-load-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-block: 12px; padding: 12px 14px; border: 1px solid #6b4a30; border-radius: 10px; color: #e9ccb2; background: #282018; font-size: 12px; line-height: 1.5; }
+.billing-load-notice button { flex: 0 0 auto; min-height: 34px; padding: 0 12px; border: 1px solid #856041; border-radius: 7px; color: #fff; background: #3b2c20; font: inherit; cursor: pointer; }
 
 .theme-xports .sidebar-mobile-close,
 .theme-xports .sidebar-mobile-toggle,

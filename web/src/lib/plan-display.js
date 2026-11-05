@@ -2,7 +2,7 @@ export function planName(account) {
   if (!account?.configured) return "ReupAI";
   if (account.plan === "admin") return "ReupAI Admin";
   if (account.plan === "pro") return "ReupAI Pro";
-  return "ReupAI Free";
+  return account.plan === "free" ? "ReupAI Free" : "ReupAI";
 }
 
 export function quotaText(account) {

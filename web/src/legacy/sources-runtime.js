@@ -2987,6 +2987,7 @@ async function pollProcess(
             data.status
             === 'completed'
         ) {
+            window.dispatchEvent(new CustomEvent('reupai:billing-changed'));
 
             progressBar.style.width =
                 '100%';
