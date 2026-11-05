@@ -383,10 +383,7 @@ BILIBILI_BRAND_REGION = (
 # Format: (x, y, width, height) theo ti le frame.
 
 # Các vùng watermark/ID chỉ được dùng khi người dùng bật chế độ tự động.
-BILIBILI_TEXT_BLUR_REGIONS = [
-    (0.008, 0.008, 0.305, 0.125),
-    (0.740, 0.008, 0.245, 0.105),
-]
+# Watermark rectangles are measured from the source by watermark_detector.
 
 
 
@@ -1104,74 +1101,30 @@ def get_bilibili_brand_box(
 
 
 
-def get_bilibili_text_blur_boxes(
-
-    width,
-
-    height,
-
-):
-
-
-
-    if (
-
-        not AUTO_BRAND_BLUR_ENABLED
-
-        or detect_source_platform() != "bilibili"
-
-    ):
-
+def get_bilibili_text_blur_boxes(width, height):
+    if not AUTO_BRAND_BLUR_ENABLED or detect_source_platform() != "bilibili":
         return []
-
-
-
-    result = []
-
-
-
-    for rx, ry, rw, rh in BILIBILI_TEXT_BLUR_REGIONS:
-
-
-
-        x = int(round(width * rx))
-
-        y = int(round(height * ry))
-
-        w = int(round(width * rw))
-
-        h = int(round(height * rh))
-
-
-
-        x = int(clamp(x, 0, max(0, width - 2)))
-
-        y = int(clamp(y, 0, max(0, height - 2)))
-
-        w = int(clamp(w, 2, width - x))
-
-        h = int(clamp(h, 2, height - y))
-
-
-
-        result.append({
-
-            "x": x,
-
-            "y": y,
-
-            "width": w,
-
-            "height": h,
-
-        })
-
-
-
-    return result
-
-
-
+    try:
+        from services.watermark_detector import detect_watermark_regions
+        detected = detect_watermark_regions(VIDEO_PATH)
+        source = detected["video"]
+        sx = width / source["width"]
+        sy = height / source["height"]
+        result = []
+        for box in detected["boxes"]:
+            # Even crop dimensions keep software and GPU encoding paths aligned.
+            x = max(0, min(width - 2, int(box["x"] * sx) // 2 * 2))
+            y = max(0, min(height - 2, int(box["y"] * sy) // 2 * 2))
+            right = min(width // 2 * 2, math.ceil((box["x"] + box["width"]) * sx / 2) * 2)
+            bottom = min(height // 2 * 2, math.ceil((box["y"] + box["height"]) * sy / 2) * 2)
+            if right > x and bottom > y:
+                result.append({"x": x, "y": y, "width": right - x, "height": bottom - y})
+        if not result:
+            print("[watermark] Khong du bang chung ve ID/watermark o goc tren; bo qua tu dong che.")
+        return result
+    except Exception as error:
+        print(f"[watermark] Chua do duoc ID/watermark, bo qua de tranh che nham: {error}")
+        return []
 
 
 def get_bilibili_logo_path():

@@ -72,6 +72,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processMusicUrl', defaults.music_url || '');
     set('processMusicVolume', defaults.music_volume ?? 0.25);
     dialog.querySelector('#processSourceNoSub').checked = defaults.source_subtitle_mode === 'none';
+    dialog.querySelector('#processAutoBrandBlur').checked = defaults.auto_brand_blur === true;
     const musicFileInput = dialog.querySelector('#processMusicFile');
     const musicUrlInput = dialog.querySelector('#processMusicUrl');
     const musicHint = dialog.querySelector('#processMusicHint');
