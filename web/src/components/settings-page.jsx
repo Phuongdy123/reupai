@@ -11,6 +11,7 @@ import { GEMINI_ONBOARDING_KEY, hasMatchingGoogleGrant } from "../lib/gemini-onb
 import { googleConsentLabel } from "../lib/google-consent";
 import { GoogleConsentPrompt } from "./google-consent-prompt";
 import { GeminiProjectPicker } from "./gemini-project-picker";
+import { settleGeminiEnablement } from "../lib/gemini-enablement";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -61,6 +62,8 @@ export function SettingsPage() {
   const requestSequence = useRef(0);
   const geminiCheckSequence = useRef(0);
   const geminiAutoEnableAttempted = useRef(false);
+  const geminiEnablePending = useRef(null);
+  const geminiCheckInFlight = useRef(null);
   const projectIdDirty = useRef(false);
   const reconnectIntentHandled = useRef(false);
   const connected = status === "connected";
@@ -116,6 +119,7 @@ export function SettingsPage() {
     else {
       requestSequence.current += 1;
       geminiCheckSequence.current += 1;
+      geminiCheckInFlight.current = null; geminiEnablePending.current = null;
       setEngineInfo(null); setDiagnostics(null); setLoaded(false); setLoading(false); setSaved(false);
       setWhisperCheck(null); setWhisperChecking(false);
       setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
@@ -130,30 +134,43 @@ export function SettingsPage() {
     return () => window.clearInterval(timer);
   }, [connected, googleOAuth?.connecting, load]);
 
+  const applyGeminiAccess = useCallback((result) => {
+    const key = `${googleOAuth?.google_subject || googleOAuth?.google_email || ''}|${googleOAuth?.project_id || ''}`;
+    const settled = settleGeminiEnablement(result, geminiEnablePending.current, key);
+    geminiEnablePending.current = settled.pending;
+    setGeminiAccess(settled.result);
+  }, [googleOAuth?.google_subject, googleOAuth?.google_email, googleOAuth?.project_id]);
+
   const checkGeminiAccess = useCallback(async () => {
+    const key = `${googleOAuth?.google_subject || googleOAuth?.google_email || ''}|${googleOAuth?.project_id || ''}`;
+    if (geminiCheckInFlight.current?.key === key) return;
     const sequence = ++geminiCheckSequence.current;
     if (!connected || !googleOAuth?.connected || oauthNeedsReconnect) {
       setGeminiAccess(null);
       return;
     }
+    const entry = { key }; geminiCheckInFlight.current = entry;
     try {
       const result = await client.json("/api/gemini/oauth/verify", { cache: "no-store" });
       if (sequence !== geminiCheckSequence.current) return;
       if (result.state === "disabled" && !geminiAutoEnableAttempted.current) {
         geminiAutoEnableAttempted.current = true;
         const setup = await requestGeminiRepair(client);
-        if (sequence === geminiCheckSequence.current) setGeminiAccess(setup);
+        if (sequence === geminiCheckSequence.current) applyGeminiAccess(setup);
         return;
       }
-      setGeminiAccess(result);
+      applyGeminiAccess(result);
     } catch (requestError) {
-      if (sequence === geminiCheckSequence.current) setGeminiAccess({ state: "temporary_error", ready: false, message: requestError.message || "Chưa thể kiểm tra Gemini." });
+      if (sequence === geminiCheckSequence.current) applyGeminiAccess({ state: "temporary_error", ready: false, message: requestError.message || "Chưa thể kiểm tra Gemini." });
+    } finally {
+      if (geminiCheckInFlight.current === entry) geminiCheckInFlight.current = null;
     }
-  }, [client, connected, oauthNeedsReconnect, googleOAuth?.connected, googleOAuth?.project_id, googleOAuth?.google_subject, googleOAuth?.google_email]);
+  }, [client, connected, oauthNeedsReconnect, googleOAuth?.connected, googleOAuth?.project_id, googleOAuth?.google_subject, googleOAuth?.google_email, applyGeminiAccess]);
 
   const applyProjectSelection = useCallback(async (selected) => {
     const unchanged = selected === googleOAuth?.project_id;
     geminiCheckSequence.current += 1;
+    geminiCheckInFlight.current = null; geminiEnablePending.current = null;
     projectIdDirty.current = false;
     setProjectId(selected); setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
     await load();
@@ -170,7 +187,7 @@ export function SettingsPage() {
     setGeminiRepairing(true); setError("");
     try {
       const result = await requestGeminiRepair(client);
-      setGeminiAccess(result);
+      applyGeminiAccess(result);
       await load();
     } catch (requestError) {
       setError(requestError.message || "Chưa thể tự sửa kết nối Gemini.");

@@ -34,7 +34,13 @@ async def main():
             if parsed.path=='/api/health':value={'version':'0.2.38' if state['mode'] in ['create','resume','denied','reauth'] else '0.2.37' if state['mode']!='legacy' else '0.2.36','capabilities':{'direct_authorization':True,'gemini_project_discovery':state['mode']!='legacy','gemini_project_creation':state['mode'] in ['create','resume','denied','reauth']}}
             elif parsed.path=='/api/authorize/connect':value={'session_token':'fixture-only','grant':'fixture-only'}
             elif parsed.path=='/api/diagnostics':value={'readiness':{'media':True,'storage':True},'components':{'ocr':True,'vietnamese_tts':True,'whisper_modules':True},'configuration':{'gemini_oauth':oauth}}
-            elif parsed.path=='/api/gemini/oauth/verify':value={'ready':bool(state['selected']),'state':'ready' if state['selected'] else 'project_required'}
+            elif parsed.path=='/api/gemini/oauth/verify':
+                state['verifies']=state.get('verifies',0)+1
+                value={'ready':bool(state['selected']),'state':'ready' if state['selected'] else 'project_required'}
+                if state['mode']=='propagation' and state['verifies']<3: value={'ready':False,'state':'disabled'}
+            elif parsed.path=='/api/gemini/oauth/repair':
+                state['repairs']=state.get('repairs',0)+1
+                value={'state':'enabling','ready':False,'message':'Đang bật Gemini API.'}
             elif parsed.path=='/api/gemini/projects/detect':
                 state['lookups']+=1
                 if state['mode']=='multiple':value={'state':'choose_project','projects':[{'project_id':'customer-one','display_name':'First project'},{'project_id':'customer-two','display_name':'Second project'}]}
@@ -71,8 +77,9 @@ async def main():
     try:
         async with async_playwright() as p:
             browser=await p.chromium.launch(channel='chrome',headless=True)
-            for mode in ['unique','multiple','empty','legacy','create','resume','denied','reauth']:
+            for mode in ['unique','multiple','empty','legacy','create','resume','denied','reauth','propagation']:
                 state={'mode':mode,'selected':None,'lookups':0,'saves':0,'consents':0,'creates':0,'polls':0,'pending':mode=='resume'}
+                if mode=='propagation': state['selected']='customer-project'
                 context=await browser.new_context(viewport={'width':390 if mode=='create' else 1280,'height':1000})
                 await context.route('**/*',route_request)
                 await context.add_cookies([{'name':'sb-fixture-auth-auth-token','value':'base64-'+encode(session),'url':base}])
@@ -131,11 +138,17 @@ async def main():
                     assert state['creates']==1 and state['selected'] is None
                     await expect(page.locator('.gemini-project-picker').get_by_role('link',name='Mở Google Cloud')).to_have_attribute('href','https://console.cloud.google.com/cloud-resource-manager')
                     checks.append('Google terms denial explains the required customer action without automatic retries or false readiness')
-                else:
+                elif mode=='reauth':
                     await page.get_by_role('button',name='Tự tạo project và kết nối').click()
                     await page.get_by_role('button',name='Cấp lại quyền Google').click()
                     assert state['consents']==1 and state['creates']==1
                     checks.append('expired creation grant offers a direct Google reconnect without deleting the existing attempt')
+                else:
+                    row=page.locator('.setting-row').filter(has_text='Gemini / Google')
+                    await expect(row).to_contain_text('Đang bật Gemini API',timeout=10000)
+                    await expect(row).to_contain_text('Sẵn sàng',timeout=20000)
+                    assert state['verifies']>=3 and state['repairs']==1
+                    checks.append('API enablement continues polling through an initially disabled Google response until Gemini confirms readiness')
                 if mode!='reauth': assert state['consents']==0
                 await context.close()
             await browser.close()
