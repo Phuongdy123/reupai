@@ -102,7 +102,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.38"
+ENGINE_VERSION = "0.2.39"
 ENGINE_CAPABILITIES = {
     "verified_updates": True,
     "google_oauth_browser_fallback": True,
@@ -595,7 +595,10 @@ def gemini_project_setup_create(payload: dict | None = None, _: bool = Depends(r
     if (payload or {}).get("confirmed") is not True:
         raise HTTPException(status_code=400, detail="Bấm Tự tạo project và kết nối để xác nhận tạo project trong tài khoản Google của bạn.")
     from services.google_project_setup import project_setup
-    return project_setup(create=True)
+    replacement = (payload or {}).get("replace_project")
+    if replacement is not None and (not isinstance(replacement, str) or not replacement):
+        raise HTTPException(status_code=400, detail="Project cần thay thế không hợp lệ.")
+    return project_setup(create=True, replace_project=replacement)
 
 
 @app.get("/api/gemini/oauth/verify")

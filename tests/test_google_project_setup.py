@@ -31,6 +31,7 @@ class ProjectSetupTests(unittest.TestCase):
         def save(value): self.selected = value; return value
         self.save = patch.object(oauth, 'set_project_id', side_effect=save).start()
         self.detect = patch.object(setup, 'detect_projects', return_value={'state':'no_projects','complete':True,'projects':[]}).start()
+        self.permissions = patch.object(setup, 'setup_permissions', return_value=set()).start()
         self.http = patch.object(setup.requests, 'request', side_effect=self.google).start()
 
     def google(self, method, url, **kwargs):
@@ -48,6 +49,34 @@ class ProjectSetupTests(unittest.TestCase):
     def test_get_is_read_only_and_never_creates(self):
         self.assertEqual(setup.project_setup()['state'], 'idle')
         self.http.assert_not_called(); self.detect.assert_not_called()
+
+    def test_explicit_replacement_preserves_old_selection_until_new_project_verified(self):
+        self.selected='old-project'
+        self.assertEqual(setup.project_setup(create=True,replace_project='old-project')['state'],'creating')
+        self.assertEqual(self.selected,'old-project'); self.save.assert_not_called()
+        self.finish()
+        result=setup.project_setup()
+        self.assertEqual(result['project_id'],self.created[0]['projectId'])
+        self.assertEqual(len(self.created),1)
+
+    def test_replacement_cannot_override_manual_choice_in_another_tab(self):
+        self.selected='old-project'
+        setup.project_setup(create=True,replace_project='old-project')
+        self.selected='manual-project'; self.finish()
+        self.assertEqual(setup.project_setup()['project_id'],'manual-project')
+        self.save.assert_not_called()
+
+    def test_replacement_does_not_create_when_permissions_unknown_or_sufficient(self):
+        self.selected='old-project'
+        for permissions in (None, {'serviceusage.services.enable','serviceusage.services.use'}):
+            self.permissions.return_value=permissions
+            setup.project_setup(create=True,replace_project='old-project')
+        self.http.assert_not_called(); self.save.assert_not_called()
+
+    def test_unsuitable_discovered_project_allows_explicit_creation(self):
+        self.detect.return_value={'state':'no_suitable_projects','complete':True,'projects':[{'project_id':'read-only-project'}]}
+        self.assertEqual(setup.project_setup(create=True)['state'],'creating')
+        self.assertEqual(len(self.created),1)
 
     def test_create_tracks_operation_then_saves_and_rechecks_without_duplicate(self):
         self.assertEqual(setup.project_setup(create=True)['state'], 'creating')

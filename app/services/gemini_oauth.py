@@ -646,7 +646,8 @@ def _response_message(response: requests.Response) -> str:
     """Return a compact, safe message for the local setup screen."""
     try:
         data = response.json()
-        value = data.get("error", {}).get("message", "") if isinstance(data, dict) else ""
+        error = data.get("error", {}) if isinstance(data, dict) else {}
+        value = error.get("message", "") if isinstance(error, dict) else ""
     except ValueError:
         value = ""
     return str(value or "").replace("\n", " ")[:240]
@@ -663,6 +664,21 @@ def _gemini_check(credentials: Credentials, project_id: str | None) -> requests.
 
 
 def _is_api_disabled(response: requests.Response) -> bool:
+    try:
+        details = response.json().get("error", {}).get("details", [])
+    except (ValueError, AttributeError):
+        details = []
+    details = details if isinstance(details, list) else []
+    disabled_services = [item.get("metadata", {}).get("service") for item in details
+                         if isinstance(item, dict) and item.get("reason") == "SERVICE_DISABLED"
+                         and isinstance(item.get("metadata"), dict)]
+    if disabled_services:
+        return response.status_code in {403, 404} and "generativelanguage.googleapis.com" in disabled_services
+    if response.status_code in {403, 404} and any(
+        isinstance(item, dict) and item.get("reason") == "SERVICE_DISABLED"
+        for item in details
+    ):
+        return True
     message = _response_message(response).lower()
     return response.status_code in {403, 404} and any(
         phrase in message
@@ -674,6 +690,61 @@ def _is_api_disabled(response: requests.Response) -> bool:
             "gemini api has not been used",
         )
     )
+
+
+def _setup_failure(response: requests.Response, project_id: str, *, enabling=False) -> dict[str, object]:
+    """Classify Google ErrorInfo; never expose its raw message or metadata."""
+    try:
+        payload = response.json()
+        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+        error = error if isinstance(error, dict) else {}
+    except ValueError:
+        error = {}
+    details = error.get("details", [])
+    details = details if isinstance(details, list) else []
+    reasons = {str(item.get("reason", "")).upper() for item in details if isinstance(item, dict)}
+    message = str(error.get("message", "")).lower()
+    permissions = {str(item.get("metadata", {}).get("permission", "")) for item in details
+                   if isinstance(item, dict) and isinstance(item.get("metadata"), dict)}
+    service = next((str(item.get("metadata", {}).get("service", "")) for item in details
+                    if isinstance(item, dict) and isinstance(item.get("metadata"), dict)
+                    and item.get("reason") == "SERVICE_DISABLED"), "")
+    state, action, label, retryable = "permission_denied", "open_project_permissions", "Kiểm tra quyền project", False
+    text = "Google chưa xác nhận quyền truy cập project. Kiểm tra đúng tài khoản và quyền project rồi thử lại."
+    if response.status_code == 401 or "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in reasons or any(
+        word in message for word in ("insufficient authentication scopes", "insufficient oauth scope")
+    ):
+        state, action, label = "reauthorization_required", "reauthorize", "Cấp lại quyền Google"
+        text = "Phiên Google thiếu hoặc hết quyền cần thiết. Cấp lại quyền Google để ReupAI tiếp tục thiết lập Gemini."
+    elif response.status_code == 429 or response.status_code >= 500 or reasons & {"RATE_LIMIT_EXCEEDED", "QUOTA_EXCEEDED"}:
+        state, action, label, retryable = "temporary_error", "retry", "Kiểm tra lại", True
+        text = "Google đang bận hoặc giới hạn yêu cầu. Hãy thử lại sau; chưa cần đăng nhập lại."
+    elif reasons & {"TOS_NOT_ACCEPTED", "TERMS_OF_SERVICE_NOT_ACCEPTED"} or any(word in message for word in ("terms of service", "terms of use", "tos_not_accepted")):
+        state, action, label = "terms_required", "open_cloud_console", "Hoàn tất thiết lập Google Cloud"
+        text = "Google yêu cầu tài khoản này hoàn tất điều khoản. Mở Google Cloud bằng đúng tài khoản rồi quay lại kiểm tra."
+    elif reasons & {"BILLING_DISABLED", "BILLING_NOT_ACTIVE", "BILLING_ACCOUNT_DISABLED", "BILLING_REQUIRED"} or any(word in message for word in ("billing account", "billing is disabled", "billing must be enabled")):
+        state, action, label = "billing_required", "open_billing", "Kiểm tra thanh toán Google Cloud"
+        text = "Google yêu cầu kiểm tra thanh toán của project. Chủ project cần xử lý trong Google Cloud rồi kiểm tra lại Gemini."
+    elif reasons & {"ORG_RESTRICTION_VIOLATION", "ORG_POLICY_VIOLATION", "SECURITY_POLICY_VIOLATED"} or "organization policy" in message:
+        state = "organization_policy_required"
+        text = "Chính sách tổ chức đang chặn yêu cầu. Quản trị viên Google Cloud cần kiểm tra chính sách của project."
+    elif enabling and service and service != "generativelanguage.googleapis.com":
+        state, action, label = "setup_service_disabled", "open_setup_api", "Mở API thiết lập Google Cloud"
+        text = "API Service Usage dùng để thiết lập chưa sẵn sàng. Mở trang bật Gemini trực tiếp trong Google Cloud rồi kiểm tra lại."
+    elif "serviceusage.services.use" in permissions or "serviceusage.services.use" in message or "service usage consumer" in message:
+        state = "quota_permission_required"
+        text = "Tài khoản Google cần quyền Service Usage Consumer trên project đã chọn để dùng quota Gemini."
+    elif enabling and ("serviceusage.services.enable" in permissions or "serviceusage.services.enable" in message or "service usage admin" in message):
+        state, label = "administrator_required", "Kiểm tra quyền bật API"
+        text = "Tài khoản Google thiếu quyền bật Gemini API trên project này. Chọn project bạn quản lý hoặc nhờ chủ project bật API."
+    elif response.status_code == 404 or reasons & {"CONSUMER_INVALID", "PROJECT_INVALID", "PROJECT_DELETED"}:
+        state, action, label = "project_unavailable", "select_project", "Chọn project khác"
+        text = "Project không tồn tại hoặc tài khoản này chưa truy cập được. Tìm và chọn project của bạn rồi kiểm tra lại."
+    elif response.status_code not in {403}:
+        state, action, label, retryable = "error", "retry", "Kiểm tra lại", True
+        text = "Chưa hoàn tất thiết lập Gemini. Hãy kiểm tra lại."
+    return {"state": state, "ready": False, "message": text, "action": action,
+            "action_label": label, "retryable": retryable, "project_id": project_id}
 
 
 def verify_gemini_access() -> dict[str, object]:
@@ -760,26 +831,8 @@ def verify_gemini_access() -> dict[str, object]:
             "project_id": project_id,
         }
     if response.status_code == 403:
-        message = _response_message(response).lower()
-        quota_permission = "serviceusage.services.use" in message or "service usage consumer" in message
-        return {
-            "state": "quota_permission_required" if quota_permission else "permission_denied",
-            "ready": False,
-            "message": (
-                "Tài khoản Google cần quyền Service Usage Consumer trên project đã chọn để dùng quota Gemini."
-                if quota_permission else
-                "Google từ chối quyền Gemini cho tài khoản hoặc project này. Hãy kiểm tra quyền truy cập và billing của project."
-            ),
-            "action": "open_project_permissions", "action_label": "Kiểm tra quyền project", "retryable": False,
-            "project_id": project_id,
-        }
-    return {
-        "state": "error",
-        "ready": False,
-        "message": "Không thể xác nhận quyền Gemini lúc này. Hãy thử lại.",
-        "action": "retry", "action_label": "Thử lại", "retryable": True,
-        "project_id": project_id,
-    }
+        return _setup_failure(response, project_id)
+    return _setup_failure(response, project_id)
 
 
 def enable_gemini_api(current: dict[str, object] | None = None) -> dict[str, object]:
@@ -802,7 +855,8 @@ def enable_gemini_api(current: dict[str, object] | None = None) -> dict[str, obj
         response = authorized_request(
             "POST",
             f"https://serviceusage.googleapis.com/v1/{service}:enable",
-            project_id=project_id,
+            # The target project is already in the resource path. Do not
+            # require services.use via a quota header before enabling it.
             timeout=20,
         )
     except requests.RequestException:
@@ -835,20 +889,7 @@ def enable_gemini_api(current: dict[str, object] | None = None) -> dict[str, obj
             "retryable": temporary,
             "project_id": project_id,
         }
-    if response.status_code == 403:
-        return {
-            "state": "administrator_required",
-            "ready": False,
-            "message": f"Tài khoản Google chưa có quyền bật Gemini API cho project {project_id}. Nhờ quản trị viên project bật API hoặc cấp quyền Service Usage Admin.",
-            "action": "open_api_console", "action_label": "Mở Google Cloud", "retryable": False,
-            "project_id": project_id,
-        }
-    return {
-        "state": "error",
-        "ready": False,
-        "message": "Không thể bật Gemini API lúc này. Hãy thử lại.",
-        "project_id": project_id,
-    }
+    return _setup_failure(response, project_id, enabling=True)
 
 
 def repair_gemini_access() -> dict[str, object]:

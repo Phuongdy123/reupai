@@ -11,7 +11,8 @@ import { GEMINI_ONBOARDING_KEY, hasMatchingGoogleGrant } from "../lib/gemini-onb
 import { googleConsentLabel } from "../lib/google-consent";
 import { GoogleConsentPrompt } from "./google-consent-prompt";
 import { GeminiProjectPicker } from "./gemini-project-picker";
-import { settleGeminiEnablement } from "../lib/gemini-enablement";
+import { geminiSetupActionUrl, settleGeminiEnablement } from "../lib/gemini-enablement";
+import { newerVersion } from "../lib/engine-version";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -81,6 +82,7 @@ export function SettingsPage() {
   const googleNeedsReconnect = oauthNeedsReconnect || geminiAccess?.state === "reauthorization_required";
   const googleTemporaryError = Boolean(googleOAuth?.temporary_error) || geminiAccess?.state === "temporary_error";
   const geminiReady = apiKeyConfigured || Boolean(geminiAccess?.ready);
+  const geminiActionUrl = geminiSetupActionUrl(geminiAccess?.action, googleOAuth?.project_id);
   const googleAccountMismatch = Boolean(
     webAccountEmail && googleOAuth?.google_email &&
     webAccountEmail.toLowerCase() !== googleOAuth.google_email.toLowerCase()
@@ -344,7 +346,7 @@ export function SettingsPage() {
         <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : geminiAccess?.state === "quota_permission_required" ? "Thiếu quyền dùng quota" : geminiAccess?.state === "permission_denied" ? "Thiếu quyền Gemini" : geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "—"}</strong></div>
         {googleOAuth?.google_email && <div className="setting-row"><span>Tài khoản Google đang cấp Gemini</span><strong>{googleOAuth.google_email}</strong></div>}
         <GoogleConsentPrompt oauth={googleOAuth} />
-        {!apiKeyConfigured && <GeminiProjectPicker client={client} supported={connected && Boolean(capabilities?.gemini_project_discovery)} canCreate={connected && Boolean(capabilities?.gemini_project_creation)} oauth={googleOAuth} onSelected={applyProjectSelection} onBusyChange={setProjectDetecting} onReconnect={connectGoogle} />}
+        {!apiKeyConfigured && <GeminiProjectPicker client={client} supported={connected && Boolean(capabilities?.gemini_project_discovery)} canCreate={connected && Boolean(capabilities?.gemini_project_creation)} canReplace={newerVersion(engineInfo?.version, "0.2.38")} oauth={googleOAuth} access={geminiAccess} onSelected={applyProjectSelection} onBusyChange={setProjectDetecting} onReconnect={connectGoogle} />}
         {!apiKeyConfigured && diagnostics && <form className="settings-form" onSubmit={saveProject}>
           <label htmlFor="gemini-project-id"><span>Project ID (tự điền hoặc nhập thủ công)</span><input id="gemini-project-id" value={projectId} onChange={(event) => { projectIdDirty.current = true; setProjectId(event.target.value); setProjectSaved(false); }} placeholder="vi-du: du-an-video-123" autoComplete="off" spellCheck={false} disabled={!connected || projectSaving || projectDetecting || googleOAuth?.connecting} /></label>
           <div className="settings-actions"><button className="btn primary" type="submit" disabled={!connected || projectSaving || projectDetecting || googleOAuth?.connecting}>{projectSaving ? "Đang lưu…" : "Lưu và kiểm tra Gemini"}</button><a className="btn" href="https://console.cloud.google.com/cloud-resource-manager" target="_blank" rel="noreferrer">Xem project của bạn</a></div>
@@ -354,7 +356,11 @@ export function SettingsPage() {
         {!apiKeyConfigured && diagnostics && <div className="settings-actions">
           {(!googleOAuth?.connected && !googleTemporaryError || googleNeedsReconnect) && <button className="btn primary" onClick={connectGoogle} disabled={!connected || oauthStarting || googleOAuth?.connecting}>{oauthStarting || googleOAuth?.connecting ? "Đang chờ Google…" : googleNeedsReconnect ? "Kết nối lại Google" : "Kết nối Google"}</button>}
           {googleTemporaryError && <button className="btn" onClick={() => { load(); checkGeminiAccess(); }} disabled={!connected || loading}>Kiểm tra lại</button>}
-          {googleOAuth?.connected && geminiAccess && !geminiAccess.ready && !["project_required", "enabling"].includes(geminiAccess.state) && <button className="btn primary" onClick={repairGemini} disabled={!connected || geminiRepairing || oauthStarting}>{geminiRepairing ? "Đang sửa…" : geminiAccess.action_label || "Sửa nhanh Gemini"}</button>}
+          {googleOAuth?.connected && geminiAccess && !geminiAccess.ready && !["project_required", "enabling"].includes(geminiAccess.state) && (geminiActionUrl
+            ? <><a className="btn primary" href={geminiActionUrl} target="_blank" rel="noreferrer">{geminiAccess.action_label || "Mở Google Cloud"}</a><button className="btn" onClick={checkGeminiAccess} disabled={!connected || loading}>Đã xử lý · Kiểm tra lại</button></>
+            : geminiAccess.action === "select_project"
+              ? <button className="btn primary" onClick={() => document.getElementById("gemini-project-id")?.focus()}>Chọn project khác</button>
+              : <button className="btn primary" onClick={repairGemini} disabled={!connected || geminiRepairing || oauthStarting}>{geminiRepairing ? "Đang thiết lập…" : geminiAccess.action === "enable_api" ? "Thiết lập Gemini tự động" : geminiAccess.action_label || "Sửa nhanh Gemini"}</button>)}
           {googleOAuth?.connecting && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang dừng…" : "Dừng chờ"}</button>}
           {googleOAuth?.connected && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang đăng xuất…" : "Đăng xuất Google"}</button>}
           {!googleOAuth?.connected && !googleNeedsReconnect && <p className="muted">Google sẽ mở trong trình duyệt để cấp quyền cho Gemini. ReupAI chỉ lưu token đã mã hóa trên máy này.</p>}
@@ -363,7 +369,6 @@ export function SettingsPage() {
           {googleAccountMismatch && <p className="muted" role="alert">Tài khoản web là {webAccountEmail}, còn Gemini đang dùng {googleOAuth.google_email}. Nếu đây không phải project bạn muốn dùng, hãy bấm Đăng xuất Google rồi kết nối đúng tài khoản.</p>}
           {geminiAccess?.message && <p className="muted">{geminiAccess.message}</p>}
           {googleOAuth?.project_id && ["disabled", "administrator_required"].includes(geminiAccess?.state) && <a className="btn" href={`https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com?project=${encodeURIComponent(googleOAuth.project_id)}`} target="_blank" rel="noreferrer">Mở trang bật Gemini API</a>}
-          {googleOAuth?.project_id && geminiAccess?.state === "quota_permission_required" && <a className="btn" href={`https://console.cloud.google.com/iam-admin/iam?project=${encodeURIComponent(googleOAuth.project_id)}`} target="_blank" rel="noreferrer">Mở quyền của project</a>}
         </div>}
         {googleOAuth?.error && <p className="muted">Google chưa hoàn tất: {googleOAuth.error}</p>}
         <div className="setting-row"><span>Dung lượng an toàn</span><strong>{diagnostics ? (storageReady ? "Đủ để chạy" : `Cần tối thiểu ${formatSpace(diagnostics.storage?.minimum_free_bytes)}`) : "—"}</strong></div>

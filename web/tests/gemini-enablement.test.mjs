@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { settleGeminiEnablement as settle } from '../src/lib/gemini-enablement.js';
+import { geminiSetupActionUrl, settleGeminiEnablement as settle } from '../src/lib/gemini-enablement.js';
+
+test('setup remedies open the right Google page and reconnect stays in the app', () => {
+  assert.equal(geminiSetupActionUrl('reauthorize', 'customer-project'), null);
+  assert.match(geminiSetupActionUrl('open_project_permissions', 'customer-project'), /iam-admin\/iam\?project=customer-project$/);
+  assert.match(geminiSetupActionUrl('open_setup_api', 'customer-project'), /generativelanguage.googleapis.com\?project=customer-project$/);
+  assert.match(geminiSetupActionUrl('open_billing', 'customer-project'), /billing\/linkedaccount\?project=customer-project$/);
+  assert.equal(geminiSetupActionUrl('open_cloud_console', ''), 'https://console.cloud.google.com/');
+  assert.equal(geminiSetupActionUrl('open_project_permissions', ''), null);
+});
 
 test('successful enable request keeps polling through Google propagation delay', () => {
   const started = settle({ state:'enabling', ready:false }, null, 'one|project', 1000);

@@ -36,6 +36,20 @@ class ProjectDiscoveryTests(unittest.TestCase):
         def select(value): self.selected=value; return value
         self.save=patch.object(oauth,'set_project_id',side_effect=select).start()
         self.request=patch.object(oauth,'authorized_request').start()
+        self.permissions=patch.object(projects,'setup_permissions',return_value={'serviceusage.services.enable','serviceusage.services.use'}).start()
+
+    def test_visible_project_without_setup_permission_is_not_auto_selected(self):
+        self.request.return_value=response([project('customer-project')])
+        self.permissions.return_value={'resourcemanager.projects.get'}
+        result=projects.detect_projects()
+        self.assertEqual(result['state'],'no_suitable_projects')
+        self.save.assert_not_called()
+
+    def test_unknown_permission_does_not_auto_select_or_claim_permission_denial(self):
+        self.request.return_value=response([project('customer-project')])
+        self.permissions.return_value=None
+        self.assertEqual(projects.detect_projects()['state'],'choose_project')
+        self.save.assert_not_called()
 
     def test_one_visible_customer_project_is_saved_without_an_app_quota_header(self):
         self.request.return_value=response([project('customer-project')])

@@ -9,6 +9,18 @@ _MAX_PAGES = 3
 SEARCH_URL = 'https://cloudresourcemanager.googleapis.com/v3/projects:search'
 
 
+def setup_permissions(oauth, project_id):
+    """Read permissions only; a failed lookup is not proof of missing IAM."""
+    response = oauth.authorized_request('POST',
+        f'https://cloudresourcemanager.googleapis.com/v3/projects/{project_id}:testIamPermissions',
+        json={'permissions':['serviceusage.services.enable', 'serviceusage.services.use']}, timeout=10)
+    if not response.ok:
+        return None
+    data = response.json()
+    permissions = data.get('permissions', []) if isinstance(data, dict) else []
+    return set(permissions) if isinstance(permissions, list) and all(isinstance(p, str) for p in permissions) else None
+
+
 def _identity(oauth):
     data = oauth._load_token_data() or {}
     return str(data.get('_reupai_google_subject') or data.get('_reupai_google_email') or '').lower()
@@ -66,6 +78,14 @@ def detect_projects(*, force=False, expected_attempt=None):
                          'project_id':current,'complete':complete,
                          'message':'Chọn một project trong danh sách để dùng quota Gemini.' if options else
                                    'Chưa tìm thấy project riêng của tài khoản này. Tạo project trong Google Cloud rồi bấm Tìm lại.'}
+                # Only auto-select a project that can both enable Gemini and
+                # consume its quota. Unknown permissions remain manual choices.
+                if complete and len(options) == 1 and not current:
+                    permissions = setup_permissions(oauth, options[0]['project_id'])
+                    eligible = permissions is not None and {'serviceusage.services.enable', 'serviceusage.services.use'} <= permissions
+                    options[0]['setup_eligible'] = eligible
+                    if permissions is not None and not eligible:
+                        value.update(state='no_suitable_projects', message='Project tìm thấy chưa đủ quyền thiết lập Gemini. Bạn có thể tạo project riêng hoặc chọn project khác.')
         except Exception:
             value = {'state':'lookup_unavailable','projects':[], 'project_id':current,
                      'message':'Chưa đọc được danh sách project Google Cloud. Kiểm tra mạng rồi bấm Tìm lại, hoặc nhập ID thủ công.'}
@@ -76,7 +96,7 @@ def detect_projects(*, force=False, expected_attempt=None):
                 return {'state':'account_changed','projects':[],'project_id':None,'message':'Tài khoản Google đã đổi. Hãy tìm project lại.'}
             options = value.get('projects', [])
             current = oauth.get_project_id()
-            if not current and value.get('complete') and len(options) == 1:
+            if not current and value.get('complete') and len(options) == 1 and options[0].get('setup_eligible'):
                 selected = oauth.set_project_id(options[0]['project_id'])
                 value = {**value,'state':'selected','project_id':selected,'auto_selected':True,
                          'message':'Đã tự chọn và lưu project duy nhất của tài khoản Google này.'}

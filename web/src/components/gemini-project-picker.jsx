@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export function GeminiProjectPicker({ client, supported, canCreate, oauth, onSelected, onBusyChange, onReconnect }) {
+export function GeminiProjectPicker({ client, supported, canCreate, canReplace, oauth, access, onSelected, onBusyChange, onReconnect }) {
   const [result, setResult] = useState(null);
   const [choice, setChoice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -33,9 +33,9 @@ export function GeminiProjectPicker({ client, supported, canCreate, oauth, onSel
         let value;
         if (canCreate) {
           value = await client.json('/api/gemini/projects/setup', {
-            method:action === 'create' ? 'POST' : 'GET', cache:'no-store',
-            ...(action === 'create' ? { headers:{'Content-Type':'application/json'}, body:JSON.stringify({ confirmed:true }) } : {}),
-            signal:entry.controller.signal, timeoutMs:action === 'create' ? 90000 : 45000,
+            method:['create', 'replace'].includes(action) ? 'POST' : 'GET', cache:'no-store',
+            ...(['create', 'replace'].includes(action) ? { headers:{'Content-Type':'application/json'}, body:JSON.stringify({ confirmed:true, ...(action === 'replace' ? { replace_project:oauth.project_id } : {}) }) } : {}),
+            signal:entry.controller.signal, timeoutMs:['create', 'replace'].includes(action) ? 90000 : 45000,
           });
         }
         if (!value || action === 'detect' && (value.state === 'idle' || force && value.state === 'selected')) {
@@ -54,7 +54,7 @@ export function GeminiProjectPicker({ client, supported, canCreate, oauth, onSel
         request.current = null; onBusyChange(false); if (alive.current) setBusy(false);
       }
     }
-  }, [supported, canCreate, oauth?.connected, owner, choice, client, onSelected, onBusyChange]);
+  }, [supported, canCreate, oauth?.connected, oauth?.project_id, owner, choice, client, onSelected, onBusyChange]);
   useEffect(() => {
     if (!canCreate || !oauth?.connected || result?.state !== 'creating' || busy) return;
     if (Date.now() >= pollDeadline.current) {
@@ -76,7 +76,10 @@ export function GeminiProjectPicker({ client, supported, canCreate, oauth, onSel
     <p role="status">{busy ? actionInFlight === 'create' ? 'Đang tạo project riêng của bạn…' : 'Đang kiểm tra project của tài khoản Google này…' : notice || (oauth.project_id ? `Đang dùng ${oauth.project_id}.` : data?.message || 'ReupAI tự tìm project; nếu chỉ có một project phù hợp, ứng dụng sẽ tự điền và lưu ID.')}</p>
     {supported ? <>
       {data?.state === 'reauthorization_required' && onReconnect && <button className="btn primary" type="button" disabled={busy} onClick={onReconnect}>Cấp lại quyền Google</button>}
-      {canCreate && !oauth.project_id && ['no_projects','retry_required','terms_required','permission_required'].includes(data?.state) && <div className="gemini-project-create"><button className="btn primary" type="button" disabled={busy} onClick={() => run('create')}>{data.state === 'no_projects' ? 'Tự tạo project và kết nối' : 'Thử tạo lại project'}</button><small>Tạo project riêng trong tài khoản Google này, lưu ID và bật Gemini. ReupAI không liên kết tài khoản thanh toán; Google có thể yêu cầu bạn hoàn tất điều khoản hoặc cấp quyền tạo project.</small></div>}
+      {canCreate && !oauth.project_id && ['no_projects','no_suitable_projects','retry_required','terms_required','permission_required'].includes(data?.state) && <div className="gemini-project-create"><button className="btn primary" type="button" disabled={busy} onClick={() => run('create')}>{['no_projects', 'no_suitable_projects'].includes(data.state) ? 'Tự tạo project và kết nối' : 'Thử tạo lại project'}</button><small>Tạo project riêng trong tài khoản Google này, lưu ID và bật Gemini. ReupAI không liên kết tài khoản thanh toán; Google có thể yêu cầu bạn hoàn tất điều khoản hoặc cấp quyền tạo project.</small></div>}
+      {canCreate && oauth.project_id && ['administrator_required', 'quota_permission_required', 'permission_denied'].includes(access?.state) && (canReplace
+        ? <div className="gemini-project-create"><button className="btn primary" type="button" disabled={busy} onClick={() => run('replace')}>Tạo project riêng và kết nối tự động</button><small>Kiểm tra quyền và tạo project riêng nếu project hiện tại chưa đủ quyền. Giữ project cũ; chỉ đổi kết nối sau khi xác minh project mới. Google có thể yêu cầu bạn hoàn tất điều khoản hoặc hạn mức tạo project.</small></div>
+        : <p><Link href="/local-engine">Cập nhật Local Engine</Link> để tự kiểm tra quyền và tạo project thay thế.</p>)}
       {options.length > 0 && (!data?.project_id || options.length > 1) && <div className="settings-form"><label htmlFor="gemini-project-options">Project của {oauth.google_email || 'bạn'}<select id="gemini-project-options" value={choice} onChange={event => setChoice(event.target.value)} disabled={busy}><option value="">Chọn project…</option>{options.map(item => <option value={item.project_id} key={item.project_id}>{item.display_name} · {item.project_id}</option>)}</select></label><button className="btn primary" type="button" disabled={busy || !choice} onClick={() => run('select')}>Dùng project này</button></div>}
       <div className="settings-actions"><button className="btn" type="button" disabled={busy} onClick={() => run('detect', true)}>{busy ? 'Đang kiểm tra…' : data?.state === 'creating' ? 'Tiếp tục kiểm tra' : 'Tìm lại project'}</button><a className="btn" href="https://console.cloud.google.com/cloud-resource-manager" target="_blank" rel="noreferrer">Mở Google Cloud</a></div>
     </> : <p><Link href="/local-engine">Cập nhật Local Engine</Link> để tự tìm và điền Project ID.</p>}

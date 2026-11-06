@@ -13,7 +13,7 @@ import requests
 
 from runtime_paths import get_config_dir
 from services import gemini_oauth as oauth
-from services.google_projects import _identity, detect_projects
+from services.google_projects import _identity, detect_projects, setup_permissions
 
 _lock = threading.RLock()
 _BASE = 'https://cloudresourcemanager.googleapis.com/v3/'
@@ -109,7 +109,9 @@ def _finish(context, journal, project):
     with oauth._lock:
         _check(context)
         # A manual selection in another tab takes precedence.
-        selected = oauth.get_project_id() or oauth.set_project_id(journal['project_id'])
+        selected = oauth.get_project_id()
+        if not selected or selected == journal.get('replaced_project'):
+            selected = oauth.set_project_id(journal['project_id'])
         journal.update(state='created', operation=None)
         _write(context, journal)
     return _result('selected', 'Đã tạo và lưu project. ReupAI đang kiểm tra và bật Gemini cho bạn.', project_id=selected, created=True)
@@ -142,7 +144,7 @@ def _resume(context, journal):
     return _failure(response.status_code, _body(response))
 
 
-def project_setup(*, create=False):
+def project_setup(*, create=False, replace_project=None):
     """Start on explicit confirmation, or resume without creating on a GET."""
     context = _context()
     if not context:
@@ -151,9 +153,21 @@ def project_setup(*, create=False):
         try:
             _check(context)
             selected = oauth.get_project_id()
-            if selected:
-                return _result('selected', 'Đang dùng project đã lưu.', project_id=selected)
             journal = _read(context)
+            replacing = bool(selected and (replace_project == selected or journal and journal.get('replaced_project') == selected))
+            if selected and not replacing:
+                return _result('selected', 'Đang dùng project đã lưu.', project_id=selected)
+            if replacing and not journal:
+                # A replacement is explicit and only allowed when we have
+                # verified this account cannot complete setup on the old one.
+                permissions = setup_permissions(oauth, selected)
+                _check(context)
+                if permissions is None:
+                    return _result('retry_required', 'Chưa kiểm tra được quyền project hiện tại. Thử lại; chưa tạo project mới.')
+                if {'serviceusage.services.enable', 'serviceusage.services.use'} <= permissions:
+                    return _result('selected', 'Project hiện tại đã có quyền thiết lập. Đang kiểm tra Gemini.', project_id=selected)
+                if not create:
+                    return _result('idle', '')
             if journal:
                 resumed = _resume(context, journal)
                 if not create or resumed['state'] != 'retry_required' or journal.get('operation'):
@@ -161,12 +175,15 @@ def project_setup(*, create=False):
             elif not create:
                 return _result('idle', '')
             # Do not create on an incomplete/denied search or when projects exist.
-            discovered = detect_projects(force=True, expected_attempt=context[1])
-            _check(context)
-            if discovered.get('state') != 'no_projects' or not discovered.get('complete'):
-                return discovered
+            if not replacing:
+                discovered = detect_projects(force=True, expected_attempt=context[1])
+                _check(context)
+                if discovered.get('state') not in {'no_projects', 'no_suitable_projects'} or not discovered.get('complete'):
+                    return discovered
             if not journal:
                 journal = {'project_id': 'reupai-' + secrets.token_hex(6), 'marker': secrets.token_hex(8), 'state': 'prepared', 'operation': None}
+                if replacing:
+                    journal['replaced_project'] = selected
             # Persist the id BEFORE sending. Even an ambiguous timeout or crash
             # can only retry the same projectId, never allocate a second resource.
             _write(context, journal)
