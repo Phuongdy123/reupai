@@ -25,6 +25,14 @@ engine._update_manager = manager
 client = TestClient(engine.app)
 origin = 'https://www.reupai.cloud'
 headers = {'Authorization': 'Bearer ' + engine.LOCAL_TOKEN, 'Origin': origin}
+assert client.get('/api/gemini/oauth').status_code == 401
+assert client.post('/api/gemini/oauth/start').status_code == 401
+from unittest.mock import patch
+from services import gemini_oauth
+with patch.object(gemini_oauth, 'start_authorization', return_value={'connecting':True}) as authorize:
+    consent = client.post('/api/gemini/oauth/start', headers=headers, json={'browser':'web','return_to':origin+'/settings#diagnostics'})
+    assert consent.status_code == 200
+    authorize.assert_called_once_with(nonce_hash=None, open_browser=False, return_to=origin+'/settings#diagnostics')
 assert client.get('/api/updates').status_code == 401
 assert client.post('/api/updates/start').status_code == 401
 assert client.post('/api/updates/start', headers={**headers, 'Origin':'https://untrusted.example'}).status_code == 403

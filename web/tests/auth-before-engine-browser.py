@@ -12,7 +12,7 @@ from pathlib import Path
 import threading
 import time
 from http.server import ThreadingHTTPServer
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 from playwright.async_api import async_playwright, expect
 
 spec = importlib.util.spec_from_file_location('workspace_fixture', Path(__file__).with_name('workspace-browser.py'))
@@ -26,12 +26,31 @@ async def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f'http://127.0.0.1:{server.server_port}'
     checks = []; errors = []; authorize = []; registrations = []; engine_before_login = []; auth_service = {}
+    auto_google = {'enabled':False,'started':False,'done':False,'starts':[],'visits':0}
     user = {'id':'00000000-0000-4000-8000-000000000001','email':'fixture@example.com','aud':'authenticated','role':'authenticated','app_metadata':{},'user_metadata':{},'identities':[]}
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(channel='chrome', headless=True)
             async def route_request(route):
                 request = route.request; parsed = urlparse(request.url)
+                if auto_google['enabled'] and parsed.hostname == 'accounts.google.com':
+                    auto_google['visits'] += 1
+                    return await route.fulfill(content_type='text/html', body=f'<h1>Google consent fixture</h1><a id="allow-consent" href="{base}/settings#diagnostics">Allow fixture consent</a>')
+                if auto_google['enabled'] and parsed.port == 17888:
+                    consent = {'connected':auto_google['done'],'connecting':auto_google['started'] and not auto_google['done'],
+                               'google_email':user['email'] if auto_google['done'] else None,'project_id':'fixture-project',
+                               'phase':'awaiting_google' if auto_google['started'] and not auto_google['done'] else None}
+                    if consent['connecting']:
+                        consent.update(authorization_url='https://accounts.google.com/o/oauth2/auth?'+urlencode({'client_id':'fixture','redirect_uri':'http://127.0.0.1:49123/','state':'fixture'}),expires_at=int(time.time())+300)
+                    value = {}
+                    if parsed.path == '/api/health': value={'version':'0.2.36','capabilities':{'direct_authorization':True,'google_oauth_browser_fallback':True}}
+                    elif parsed.path == '/api/authorize/connect': value={'session_token':'fixture-only','grant':'fixture-only'}
+                    elif parsed.path == '/api/gemini/oauth/start':
+                        auto_google['starts'].append(request.post_data_json); auto_google['started']=True
+                    elif parsed.path == '/api/diagnostics': value={'readiness':{'media':True,'storage':True},'components':{'ocr':True,'vietnamese_tts':True,'whisper_modules':True},'configuration':{'gemini_oauth':consent}}
+                    elif parsed.path == '/api/gemini/oauth': value=consent
+                    elif parsed.path == '/api/gemini/oauth/verify': value={'ready':True,'state':'ready'}
+                    return await route.fulfill(content_type='application/json',body=json.dumps(value),headers={'Access-Control-Allow-Origin':'*'})
                 if parsed.port == 17888:
                     current = urlparse(request.frame.url).path
                     if current in ['/sign-in','/sign-up','/local-engine']: engine_before_login.append(current)
@@ -47,7 +66,9 @@ async def main():
                     return await route.fulfill(content_type='application/json', body=json.dumps(user), headers={'Access-Control-Allow-Origin':'*'})
                 if parsed.path == '/api/auth/login' and request.method == 'POST':
                     return await route.fulfill(content_type='application/json', body='{"ok":true}')
-                if request.url.startswith(base + '/'): return await route.continue_()
+                if request.url.startswith(base + '/'):
+                    if auto_google['enabled'] and auto_google['started'] and parsed.path == '/settings' and request.is_navigation_request(): auto_google['done']=True
+                    return await route.continue_()
                 return await route.abort()
             for path in ['sign-in','sign-up']:
                 context = await browser.new_context(viewport={'width':1280,'height':950})
@@ -135,6 +156,25 @@ async def main():
                 assert await page.evaluate('fixtureOauthStarts') == expected, grant_email
                 checks.append('registered account waits for Engine then '+('keeps its existing Gemini grant' if expected==0 else 'requests Gemini consent when the local grant belongs to a different Google account'))
                 await context.close()
+            auto_google['enabled']=True
+            context = await browser.new_context()
+            await context.route('**/*',route_request)
+            await context.add_cookies([{'name':'sb-'+auth_service['host'].split('.')[0]+'-auth-token','value':'base64-'+encode(session),'url':base}])
+            await context.add_init_script("if(!sessionStorage.getItem('seeded')){localStorage.setItem('reupai.gemini.onboarding','1');sessionStorage.setItem('seeded','1');}")
+            page=await context.new_page(); page.on('pageerror',lambda error:errors.append(str(error)))
+            await page.goto(base+'/app')
+            await expect(page.locator('h1')).to_have_text('Google consent fixture')
+            assert auto_google['visits']==1
+            assert len(auto_google['starts'])==1
+            assert auto_google['starts'][0]['browser']=='web'
+            assert auto_google['starts'][0]['return_to']==base+'/settings#diagnostics'
+            await page.locator('#allow-consent').click()
+            await page.wait_for_url(base+'/settings#diagnostics')
+            await expect(page.locator('#diagnostics')).to_contain_text(user['email'])
+            await page.wait_for_timeout(500)
+            assert auto_google['visits']==1 and len(auto_google['starts'])==1, 'Google consent navigation repeated after returning'
+            checks.append('Google consent opens automatically in the current tab and returns to Settings without a popup or repeat consent')
+            await context.close()
             assert not errors, errors
             await browser.close()
     finally: server.shutdown()

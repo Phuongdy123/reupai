@@ -102,9 +102,10 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.35"
+ENGINE_VERSION = "0.2.36"
 ENGINE_CAPABILITIES = {
     "verified_updates": True,
+    "google_oauth_browser_fallback": True,
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
@@ -549,12 +550,30 @@ def gemini_oauth_status(_: bool = Depends(require_token)):
 
 
 @app.post("/api/gemini/oauth/start")
-def gemini_oauth_start(_: bool = Depends(require_token)):
+def gemini_oauth_start(payload: dict[str, str] | None = None, _: bool = Depends(require_token)):
     from services.gemini_oauth import start_authorization
     try:
-        return start_authorization()
+        values = payload or {}
+        return start_authorization(nonce_hash=values.get("nonce_hash"), open_browser=values.get("browser") != "web", return_to=values.get("return_to"))
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/gemini/oauth/login-result")
+def gemini_oauth_login_result(payload: dict[str, str], _: bool = Depends(require_token)):
+    from services.gemini_oauth import take_login_identity
+    return take_login_identity(str(payload.get("login_request", "")))
+
+
+@app.put("/api/gemini/project")
+def gemini_project_set(payload: dict[str, str], _: bool = Depends(require_token)):
+    from services.gemini_oauth import set_project_id
+    try:
+        return {"project_id": set_project_id(str(payload.get("project_id", "")))}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/api/gemini/oauth/verify")
@@ -567,6 +586,12 @@ def gemini_oauth_verify(_: bool = Depends(require_token)):
 def gemini_oauth_enable(_: bool = Depends(require_token)):
     from services.gemini_oauth import enable_gemini_api
     return enable_gemini_api()
+
+
+@app.post("/api/gemini/oauth/repair")
+def gemini_oauth_repair(_: bool = Depends(require_token)):
+    from services.gemini_oauth import repair_gemini_access
+    return repair_gemini_access()
 
 
 @app.delete("/api/gemini/oauth")

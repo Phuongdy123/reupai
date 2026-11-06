@@ -8,6 +8,8 @@ import { sendFeedback } from "./feedback-provider";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
 import { GEMINI_ONBOARDING_KEY, hasMatchingGoogleGrant } from "../lib/gemini-onboarding";
+import { googleConsentLabel } from "../lib/google-consent";
+import { GoogleConsentPrompt } from "./google-consent-prompt";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -170,7 +172,7 @@ export function SettingsPage() {
     if (!connected || oauthStarting) return;
     setOauthStarting(true); setError(""); geminiAutoEnableAttempted.current = false;
     try {
-      await client.json("/api/gemini/oauth/start", { method: "POST" });
+      await client.json("/api/gemini/oauth/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser: "web", return_to: `${window.location.origin}/settings#diagnostics` }) });
       await load();
     } catch (requestError) {
       setError(requestError.message || "Không thể bắt đầu đăng nhập Google.");
@@ -309,8 +311,9 @@ export function SettingsPage() {
         {diagnostics && <div className="settings-actions"><button className="btn" onClick={checkWhisper} disabled={!connected || !whisperModules || whisperChecking}>{whisperChecking ? "Đang kiểm tra Whisper…" : "Kiểm tra Whisper"}</button></div>}
         {whisperCheck?.message && <p className="muted">{whisperCheck.message}</p>}
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
-        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : geminiReady ? "Sẵn sàng" : googleOAuth?.connecting ? "Đang chờ Google xác nhận" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : geminiAccess?.state === "quota_permission_required" ? "Thiếu quyền dùng quota" : geminiAccess?.state === "permission_denied" ? "Thiếu quyền Gemini" : geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "—"}</strong></div>
+        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : geminiAccess?.state === "quota_permission_required" ? "Thiếu quyền dùng quota" : geminiAccess?.state === "permission_denied" ? "Thiếu quyền Gemini" : geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "—"}</strong></div>
         {googleOAuth?.google_email && <div className="setting-row"><span>Tài khoản Google đang cấp Gemini</span><strong>{googleOAuth.google_email}</strong></div>}
+        <GoogleConsentPrompt oauth={googleOAuth} />
         {!apiKeyConfigured && diagnostics && <form className="settings-form" onSubmit={saveProject}>
           <label htmlFor="gemini-project-id"><span>Google Cloud Project ID của bạn</span><input id="gemini-project-id" value={projectId} onChange={(event) => { projectIdDirty.current = true; setProjectId(event.target.value); setProjectSaved(false); }} placeholder="vi-du: du-an-video-123" autoComplete="off" spellCheck={false} disabled={!connected || projectSaving} /></label>
           <div className="settings-actions"><button className="btn primary" type="submit" disabled={!connected || projectSaving}>{projectSaving ? "Đang lưu…" : "Lưu và kiểm tra Gemini"}</button><a className="btn" href="https://console.cloud.google.com/cloud-resource-manager" target="_blank" rel="noreferrer">Xem project của bạn</a></div>

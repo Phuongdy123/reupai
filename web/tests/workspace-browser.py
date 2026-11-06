@@ -86,6 +86,7 @@ async def main():
             page=await context.new_page(); errors=[]
             page.on('pageerror',lambda error:errors.append(str(error)))
             await page.goto(base+'/app',wait_until='networkidle')
+            await expect(page.locator('.plan-status-admin')).to_be_visible()
             assert server.billing_requests==1, f'duplicate billing requests: {server.billing_requests}'
             await expect(page.locator('.sidebar-mobile-close')).to_be_hidden()
             await page.locator('.sidebar-collapse').click()
