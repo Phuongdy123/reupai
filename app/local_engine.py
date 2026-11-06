@@ -102,11 +102,12 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.37"
+ENGINE_VERSION = "0.2.38"
 ENGINE_CAPABILITIES = {
     "verified_updates": True,
     "google_oauth_browser_fallback": True,
     "gemini_project_discovery": True,
+    "gemini_project_creation": True,
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
@@ -581,6 +582,20 @@ def gemini_project_set(payload: dict[str, str], _: bool = Depends(require_token)
 def gemini_projects_detect(payload: dict | None = None, _: bool = Depends(require_token)):
     from services.google_projects import detect_projects
     return detect_projects(force=(payload or {}).get("force") is True)
+
+
+@app.get("/api/gemini/projects/setup")
+def gemini_project_setup_status(_: bool = Depends(require_token)):
+    from services.google_project_setup import project_setup
+    return project_setup()
+
+
+@app.post("/api/gemini/projects/setup")
+def gemini_project_setup_create(payload: dict | None = None, _: bool = Depends(require_token)):
+    if (payload or {}).get("confirmed") is not True:
+        raise HTTPException(status_code=400, detail="Bấm Tự tạo project và kết nối để xác nhận tạo project trong tài khoản Google của bạn.")
+    from services.google_project_setup import project_setup
+    return project_setup(create=True)
 
 
 @app.get("/api/gemini/oauth/verify")

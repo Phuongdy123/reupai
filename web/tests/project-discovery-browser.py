@@ -31,17 +31,37 @@ async def main():
         if parsed.port==17888:
             oauth={'connected':True,'connecting':False,'google_email':user['email'],'google_subject':'fixture-user','project_id':state['selected']}
             value={}
-            if parsed.path=='/api/health':value={'version':'0.2.37' if state['mode']!='legacy' else '0.2.36','capabilities':{'direct_authorization':True,'gemini_project_discovery':state['mode']!='legacy'}}
+            if parsed.path=='/api/health':value={'version':'0.2.38' if state['mode'] in ['create','resume','denied','reauth'] else '0.2.37' if state['mode']!='legacy' else '0.2.36','capabilities':{'direct_authorization':True,'gemini_project_discovery':state['mode']!='legacy','gemini_project_creation':state['mode'] in ['create','resume','denied','reauth']}}
             elif parsed.path=='/api/authorize/connect':value={'session_token':'fixture-only','grant':'fixture-only'}
             elif parsed.path=='/api/diagnostics':value={'readiness':{'media':True,'storage':True},'components':{'ocr':True,'vietnamese_tts':True,'whisper_modules':True},'configuration':{'gemini_oauth':oauth}}
             elif parsed.path=='/api/gemini/oauth/verify':value={'ready':bool(state['selected']),'state':'ready' if state['selected'] else 'project_required'}
             elif parsed.path=='/api/gemini/projects/detect':
                 state['lookups']+=1
                 if state['mode']=='multiple':value={'state':'choose_project','projects':[{'project_id':'customer-one','display_name':'First project'},{'project_id':'customer-two','display_name':'Second project'}]}
-                elif state['mode']=='empty':value={'state':'no_projects','projects':[],'message':'Chưa tìm thấy project riêng. Tạo project rồi bấm Tìm lại.'}
+                elif state['mode'] in ['empty','create','resume','denied','reauth']:value={'state':'no_projects','complete':True,'projects':[],'message':'Chưa tìm thấy project riêng. Tạo project rồi bấm Tìm lại.'}
                 else:
                     state['selected']='customer-project'
                     value={'state':'selected','project_id':'customer-project','auto_selected':True,'projects':[{'project_id':'customer-project','display_name':'Customer project'}],'message':'Đã tự chọn và lưu project duy nhất.'}
+            elif parsed.path=='/api/gemini/projects/setup':
+                if request.method=='POST':
+                    assert request.post_data_json=={'confirmed':True}
+                    state['creates']+=1;state['pending']=True
+                    await asyncio.sleep(0.2)
+                    value={'state':'creating','message':'Google đang tạo project riêng của bạn…'}
+                    if state['mode']=='denied':
+                        state['pending']=False
+                        value={'state':'terms_required','message':'Google cần bạn chấp nhận điều khoản. Mở Google Cloud rồi thử lại.'}
+                    elif state['mode']=='reauth':
+                        state['pending']=False
+                        value={'state':'reauthorization_required','message':'Phiên Google cần cấp lại quyền.'}
+                elif state.get('pending'):
+                    state['polls']+=1
+                    if state['polls']>=2:
+                        state['selected']='created-project';state['pending']=False
+                        value={'state':'selected','created':True,'project_id':'created-project','message':'Đã tạo và lưu project.'}
+                    else:value={'state':'creating','message':'Google đang tạo project riêng của bạn…'}
+                elif state['selected']:value={'state':'selected','project_id':state['selected']}
+                else:value={'state':'idle'}
             elif parsed.path=='/api/gemini/project' and request.method=='PUT':
                 state['saves']+=1;state['selected']=request.post_data_json['project_id'];value={'project_id':state['selected']}
             elif parsed.path=='/api/gemini/oauth/start':state['consents']+=1
@@ -51,9 +71,9 @@ async def main():
     try:
         async with async_playwright() as p:
             browser=await p.chromium.launch(channel='chrome',headless=True)
-            for mode in ['unique','multiple','empty','legacy']:
-                state={'mode':mode,'selected':None,'lookups':0,'saves':0,'consents':0}
-                context=await browser.new_context(viewport={'width':1280,'height':1000})
+            for mode in ['unique','multiple','empty','legacy','create','resume','denied','reauth']:
+                state={'mode':mode,'selected':None,'lookups':0,'saves':0,'consents':0,'creates':0,'polls':0,'pending':mode=='resume'}
+                context=await browser.new_context(viewport={'width':390 if mode=='create' else 1280,'height':1000})
                 await context.route('**/*',route_request)
                 await context.add_cookies([{'name':'sb-fixture-auth-auth-token','value':'base64-'+encode(session),'url':base}])
                 page=await context.new_page();page.on('pageerror',lambda error:errors.append(str(error)))
@@ -83,12 +103,40 @@ async def main():
                     await expect(field).to_have_value('customer-project')
                     assert state['lookups']==2
                     checks.append('no-project guidance supports refresh after creation without creating a project automatically')
-                else:
+                elif mode=='legacy':
                     await expect(page.locator('.gemini-project-picker')).to_contain_text('Cập nhật Local Engine')
                     assert state['lookups']==0
                     await expect(field).to_be_enabled()
                     checks.append('older Engine keeps manual entry and an update link instead of an unsupported discovery request')
-                assert state['consents']==0
+                elif mode=='create':
+                    create=page.get_by_role('button',name='Tự tạo project và kết nối')
+                    await expect(create).to_be_visible()
+                    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+                    assert state['creates']==0
+                    await create.dblclick()
+                    await expect(field).to_have_value('created-project',timeout=15000)
+                    assert state['creates']==1 and state['saves']==0
+                    await page.reload()
+                    await expect(field).to_have_value('created-project')
+                    assert state['creates']==1
+                    checks.append('explicit create action survives double clicks, polls Google and persists the new project without repeat consent')
+                elif mode=='resume':
+                    await expect(field).to_have_value('created-project',timeout=15000)
+                    assert state['creates']==0 and state['lookups']==0
+                    checks.append('returning to Settings resumes a durable creation instead of creating a new project')
+                elif mode=='denied':
+                    await page.get_by_role('button',name='Tự tạo project và kết nối').click()
+                    await expect(page.locator('.gemini-project-picker')).to_contain_text('chấp nhận điều khoản')
+                    await expect(page.get_by_role('button',name='Thử tạo lại project')).to_be_visible()
+                    assert state['creates']==1 and state['selected'] is None
+                    await expect(page.locator('.gemini-project-picker').get_by_role('link',name='Mở Google Cloud')).to_have_attribute('href','https://console.cloud.google.com/cloud-resource-manager')
+                    checks.append('Google terms denial explains the required customer action without automatic retries or false readiness')
+                else:
+                    await page.get_by_role('button',name='Tự tạo project và kết nối').click()
+                    await page.get_by_role('button',name='Cấp lại quyền Google').click()
+                    assert state['consents']==1 and state['creates']==1
+                    checks.append('expired creation grant offers a direct Google reconnect without deleting the existing attempt')
+                if mode!='reauth': assert state['consents']==0
                 await context.close()
             await browser.close()
     finally:server.shutdown()

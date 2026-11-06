@@ -28,6 +28,7 @@
 .gemini-project-picker strong { color: #d3f2e8; }
 .gemini-project-picker p,.gemini-project-picker small { color: #b6c9c2; font-size: 13px; line-height: 1.65; }
 .gemini-project-picker .settings-actions { margin-bottom: 10px; }
+.gemini-project-create { display: grid; justify-items: start; gap: 10px; margin: 14px 0; }
 .theme-xports .dashboard-engine-onboarding { align-items: flex-start; gap: 14px; }
 .dashboard-engine-guide { flex: 1; min-width: 0; }
 .dashboard-engine-guide p,.dashboard-engine-guide ol { margin: 8px 0; color: #aeb6c4; font-size: 13px; line-height: 1.65; }

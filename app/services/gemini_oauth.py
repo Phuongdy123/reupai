@@ -33,8 +33,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from runtime_paths import get_config_dir, is_production
 
 
-# ``cloud-platform`` is required only for the one-click "Bật Gemini API"
-# action. The Gemini scope continues to authorize calls to the Developer API.
+# ``cloud-platform`` supports customer project discovery/creation and the
+# one-click "Bật Gemini API" action. The Gemini scope authorizes the API calls.
 # Keep both scopes in the consent request so a newly installed Engine has a
 # complete setup flow and never asks a customer to paste an API key.
 SCOPES = [

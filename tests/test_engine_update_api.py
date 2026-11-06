@@ -28,6 +28,8 @@ headers = {'Authorization': 'Bearer ' + engine.LOCAL_TOKEN, 'Origin': origin}
 assert client.get('/api/gemini/oauth').status_code == 401
 assert client.post('/api/gemini/oauth/start').status_code == 401
 assert client.post('/api/gemini/projects/detect').status_code == 401
+assert client.post('/api/gemini/projects/setup', json={'confirmed':True}).status_code == 401
+assert client.get('/api/gemini/projects/setup').status_code == 401
 from unittest.mock import patch
 from services import gemini_oauth
 with patch.object(gemini_oauth, 'start_authorization', return_value={'connecting':True}) as authorize:
@@ -39,6 +41,16 @@ with patch.object(google_projects, 'detect_projects', return_value={'state':'no_
     discovered = client.post('/api/gemini/projects/detect', headers=headers, json={'force':True})
     assert discovered.status_code == 200
     detect.assert_called_once_with(force=True)
+from services import google_project_setup
+with patch.object(google_project_setup, 'project_setup', return_value={'state':'creating'}) as setup:
+    assert client.post('/api/gemini/projects/setup', headers=headers, json={}).status_code == 400
+    assert client.post('/api/gemini/projects/setup', headers=headers, json={'confirmed':'true'}).status_code == 400
+    setup.assert_not_called()
+    assert client.get('/api/gemini/projects/setup', headers=headers).status_code == 200
+    setup.assert_called_once_with()
+    setup.reset_mock()
+    assert client.post('/api/gemini/projects/setup', headers=headers, json={'confirmed':True}).status_code == 200
+    setup.assert_called_once_with(create=True)
 assert client.get('/api/updates').status_code == 401
 assert client.post('/api/updates/start').status_code == 401
 assert client.post('/api/updates/start', headers={**headers, 'Origin':'https://untrusted.example'}).status_code == 403
