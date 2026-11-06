@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from "../lib/supabase/config";
 import { GEMINI_ONBOARDING_KEY, hasMatchingGoogleGrant } from "../lib/gemini-onboarding";
 import { googleConsentLabel } from "../lib/google-consent";
 import { GoogleConsentPrompt } from "./google-consent-prompt";
+import { GeminiProjectPicker } from "./gemini-project-picker";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -37,7 +38,7 @@ function formatSpace(bytes) {
 }
 
 export function SettingsPage() {
-  const { status, client, connect, check } = useEngine();
+  const { status, client, connect, check, capabilities } = useEngine();
   const [settings, setSettings] = useState(DEFAULTS);
   const [engineInfo, setEngineInfo] = useState(null);
   const [diagnostics, setDiagnostics] = useState(null);
@@ -50,6 +51,7 @@ export function SettingsPage() {
   const [projectId, setProjectId] = useState("");
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectSaved, setProjectSaved] = useState(false);
+  const [projectDetecting, setProjectDetecting] = useState(false);
   const [geminiAccess, setGeminiAccess] = useState(null);
   const [whisperCheck, setWhisperCheck] = useState(null);
   const [whisperChecking, setWhisperChecking] = useState(false);
@@ -57,6 +59,7 @@ export function SettingsPage() {
   const [webAccountEmail, setWebAccountEmail] = useState("");
   const [geminiRepairing, setGeminiRepairing] = useState(false);
   const requestSequence = useRef(0);
+  const geminiCheckSequence = useRef(0);
   const geminiAutoEnableAttempted = useRef(false);
   const projectIdDirty = useRef(false);
   const reconnectIntentHandled = useRef(false);
@@ -112,12 +115,13 @@ export function SettingsPage() {
     if (connected) load();
     else {
       requestSequence.current += 1;
+      geminiCheckSequence.current += 1;
       setEngineInfo(null); setDiagnostics(null); setLoaded(false); setLoading(false); setSaved(false);
       setWhisperCheck(null); setWhisperChecking(false);
       setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
       setProjectId(""); setProjectSaved(false); projectIdDirty.current = false;
     }
-    return () => { requestSequence.current += 1; };
+    return () => { requestSequence.current += 1; geminiCheckSequence.current += 1; };
   }, [connected, load]);
   useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
   useEffect(() => {
@@ -127,23 +131,35 @@ export function SettingsPage() {
   }, [connected, googleOAuth?.connecting, load]);
 
   const checkGeminiAccess = useCallback(async () => {
+    const sequence = ++geminiCheckSequence.current;
     if (!connected || !googleOAuth?.connected || oauthNeedsReconnect) {
       setGeminiAccess(null);
       return;
     }
     try {
       const result = await client.json("/api/gemini/oauth/verify", { cache: "no-store" });
+      if (sequence !== geminiCheckSequence.current) return;
       if (result.state === "disabled" && !geminiAutoEnableAttempted.current) {
         geminiAutoEnableAttempted.current = true;
         const setup = await requestGeminiRepair(client);
-        setGeminiAccess(setup);
+        if (sequence === geminiCheckSequence.current) setGeminiAccess(setup);
         return;
       }
       setGeminiAccess(result);
     } catch (requestError) {
-      setGeminiAccess({ state: "temporary_error", ready: false, message: requestError.message || "Chưa thể kiểm tra Gemini." });
+      if (sequence === geminiCheckSequence.current) setGeminiAccess({ state: "temporary_error", ready: false, message: requestError.message || "Chưa thể kiểm tra Gemini." });
     }
-  }, [client, connected, oauthNeedsReconnect, googleOAuth?.connected, googleOAuth?.project_id]);
+  }, [client, connected, oauthNeedsReconnect, googleOAuth?.connected, googleOAuth?.project_id, googleOAuth?.google_subject, googleOAuth?.google_email]);
+
+  const applyProjectSelection = useCallback(async (selected) => {
+    const unchanged = selected === googleOAuth?.project_id;
+    geminiCheckSequence.current += 1;
+    projectIdDirty.current = false;
+    setProjectId(selected); setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
+    await load();
+    if (unchanged) await checkGeminiAccess();
+    setProjectSaved(true);
+  }, [load, checkGeminiAccess, googleOAuth?.project_id]);
 
   const repairGemini = async () => {
     if (!connected || geminiRepairing) return;
@@ -224,10 +240,7 @@ export function SettingsPage() {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project_id: selected }),
       });
-      projectIdDirty.current = false;
-      setProjectId(selected); setGeminiAccess(null); geminiAutoEnableAttempted.current = false;
-      await load();
-      setProjectSaved(true);
+      await applyProjectSelection(selected);
     } catch (requestError) {
       setError(requestError.message || "Không thể lưu Google Cloud project trên máy này.");
     } finally { setProjectSaving(false); }
@@ -314,9 +327,10 @@ export function SettingsPage() {
         <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : geminiAccess?.state === "quota_permission_required" ? "Thiếu quyền dùng quota" : geminiAccess?.state === "permission_denied" ? "Thiếu quyền Gemini" : geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "—"}</strong></div>
         {googleOAuth?.google_email && <div className="setting-row"><span>Tài khoản Google đang cấp Gemini</span><strong>{googleOAuth.google_email}</strong></div>}
         <GoogleConsentPrompt oauth={googleOAuth} />
+        {!apiKeyConfigured && <GeminiProjectPicker client={client} supported={connected && Boolean(capabilities?.gemini_project_discovery)} oauth={googleOAuth} onSelected={applyProjectSelection} onBusyChange={setProjectDetecting} />}
         {!apiKeyConfigured && diagnostics && <form className="settings-form" onSubmit={saveProject}>
-          <label htmlFor="gemini-project-id"><span>Google Cloud Project ID của bạn</span><input id="gemini-project-id" value={projectId} onChange={(event) => { projectIdDirty.current = true; setProjectId(event.target.value); setProjectSaved(false); }} placeholder="vi-du: du-an-video-123" autoComplete="off" spellCheck={false} disabled={!connected || projectSaving} /></label>
-          <div className="settings-actions"><button className="btn primary" type="submit" disabled={!connected || projectSaving}>{projectSaving ? "Đang lưu…" : "Lưu và kiểm tra Gemini"}</button><a className="btn" href="https://console.cloud.google.com/cloud-resource-manager" target="_blank" rel="noreferrer">Xem project của bạn</a></div>
+          <label htmlFor="gemini-project-id"><span>Project ID (tự điền hoặc nhập thủ công)</span><input id="gemini-project-id" value={projectId} onChange={(event) => { projectIdDirty.current = true; setProjectId(event.target.value); setProjectSaved(false); }} placeholder="vi-du: du-an-video-123" autoComplete="off" spellCheck={false} disabled={!connected || projectSaving || projectDetecting || googleOAuth?.connecting} /></label>
+          <div className="settings-actions"><button className="btn primary" type="submit" disabled={!connected || projectSaving || projectDetecting || googleOAuth?.connecting}>{projectSaving ? "Đang lưu…" : "Lưu và kiểm tra Gemini"}</button><a className="btn" href="https://console.cloud.google.com/cloud-resource-manager" target="_blank" rel="noreferrer">Xem project của bạn</a></div>
           <p className="muted">Mỗi khách dùng quota và project Google Cloud của mình. Project cần bật Gemini API; tài khoản Google đăng nhập cần quyền dùng quota trên project đó.</p>
           {projectSaved && <p className="muted" role="status">Đã lưu Project ID trên máy này. Đang kiểm tra Gemini API.</p>}
         </form>}

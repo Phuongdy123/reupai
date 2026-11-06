@@ -21,5 +21,6 @@ export function googleConsentLabel(oauth) {
   if (oauth?.phase === 'preparing') return 'Đang chuẩn bị mở Google';
   if (oauth?.phase === 'exchanging') return 'Đang nhận quyền từ Google';
   if (oauth?.phase === 'checking_api') return 'Đang kiểm tra kết nối Gemini';
+  if (oauth?.phase === 'discovering_project') return 'Đang tìm project Google Cloud';
   return 'Đang chờ Google xác nhận';
 }

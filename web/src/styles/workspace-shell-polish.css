@@ -24,6 +24,10 @@
 .google-consent-prompt strong { color: #fff; }
 .google-consent-prompt p,.google-consent-prompt small { color: #c5b6bf; font-size: 13px; line-height: 1.6; }
 .google-consent-prompt .settings-actions { margin-bottom: 10px; }
+.gemini-project-picker { margin: 16px 0; padding: 18px; border: 1px solid #314e48; border-radius: 12px; background: #13201e; }
+.gemini-project-picker strong { color: #d3f2e8; }
+.gemini-project-picker p,.gemini-project-picker small { color: #b6c9c2; font-size: 13px; line-height: 1.65; }
+.gemini-project-picker .settings-actions { margin-bottom: 10px; }
 .theme-xports .dashboard-engine-onboarding { align-items: flex-start; gap: 14px; }
 .dashboard-engine-guide { flex: 1; min-width: 0; }
 .dashboard-engine-guide p,.dashboard-engine-guide ol { margin: 8px 0; color: #aeb6c4; font-size: 13px; line-height: 1.65; }

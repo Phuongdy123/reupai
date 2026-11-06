@@ -28,7 +28,7 @@ export function GoogleConsentPrompt({ oauth }) {
     <strong>{googleConsentLabel(oauth)}</strong>
     {url && !expired ? <><p>ReupAI đang tự chuyển sang Google trong trình duyệt này. Chọn tài khoản và cho phép quyền truy cập; sau đó bạn sẽ tự quay lại Cài đặt.</p><div className="settings-actions"><a className="btn primary" href={url} rel="noreferrer">Mở Google để cấp quyền</a><button className="btn" type="button" onClick={copy}>Sao chép liên kết</button></div><small>Liên kết còn hiệu lực khoảng {Math.max(0, Math.ceil((oauth.expires_at * 1000 - now) / 1000))} giây. Chỉ mở trên máy đang chạy ReupAI.</small></>
       : expired ? <p>Liên kết đã hết hạn. Bấm Dừng chờ, rồi Kết nối Google để tạo lượt mới.</p>
-      : oauth.phase ? <p>{['exchanging','checking_api'].includes(oauth.phase) ? 'Google đã gửi xác nhận. ReupAI đang hoàn tất kết nối, bạn chưa cần thao tác thêm.' : 'Đang chuẩn bị liên kết đăng nhập Google…'}</p>
+      : oauth.phase ? <p>{['exchanging','checking_api','discovering_project'].includes(oauth.phase) ? 'Google đã gửi xác nhận. ReupAI đang hoàn tất kết nối, bạn chưa cần thao tác thêm.' : 'Đang chuẩn bị liên kết đăng nhập Google…'}</p>
       : <p>Nếu trang Google không tự mở, hãy <Link href="/local-engine">cập nhật Local Engine</Link> để dùng luồng tự động trong trình duyệt hiện tại.</p>}
     {notice && <p>{notice}</p>}
   </div>;

@@ -200,6 +200,7 @@ _state: dict[str, object] = {
     "authorization_url": None,
     "phase": None,
     "browser_opened": False,
+    "project_discovery": None,
 }
 
 
@@ -227,6 +228,7 @@ def _status_from_state(
         authorization_url = _state.get("authorization_url") if running and _state.get("phase") == "awaiting_google" else None
         phase = _state.get("phase") if running else None
         browser_opened = bool(_state.get("browser_opened"))
+        project_discovery = _state.get("project_discovery")
     token_data = _load_token_data() or {}
     return {
         "configured": _client_config() is not None,
@@ -240,6 +242,7 @@ def _status_from_state(
         "phase": phase,
         "browser_opened": browser_opened if running else False,
         "expires_at": int(started_at + OAUTH_WAIT_SECONDS) if authorization_url and started_at else None,
+        "project_discovery": project_discovery,
         "api_setup": api_setup,
         "project_id": get_project_id(),
         "google_email": str(token_data.get("_reupai_google_email") or "") or None,
@@ -290,6 +293,11 @@ def get_project_id() -> str | None:
         saved = json.loads(PROJECT_PATH.read_text(encoding="utf-8"))
         selected = str(saved.get("project_id") or "") if isinstance(saved, dict) else ""
         if PROJECT_ID_PATTERN.fullmatch(selected):
+            token = _load_token_data() or {}
+            owner = str(saved.get("google_subject") or saved.get("google_email") or "").lower()
+            actual = str(token.get("_reupai_google_subject") if saved.get("google_subject") else token.get("_reupai_google_email") or "").lower()
+            if owner and owner != actual:
+                return None
             return selected
     except (OSError, ValueError, TypeError):
         pass
@@ -310,13 +318,29 @@ def set_project_id(project_id: str) -> str:
     value = project_id.strip()
     if not PROJECT_ID_PATTERN.fullmatch(value):
         raise ValueError("Project ID phải dài 6–30 ký tự, bắt đầu bằng chữ thường và chỉ gồm chữ thường, số hoặc dấu gạch ngang.")
-    PROJECT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    temporary = PROJECT_PATH.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"project_id": value}), encoding="utf-8")
-    temporary.replace(PROJECT_PATH)
     with _lock:
+        token = _load_token_data() or {}
+        data = {"project_id": value, "google_subject": token.get("_reupai_google_subject"), "google_email": token.get("_reupai_google_email")}
+        PROJECT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        temporary = PROJECT_PATH.with_suffix(".tmp")
+        temporary.write_text(json.dumps(data), encoding="utf-8")
+        temporary.replace(PROJECT_PATH)
         _state["api_setup"] = None
     return value
+
+
+def _bind_legacy_project_owner() -> None:
+    """Keep an old manual selection with its Google account across reconnects."""
+    with _lock:
+        try:
+            saved = json.loads(PROJECT_PATH.read_text(encoding="utf-8"))
+            token = _load_token_data() or {}
+            if (isinstance(saved, dict) and not (saved.get("google_subject") or saved.get("google_email"))
+                    and (token.get("_reupai_google_subject") or token.get("_reupai_google_email"))
+                    and PROJECT_ID_PATTERN.fullmatch(str(saved.get("project_id") or ""))):
+                set_project_id(saved["project_id"])
+        except (OSError, ValueError, TypeError):
+            pass
 
 
 def _dpapi_encrypt(value: bytes) -> bytes:
@@ -479,11 +503,12 @@ def start_authorization(nonce_hash: str | None = None, *, open_browser: bool = T
         _expire_authorization_locked()
         if _state["status"] == "connecting":
             raise RuntimeError("Một cửa sổ Google đang chờ xác nhận. Hãy hoàn tất hoặc dừng lượt đó trước.")
+        _bind_legacy_project_owner()
         attempt = int(_state["attempt"]) + 1
         login_request = secrets.token_urlsafe(24) if nonce_hash else None
         _state.update(status="connecting", error="", attempt=attempt, started_at=time.time(),
                       api_setup=None, login_request=login_request, login_id_token=None,
-                      login_completed_at=0.0, authorization_url=None, phase="preparing", browser_opened=False)
+                      login_completed_at=0.0, authorization_url=None, phase="preparing", browser_opened=False, project_discovery=None)
 
     def publish_authorization(value: str) -> None:
         url = _google_authorization_url(value)
@@ -532,6 +557,16 @@ def start_authorization(nonce_hash: str | None = None, *, open_browser: bool = T
                     return
                 _save_credentials(credentials, metadata=_identity_from_id_token(identity_token))
                 _state.update(phase="checking_api", authorization_url=None)
+                _bind_legacy_project_owner()
+            if not get_project_id():
+                from services.google_projects import detect_projects
+                with _lock:
+                    _state["phase"] = "discovering_project"
+                discovered = detect_projects(expected_attempt=attempt)
+                with _lock:
+                    if int(_state["attempt"]) != attempt:
+                        return
+                    _state.update(project_discovery=discovered, phase="checking_api")
             # Consent succeeded: enable the Gemini API immediately. The setup
             # stays local and runs without a second UI action.
             api_setup = enable_gemini_api()
@@ -844,4 +879,5 @@ def disconnect() -> None:
                 authorization_url=None,
                 phase=None,
                 browser_opened=False,
+                project_discovery=None,
             )

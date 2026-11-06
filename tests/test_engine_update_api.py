@@ -27,12 +27,18 @@ origin = 'https://www.reupai.cloud'
 headers = {'Authorization': 'Bearer ' + engine.LOCAL_TOKEN, 'Origin': origin}
 assert client.get('/api/gemini/oauth').status_code == 401
 assert client.post('/api/gemini/oauth/start').status_code == 401
+assert client.post('/api/gemini/projects/detect').status_code == 401
 from unittest.mock import patch
 from services import gemini_oauth
 with patch.object(gemini_oauth, 'start_authorization', return_value={'connecting':True}) as authorize:
     consent = client.post('/api/gemini/oauth/start', headers=headers, json={'browser':'web','return_to':origin+'/settings#diagnostics'})
     assert consent.status_code == 200
     authorize.assert_called_once_with(nonce_hash=None, open_browser=False, return_to=origin+'/settings#diagnostics')
+from services import google_projects
+with patch.object(google_projects, 'detect_projects', return_value={'state':'no_projects','projects':[]}) as detect:
+    discovered = client.post('/api/gemini/projects/detect', headers=headers, json={'force':True})
+    assert discovered.status_code == 200
+    detect.assert_called_once_with(force=True)
 assert client.get('/api/updates').status_code == 401
 assert client.post('/api/updates/start').status_code == 401
 assert client.post('/api/updates/start', headers={**headers, 'Origin':'https://untrusted.example'}).status_code == 403

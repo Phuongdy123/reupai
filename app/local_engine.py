@@ -102,10 +102,11 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.36"
+ENGINE_VERSION = "0.2.37"
 ENGINE_CAPABILITIES = {
     "verified_updates": True,
     "google_oauth_browser_fallback": True,
+    "gemini_project_discovery": True,
     "direct_authorization": True,
     "media_tickets": True,
     "runtime_readiness": True,
@@ -574,6 +575,12 @@ def gemini_project_set(payload: dict[str, str], _: bool = Depends(require_token)
         return {"project_id": set_project_id(str(payload.get("project_id", "")))}
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/gemini/projects/detect")
+def gemini_projects_detect(payload: dict | None = None, _: bool = Depends(require_token)):
+    from services.google_projects import detect_projects
+    return detect_projects(force=(payload or {}).get("force") is True)
 
 
 @app.get("/api/gemini/oauth/verify")
