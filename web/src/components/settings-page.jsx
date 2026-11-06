@@ -21,6 +21,13 @@ const CONNECTION_LABELS = {
   authorization_required: "Cần cấp quyền", authorizing: "Đang cấp quyền",
   permission_denied: "Quyền truy cập bị từ chối", update_required: "Cần cập nhật Local Engine", error: "Lỗi kết nối",
 };
+const GEMINI_SETUP_LABELS = {
+  administrator_required: "Cần quyền bật API", quota_permission_required: "Thiếu quyền dùng quota",
+  permission_denied: "Cần kiểm tra quyền project", organization_policy_required: "Bị chặn bởi chính sách tổ chức",
+  terms_required: "Cần hoàn tất điều khoản Google", billing_required: "Cần kiểm tra thanh toán Google Cloud",
+  setup_service_disabled: "Cần hoàn tất thiết lập API", project_unavailable: "Cần chọn project khác",
+  disabled: "API chưa bật", enabling: "Đang bật Gemini API", error: "Chưa xác nhận được Gemini",
+};
 
 async function requestGeminiRepair(client) {
   try {
@@ -343,7 +350,7 @@ export function SettingsPage() {
         {diagnostics && <div className="settings-actions"><button className="btn" onClick={checkWhisper} disabled={!connected || !whisperModules || whisperChecking}>{whisperChecking ? "Đang kiểm tra Whisper…" : "Kiểm tra Whisper"}</button></div>}
         {whisperCheck?.message && <p className="muted">{whisperCheck.message}</p>}
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
-        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : geminiAccess?.state === "quota_permission_required" ? "Thiếu quyền dùng quota" : geminiAccess?.state === "permission_denied" ? "Thiếu quyền Gemini" : geminiAccess?.state === "enabling" ? "Đang bật Gemini API" : "Đang kiểm tra Gemini API") : "—"}</strong></div>
+        <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : GEMINI_SETUP_LABELS[geminiAccess?.state] || "Đang kiểm tra Gemini API") : "—"}</strong></div>
         {googleOAuth?.google_email && <div className="setting-row"><span>Tài khoản Google đang cấp Gemini</span><strong>{googleOAuth.google_email}</strong></div>}
         <GoogleConsentPrompt oauth={googleOAuth} />
         {!apiKeyConfigured && <GeminiProjectPicker client={client} supported={connected && Boolean(capabilities?.gemini_project_discovery)} canCreate={connected && Boolean(capabilities?.gemini_project_creation)} canReplace={newerVersion(engineInfo?.version, "0.2.38")} oauth={googleOAuth} access={geminiAccess} onSelected={applyProjectSelection} onBusyChange={setProjectDetecting} onReconnect={connectGoogle} />}
