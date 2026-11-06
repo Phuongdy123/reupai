@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.35",
+    "version": "0.2.36",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.35/ReupAI-Setup-0.2.35.exe",
-    "sha256": "8687f49645ab27191ab8d77c0f07c1bbdc3a302cf7ec609487d7bbe29512b288",
-    "size": 464813705,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.36/ReupAI-Setup-0.2.36.exe",
+    "sha256": "9de0e3497ea09e62b57e5a6204b51830647319991634e86d9a1f144f67d3f8b7",
+    "size": 464850162,
     "notes": [
-      "Cập nhật Local Engine từ website, xác minh chữ ký và SHA-256 trước khi cài.",
-      "Chờ tác vụ đang chạy hoàn tất, hỗ trợ hủy và tự kết nối lại sau cập nhật.",
-      "Dò vùng mờ logo Bilibili gọn theo vị trí chữ thay vì phủ cố định hai góc."
+      "Tự mở Google trong tab đang dùng, không phụ thuộc trình duyệt mặc định Windows.",
+      "Sau khi cấp quyền, tự quay lại ReupAI và hoàn tất kết nối Gemini.",
+      "Có liên kết dự phòng, giới hạn thời gian chờ và hủy lượt đăng nhập an toàn."
     ],
-    "publishedAt": "2026-11-05T08:21:03+00:00"
+    "publishedAt": "2026-11-06T04:36:01+00:00"
   },
-  "signature": "yadOdivP90gH9BUgf2VDR+vuR3IXSmlgjh9pLnlE/w7yoNGZmOd3wbgf8B3CJmlE/YFC92zeQv5xUsdVIoO5CQ=="
+  "signature": "C8A12ert3AS1urg/zea64gSAM3RD7SvktB5+raXfJ667JpFs+fMqHtxDjIN4heO802i1n2pHqFoCzbHnfb6TAA=="
 }
