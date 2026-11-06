@@ -20,6 +20,17 @@
 .engine-update-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .engine-update-actions a,.engine-update-actions button { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 15px; border: 1px solid #d1994b; border-radius: 9px; background: #bb8437; color: #120c05; font: inherit; font-size: 12px; font-weight: 800; text-decoration: none; cursor: pointer; }
 .engine-update-actions .secondary { background: transparent; color: #f0d9ba; }
+.theme-xports .dashboard-engine-onboarding { align-items: flex-start; gap: 14px; }
+.dashboard-engine-guide { flex: 1; min-width: 0; }
+.dashboard-engine-guide p,.dashboard-engine-guide ol { margin: 8px 0; color: #aeb6c4; font-size: 13px; line-height: 1.65; }
+.dashboard-engine-guide ol { padding-left: 18px; }
+.dashboard-engine-guide a { color: #ff8499; font-size: 13px; }
+.theme-xports .dashboard-engine-onboarding .dashboard-engine-actions { flex-direction: column; align-items: stretch; }
+.theme-xports .dashboard-engine-onboarding a.dashboard-engine-download { border-color: #f12b4c; color: #fff; background: #d61437; text-align: center; }
+@media (max-width: 700px) {
+  .theme-xports .dashboard-engine-onboarding { flex-wrap: wrap; }
+  .theme-xports .dashboard-engine-onboarding .dashboard-engine-actions { width: 100%; }
+}
 .billing-load-notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-block: 12px; padding: 12px 14px; border: 1px solid #6b4a30; border-radius: 10px; color: #e9ccb2; background: #282018; font-size: 12px; line-height: 1.5; }
 .billing-load-notice button { flex: 0 0 auto; min-height: 34px; padding: 0 12px; border: 1px solid #856041; border-radius: 7px; color: #fff; background: #3b2c20; font: inherit; cursor: pointer; }
 

@@ -5,14 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
-import { localEngineClient } from "../lib/local-engine-client";
+import { queueGeminiSetup } from "../lib/gemini-onboarding";
 import { sendFeedback } from "./feedback-provider";
 import { Icon } from "./icon";
-
-// A release can opt out, but new website builds use one Google consent for
-// account login and the local Gemini connection by default.
-const UNIFIED_GOOGLE_LOGIN = process.env.NEXT_PUBLIC_GOOGLE_GEMINI_LOGIN !== "false";
-const GEMINI_ONBOARDING_KEY = "reupai.gemini.onboarding";
 
 function destinationPath() {
   const requestedPath = new URLSearchParams(window.location.search).get("next");
@@ -22,32 +17,12 @@ function destinationPath() {
 async function beginWebGoogleLogin(next) {
   const redirectTo = new URL(`/auth/callback?next=${encodeURIComponent(next)}`, window.location.origin).toString();
   const { data, error } = await createClient().auth.signInWithOAuth({
-    provider: "google", options: { redirectTo },
+    provider: "google", options: { redirectTo, skipBrowserRedirect: true },
   });
   if (error) throw error;
   if (!data?.url) throw new Error("Không thể mở trang đăng nhập Google.");
+  queueGeminiSetup(window.localStorage);
   window.location.assign(data.url);
-}
-
-async function loginNonce() {
-  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(nonce));
-  const nonceHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return { nonce, nonceHash };
-}
-
-async function waitForGoogleIdentity(loginRequest) {
-  const deadline = Date.now() + 305000;
-  while (Date.now() < deadline) {
-    const result = await localEngineClient.json("/api/gemini/oauth/login-result", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ login_request: loginRequest }),
-    });
-    if (result.state === "ready" && result.id_token) return result.id_token;
-    if (result.state !== "connecting") throw new Error(result.message || "Google chưa hoàn tất đăng nhập. Hãy thử lại.");
-    await new Promise((resolve) => window.setTimeout(resolve, 2500));
-  }
-  throw new Error("Đã quá thời gian chờ Google. Hãy thử đăng nhập lại.");
 }
 
 function AuthUnavailable() {
@@ -64,125 +39,43 @@ export function AuthCard({ mode }) {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [signupCreated, setSignupCreated] = useState(false);
-  const [geminiBusy, setGeminiBusy] = useState(false);
-  const [geminiStatus, setGeminiStatus] = useState("");
-  const [showWebFallback, setShowWebFallback] = useState(false);
   const router = useRouter();
   const signUp = mode === "sign-up";
   useEffect(() => { if (error) sendFeedback("error", error); }, [error]);
 
   async function submit(event) {
     event.preventDefault();
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
       const supabase = createClient();
       if (signUp) {
         const normalizedUsername = username.trim().toLowerCase();
         if (!/^[a-z0-9][a-z0-9_.-]{2,31}$/.test(normalizedUsername)) throw new Error("Tên đăng nhập gồm 3–32 ký tự: chữ thường, số, dấu chấm, gạch dưới hoặc gạch ngang.");
-        const { error: authError } = await supabase.auth.signUp({
+        const { data, error: authError } = await supabase.auth.signUp({
           email, password,
-          options: { data: { display_name: name.trim(), username: normalizedUsername }, emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/settings?onboarding=1#diagnostics")}` },
+          options: { data: { display_name: name.trim(), username: normalizedUsername }, emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/app?onboarding=1")}` },
         });
         if (authError) throw authError;
-        window.localStorage.setItem(GEMINI_ONBOARDING_KEY, "1");
+        queueGeminiSetup(window.localStorage);
         setSignupCreated(true);
         setNotice("Tài khoản đã được tạo. Hãy kiểm tra email để xác minh, sau đó đăng nhập ReupAI.");
-        void connectGeminiAfterSignup();
+        if (data?.session) { router.replace(destinationPath()); router.refresh(); }
       } else {
         const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier: email, password }) });
         if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(data.error || "Tên đăng nhập, email hoặc mật khẩu không đúng."); }
-        const requestedPath = new URLSearchParams(window.location.search).get("next");
-        const destination = window.localStorage.getItem(GEMINI_ONBOARDING_KEY) === "1"
-          ? "/settings?onboarding=1#diagnostics"
-          : requestedPath?.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/app";
+        const destination = destinationPath();
         router.replace(destination); router.refresh();
       }
     } catch (caught) { setError(caught.message || "Không thể hoàn tất yêu cầu."); }
     finally { setBusy(false); }
   }
 
-  async function connectGeminiAfterSignup() {
-    if (geminiBusy) return;
-    setGeminiBusy(true); setGeminiStatus("Đang kiểm tra ReupAI Local Engine trên máy này…");
-    try {
-      let connected = await localEngineClient.check();
-      if (!connected && ["authorization_required", "permission_denied"].includes(localEngineClient.status)) {
-        connected = await localEngineClient.authorizeDirectly();
-      }
-      if (!connected) throw new Error("Hãy mở ReupAI Local Engine trên máy này, rồi bấm Kết nối Google cho Gemini.");
-      const health = await localEngineClient.json("/api/health");
-      if (!health.capabilities?.google_gemini_login) throw new Error("Hãy cập nhật Local Engine để cấp quyền Gemini bằng Google.");
-      await localEngineClient.json("/api/gemini/oauth/start", { method: "POST" });
-      setGeminiStatus("Google đã mở trong trình duyệt. Hãy chọn tài khoản và cấp quyền Gemini.");
-      const deadline = Date.now() + 305000;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2500));
-        const state = await localEngineClient.json("/api/gemini/oauth");
-        if (state.connected && !state.connecting) {
-          const setup = state.api_setup;
-          setGeminiStatus(`Đã cấp quyền Google trên máy này. ${setup?.message || "Sau khi tài khoản được duyệt, vào Cài đặt chọn Google Cloud project của bạn để kiểm tra Gemini."}`);
-          return;
-        }
-        if (!state.connecting && state.error) throw new Error(state.error);
-      }
-      throw new Error("Hết thời gian chờ Google. Bấm Kết nối lại để thử lần nữa.");
-    } catch (caught) {
-      setGeminiStatus(caught.message || "Chưa thể kết nối Google. Bạn có thể thử lại sau.");
-    } finally { setGeminiBusy(false); }
-  }
-
   async function signInWithGoogle() {
     if (!isSupabaseConfigured() || busy) return;
     setBusy(true); setError(""); setNotice("");
-    try {
-      const next = destinationPath();
-      if (!UNIFIED_GOOGLE_LOGIN) {
-        await beginWebGoogleLogin(next);
-        return;
-      }
-      const connected = await localEngineClient.check();
-      if (!connected && ["authorization_required", "permission_denied"].includes(localEngineClient.status)) {
-        if (!await localEngineClient.authorizeDirectly()) throw new Error("Chưa cấp quyền cho trang ReupAI kết nối Local Engine.");
-      } else if (!connected) {
-        throw new Error("Hãy mở ReupAI Local Engine trên máy này rồi thử đăng nhập Google.");
-      }
-      const health = await localEngineClient.json("/api/health");
-      if (!health.capabilities?.google_gemini_login) {
-        throw new Error("Local Engine cần được cập nhật để đăng nhập Google và cấp quyền Gemini cùng một lần.");
-      }
-      const { nonce, nonceHash } = await loginNonce();
-      setNotice("Google đang mở trong trình duyệt. Hãy chọn tài khoản và cấp quyền Gemini; trang này sẽ tự hoàn tất đăng nhập.");
-      const started = await localEngineClient.json("/api/gemini/oauth/start", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nonce_hash: nonceHash }),
-      });
-      if (!started.login_request) throw new Error("Local Engine chưa tạo được lượt đăng nhập Google.");
-      const idToken = await waitForGoogleIdentity(started.login_request);
-      const { error: authError } = await createClient().auth.signInWithIdToken({
-        provider: "google", token: idToken, nonce,
-      });
-      if (authError) {
-        if (/unacceptable audience|bad id token|nonce/i.test(authError.message || "")) {
-          throw new Error("Google đã cấp quyền Gemini, nhưng website chưa chấp nhận đăng nhập. Quản trị viên cần kiểm tra Desktop Client ID và nonce trong Supabase.");
-        }
-        throw authError;
-      }
-      window.localStorage.removeItem(GEMINI_ONBOARDING_KEY);
-      router.replace(started.project_id ? next : "/settings#diagnostics"); router.refresh();
-    } catch (caught) {
-      setError(caught.message || "Không thể đăng nhập Google lúc này.");
-      setNotice("");
-      if (UNIFIED_GOOGLE_LOGIN) setShowWebFallback(true);
-      setBusy(false);
-    }
-  }
-
-  async function signInWithWebGoogle() {
-    if (busy) return;
-    setBusy(true); setError(""); setNotice("");
     try { await beginWebGoogleLogin(destinationPath()); }
-    catch (caught) { setError(caught.message || "Không thể đăng nhập Google vào website."); setBusy(false); }
+    catch (caught) { setError(caught.message || "Không thể đăng nhập Google lúc này."); setBusy(false); }
   }
 
   return <main className="account-shell auth-shell">
@@ -197,7 +90,7 @@ export function AuthCard({ mode }) {
         <Link href="/sign-in" className={!signUp ? "active" : ""} aria-current={!signUp ? "page" : undefined}>Đăng nhập</Link>
         <Link href="/sign-up" className={signUp ? "active" : ""} aria-current={signUp ? "page" : undefined}>Đăng ký</Link>
       </div>
-      {signUp && <div className="auth-gemini-note"><Icon name="spark" size={18} /><p><strong>Đăng ký bằng email?</strong> Bạn vẫn cần kết nối Google và cấp quyền Gemini trên Local Engine. ReupAI sẽ mở bước kết nối ngay sau khi tạo tài khoản; mỗi khách chọn Google Cloud project của mình.</p></div>}
+      {signUp && <div className="auth-gemini-note"><Icon name="spark" size={18} /><p><strong>Tạo tài khoản trước.</strong> Bạn có thể đăng ký mà chưa cài phần mềm. Sau khi đăng nhập, ReupAI sẽ hướng dẫn cài Local Engine để tải và xử lý video trên máy.</p></div>}
       {!isSupabaseConfigured() ? <AuthUnavailable /> : <>
         <form onSubmit={submit} className="account-form auth-form">
           {signUp && <>
@@ -210,11 +103,10 @@ export function AuthCard({ mode }) {
           {notice && <p className="account-notice success" role="status">{notice}</p>}
           <button className="button-primary account-submit" disabled={busy || signupCreated}>{busy ? "Đang xử lý…" : signUp ? signupCreated ? "Đã gửi đăng ký" : "Tạo tài khoản" : "Đăng nhập"}<span aria-hidden="true">→</span></button>
         </form>
-        {signUp && signupCreated && <div className="auth-gemini-progress" role="status"><strong>Quyền Gemini trên máy này</strong><p>{geminiStatus || "Đang chuẩn bị kết nối Google…"}</p><button type="button" onClick={connectGeminiAfterSignup} disabled={geminiBusy}>{geminiBusy ? "Đang chờ Google…" : "Kết nối Google cho Gemini"}</button></div>}
+        {signUp && signupCreated && <div className="auth-gemini-progress"><strong>Bước tiếp theo</strong><p>Xác minh email rồi đăng nhập. Bạn sẽ được hướng dẫn cài Local Engine và kết nối Google cho Gemini trong workspace.</p><Link href="/sign-in">Đến trang đăng nhập →</Link></div>}
         <div className="auth-divider"><span>hoặc tiếp tục với</span></div>
         <button className="google-sign-in" type="button" onClick={signInWithGoogle} disabled={busy}><span aria-hidden="true">G</span>{busy ? "Đang chờ Google…" : signUp ? "Đăng ký với Google" : "Tiếp tục với Google"}</button>
-        {UNIFIED_GOOGLE_LOGIN && <p className="auth-google-hint">Mở ReupAI Local Engine để đăng nhập Google và cấp quyền Gemini cùng một lần.</p>}
-        {showWebFallback && <div className="account-notice"><p>Chưa thể kết nối Gemini trên máy này. Bạn có thể vào website trước, rồi kết nối trong Cài đặt.</p><button className="btn" type="button" onClick={signInWithWebGoogle} disabled={busy}>Chỉ đăng nhập website bằng Google</button></div>}
+        <p className="auth-google-hint">Đăng nhập Google trực tiếp trên web. Cài Local Engine và cấp quyền Gemini sau khi đăng nhập, trước khi xử lý video.</p>
       </>}
       <p className="account-switch">{signUp ? "Đã có tài khoản?" : "Chưa có tài khoản?"} <Link href={signUp ? "/sign-in" : "/sign-up"}>{signUp ? "Đăng nhập" : "Đăng ký ngay"}</Link></p>
     </section>

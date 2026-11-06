@@ -8,7 +8,7 @@ const content = {
     sections: [
       ["Dữ liệu chúng tôi dùng", "ReupAI dùng thông tin tài khoản như email và tên hiển thị để xác thực, cấp quyền sử dụng và hỗ trợ người dùng."],
       ["Video và tệp", "Video, âm thanh và dự án được Local Engine xử lý trên máy của bạn. ReupAI không tự động tải nội dung nguồn hoặc thành phẩm từ Local Engine lên máy chủ của ReupAI."],
-      ["Đăng nhập Google và Gemini", "Khi bạn chọn đăng nhập Google, Local Engine xin quyền Gemini cùng với danh tính tài khoản. Website nhận ID token để tạo phiên đăng nhập; Engine lưu token truy cập Google đã mã hóa trên máy để xử lý văn bản qua Gemini và tự làm mới khi có thể. Project ID của bạn được lưu trên máy để dùng quota Google Cloud của project đó. Văn bản gửi cho Gemini được chuyển đến Google để xử lý."],
+      ["Đăng nhập Google và Gemini", "Bạn có thể đăng nhập tài khoản trên website bằng Google mà chưa cài Local Engine. Khi bắt đầu xử lý video, bạn cài Local Engine và chủ động kết nối Google cho Gemini trong Cài đặt. Engine lưu token truy cập Google đã mã hóa trên máy và tự làm mới khi có thể. Project ID của bạn được lưu trên máy để dùng quota Google Cloud của project đó. Văn bản gửi cho Gemini được chuyển đến Google để xử lý."],
       ["Liên hệ", "Nếu có câu hỏi về quyền riêng tư, hãy liên hệ phuongndps39487@gmail.com."],
     ],
   },

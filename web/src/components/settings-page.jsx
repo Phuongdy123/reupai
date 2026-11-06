@@ -7,6 +7,7 @@ import { useEngine } from "./engine-provider";
 import { sendFeedback } from "./feedback-provider";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
+import { GEMINI_ONBOARDING_KEY, hasMatchingGoogleGrant } from "../lib/gemini-onboarding";
 
 const DEFAULTS = { refresh_interval: 5 };
 const REFRESH_INTERVALS = [3, 5, 10, 15, 30, 60];
@@ -183,16 +184,17 @@ export function SettingsPage() {
     const url = new URL(window.location.href);
     const onboarding = url.searchParams.get("onboarding") === "1";
     if (url.searchParams.get("reconnect") !== "1" && !onboarding) return;
+    if (onboarding && !webAccountEmail) return;
     reconnectIntentHandled.current = true;
     url.searchParams.delete("reconnect");
     url.searchParams.delete("onboarding");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
     if (onboarding) {
-      window.localStorage.removeItem("reupai.gemini.onboarding");
-      if (googleOAuth?.connected && !googleOAuth?.needs_reauthorization) return;
+      window.localStorage.removeItem(GEMINI_ONBOARDING_KEY);
+      if (hasMatchingGoogleGrant(webAccountEmail, googleOAuth)) return;
     }
     void connectGoogle();
-  }, [connected, diagnostics, googleOAuth?.connecting, googleOAuth?.connected, googleOAuth?.needs_reauthorization]);
+  }, [connected, diagnostics, googleOAuth?.connecting, googleOAuth?.connected, googleOAuth?.needs_reauthorization, webAccountEmail]);
 
   const disconnectGoogle = async () => {
     if (!connected || oauthDisconnecting) return;

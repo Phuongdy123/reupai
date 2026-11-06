@@ -7,6 +7,7 @@ import { useEngine } from "./engine-provider";
 import { useBilling } from "./billing-provider";
 import { Icon } from "./icon";
 import { EngineUpdateNotice } from "./engine-update-notice";
+import { GeminiSetupRedirect } from "./gemini-setup-redirect";
 import { IconSprite } from "./icon-sprite";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
@@ -160,7 +161,7 @@ export function AppShell({ children }) {
   }, []);
   useEffect(() => { setAccountOpen(false); setMobileNavOpen(false); }, [pathname]);
   const quickLinks = [["/app", "Trang chủ"], ["/sources", "Nguồn video"], ["/downloads", "Video đã tải"], ["/outputs", "Thành phẩm"], ["/history", "Lịch sử"], ["/profile", "Hồ sơ"], ["/plans", "Gói dịch vụ"], ["/settings", "Cài đặt"]].filter(([, label]) => label.toLocaleLowerCase("vi-VN").includes(quickQuery.trim().toLocaleLowerCase("vi-VN")));
-  return <><IconSprite /><a className="workspace-skip" href="#workspace-main">Bỏ qua điều hướng</a><div className={`app-shell premium-workspace${pathname === "/app" ? " is-dashboard" : ""}${collapsed ? " is-collapsed" : ""}${mobileNavOpen ? " is-nav-open" : ""}`}>
+  return <><IconSprite /><GeminiSetupRedirect /><a className="workspace-skip" href="#workspace-main">Bỏ qua điều hướng</a><div className={`app-shell premium-workspace${pathname === "/app" ? " is-dashboard" : ""}${collapsed ? " is-collapsed" : ""}${mobileNavOpen ? " is-nav-open" : ""}`}>
     {mobileNavOpen && <div className="sidebar-backdrop" aria-hidden="true" onClick={() => setMobileNavOpen(false)} />}
     <aside className="sidebar" id="workspace-sidebar" ref={sidebarRef} role={mobileNavOpen ? "dialog" : undefined} aria-modal={mobileNavOpen || undefined} aria-label="Điều hướng ReupAI">
       <button type="button" className="sidebar-mobile-close" onClick={() => setMobileNavOpen(false)} aria-label="Đóng điều hướng">×</button>

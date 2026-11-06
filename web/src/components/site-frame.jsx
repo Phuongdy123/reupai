@@ -6,7 +6,7 @@ import { EngineProvider } from "./engine-provider";
 import { FeedbackProvider } from "./feedback-provider";
 import { BillingProvider } from "./billing-provider";
 
-const PUBLIC_ROUTES = new Set(["/", "/sign-in", "/sign-up", "/pending", "/plans", "/terms", "/privacy"]);
+const PUBLIC_ROUTES = new Set(["/", "/sign-in", "/sign-up", "/pending", "/plans", "/terms", "/privacy", "/local-engine"]);
 
 export function SiteFrame({ children }) {
   const pathname = usePathname();
