@@ -1,17 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.37",
+    "version": "0.2.38",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.37/ReupAI-Setup-0.2.37.exe",
-    "sha256": "5db57cda6d2644e29478956311d0140e12d1d4fd7d3da47ee4836f761a6b862e",
-    "size": 464873537,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.38/ReupAI-Setup-0.2.38.exe",
+    "sha256": "59e683dc291f25eb845054bd05cbf33083bdd1704a840b15ef1f019303b43df0",
+    "size": 464830373,
     "notes": [
-      "Tự tìm và điền project riêng của khách sau khi kết nối Google.",
-      "Một project thì tự lưu; nhiều project cho chọn; giữ lựa chọn theo tài khoản."
+      "Tạo Google Cloud project riêng và kết nối Gemini bằng một nút trong Cài đặt.",
+      "Giữ lần tạo theo tài khoản; tiếp tục sau mất mạng hoặc khởi động lại, không tạo trùng khi bấm nhiều lần.",
+      "Hướng dẫn cấp lại quyền hoặc xử lý điều khoản và hạn mức của Google; không tự liên kết thanh toán."
     ],
-    "publishedAt": "2026-11-06T05:37:34+00:00"
+    "publishedAt": "2026-11-06T06:20:09+00:00"
   },
-  "signature": "Hz4iLuN2bfC+hRHVf5I/iN7+XZp9W2Cs58aPRfaHosjz6eup0Qk/OgJeddv2+Xt6lPIyH00EDcKWVJSdu5l4BA=="
+  "signature": "yS5b29iTRJLsxxB8MyM+1YzK02rFqVqhyMrB6cgJPFCi7ecyFp+4/zrT4zNLsSheGutfhGBz2eqEBmTMlP5BCQ=="
 }
