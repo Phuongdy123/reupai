@@ -35,6 +35,12 @@ For each release:
 5. Build, check, commit and deploy that document. Verify the public release API
    and stable download redirect. Never overwrite an installer at an existing tag.
 
+The publisher reports progress while streaming and reuses an existing draft on
+retry. If a regional upload route is stalled, `--upload-route-ip` accepts an IP
+resolved for `uploads.github.com`; the HTTP hostname, SNI and TLS certificate
+verification stay pinned to GitHub. Do not disable certificate validation or
+store a regional IP as a permanent download URL.
+
 For a bad release, stop offering its document and publish a higher version with
 the correction. The updater rejects a downgrade and rejects unsigned/tampered
 documents. It does not claim to roll back a partially failed Windows install;

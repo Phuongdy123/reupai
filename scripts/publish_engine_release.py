@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import http.client
+import ipaddress
 import json
 from pathlib import Path
 import subprocess
@@ -42,8 +43,13 @@ def github_api(token, path, method='GET', data=None):
         return json.load(response) if response.status != 204 else None
 
 
-def upload_asset(token, release_id, path):
+def upload_asset(token, release_id, path, upload_address=None):
     connection = http.client.HTTPSConnection('uploads.github.com', timeout=120)
+    if upload_address:
+        # Keep HTTPS SNI and certificate verification pinned to the service.
+        # Only the socket route changes, using an IP resolved for this host.
+        connect = connection._create_connection
+        connection._create_connection = lambda address, timeout, source_address=None: connect((str(upload_address), address[1]), timeout, source_address)
     try:
         connection.putrequest('POST', f'/repos/{REPO}/releases/{release_id}/assets?name={quote(path.name)}')
         for key, value in {
@@ -53,9 +59,14 @@ def upload_asset(token, release_id, path):
         }.items():
             connection.putheader(key, value)
         connection.endheaders()
+        total = 0; next_report = 32 * 1024 * 1024
         with path.open('rb') as source:
             while chunk := source.read(1024 * 1024):
                 connection.send(chunk)
+                total += len(chunk)
+                if total >= next_report:
+                    print(f'Uploading {path.name}: {total * 100 // path.stat().st_size}%', flush=True)
+                    next_report += 32 * 1024 * 1024
         response = connection.getresponse()
         data = response.read()
         if response.status != 201:
@@ -73,6 +84,7 @@ def main():
     parser.add_argument('--note', action='append', default=[])
     parser.add_argument('--key-file', type=Path, default=Path.home() / '.codex/reupai-release/update-signing-key.pem')
     parser.add_argument('--publish', action='store_true')
+    parser.add_argument('--upload-route-ip', type=ipaddress.ip_address, help='Optional DNS-resolved GitHub upload IP; HTTPS hostname verification remains enabled.')
     args = parser.parse_args()
     version_tuple(args.version); version_tuple(args.minimum_version)
     installer = args.installer.resolve()
@@ -105,11 +117,15 @@ def main():
     except urllib.error.HTTPError as error:
         if error.code != 404:
             raise
-        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-        remote = github_api(token, f'/repos/{REPO}/releases', 'POST', {
-            'tag_name': tag, 'target_commitish': commit, 'name': 'ReupAI Local Engine ' + args.version,
-            'body': '\n'.join('- ' + note for note in args.note) + f'\n\nSHA-256: `{digest}`', 'draft': True,
-        })
+        # GitHub does not always expose an untagged draft through /tags/{tag}.
+        releases = github_api(token, f'/repos/{REPO}/releases?per_page=100')
+        remote = next((item for item in releases if item['tag_name'] == tag and item.get('draft')), None)
+        if remote is None:
+            commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+            remote = github_api(token, f'/repos/{REPO}/releases', 'POST', {
+                'tag_name': tag, 'target_commitish': commit, 'name': 'ReupAI Local Engine ' + args.version,
+                'body': '\n'.join('- ' + note for note in args.note) + f'\n\nSHA-256: `{digest}`', 'draft': True,
+            })
     if not remote.get('draft'):
         raise RuntimeError('Phiên bản đã phát hành là bất biến. Hãy tăng số phiên bản để phát hành bản khác.')
     for asset in remote.get('assets', []):
@@ -118,7 +134,7 @@ def main():
     checksum = installer.with_suffix('.exe.sha256')
     checksum.write_text(f'{digest}  {installer.name}\n', encoding='ascii')
     for path in [installer, checksum]:
-        asset = upload_asset(token, remote['id'], path)
+        asset = upload_asset(token, remote['id'], path, args.upload_route_ip)
         if asset['size'] != path.stat().st_size:
             raise RuntimeError('Kích thước asset sau khi tải lên không khớp.')
         if path == installer and asset.get('digest') and asset['digest'] != 'sha256:' + digest:
