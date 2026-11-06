@@ -1,0 +1,34 @@
+.customer-feedback-page{max-width:1160px;margin:0 auto;color:#e9edf4}
+.customer-feedback-intro{display:flex;gap:18px;align-items:center;margin:10px 0 28px}
+.customer-feedback-intro h2{margin:0 0 8px;font-size:clamp(22px,2.5vw,30px);letter-spacing:-.025em}
+.customer-feedback-intro p,.admin-feedback-page .native-toolbar p{margin:0;color:#a5adbd;line-height:1.65}
+.customer-feedback-symbol{display:grid;place-items:center;flex:0 0 56px;height:56px;border:1px solid #fe365449;background:#f82d4e16;color:#ff526c;border-radius:16px}
+.customer-feedback-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:22px;align-items:start}
+.customer-feedback-form,.customer-feedback-guide,.admin-feedback-card{background:#11151e;border:1px solid #292e3a;border-radius:18px;padding:25px;min-width:0}
+.customer-feedback-form fieldset{border:0;margin:0;padding:0;display:grid;gap:20px;min-width:0}
+.customer-feedback-form label,.admin-feedback-card footer label{display:grid;gap:9px;font-size:14px;font-weight:600}
+.customer-feedback-form label span,.customer-feedback-details summary span{font-weight:400;color:#949daf;font-size:12px}
+.customer-feedback-form input,.customer-feedback-form textarea,.customer-feedback-form select,.admin-feedback-card select{width:100%;min-height:46px;border:1px solid #353c4b;border-radius:10px;background:#0b0f17;color:#f2f4f8;padding:12px;font:inherit;box-sizing:border-box}
+.customer-feedback-form textarea{resize:vertical;line-height:1.6}
+.customer-feedback-form :is(input,textarea,select):focus-visible,.admin-feedback-card select:focus-visible{outline:2px solid #ff4262;outline-offset:3px}
+.customer-feedback-form label small{font-size:12px;font-weight:400;color:#949daf;text-align:right}
+.customer-feedback-details{border-top:1px solid #2b303b;padding-top:16px}
+.customer-feedback-details summary{cursor:pointer;min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;color:#c5ccda}
+.customer-feedback-details label{margin-top:12px}
+.customer-feedback-submit{display:flex;gap:18px;align-items:center;justify-content:space-between;margin-top:25px}
+.customer-feedback-submit small{color:#9ca6b8;line-height:1.6;max-width:310px}
+.customer-feedback-submit .btn{min-height:46px;white-space:nowrap;display:inline-flex;gap:8px;align-items:center}
+.customer-feedback-guide h3{font-size:16px;margin:0 0 16px}.customer-feedback-guide ul{padding-left:18px;color:#bac2d0;line-height:1.75;display:grid;gap:10px;font-size:14px}
+.customer-feedback-guide p{font-size:13px;color:#a1aabd;line-height:1.7;margin-top:22px}
+.customer-feedback-guide>div{display:flex;gap:10px;border-top:1px solid #2b303b;padding-top:18px;margin-top:20px;color:#9da8bb;font-size:12px;line-height:1.7}.customer-feedback-guide svg{flex-shrink:0}
+.customer-feedback-error{background:#f9405710;border:1px solid #f9405740;border-radius:10px;padding:14px;color:#ff9fad;line-height:1.6}
+.customer-feedback-success{display:flex;gap:12px;background:#23b47e13;border:1px solid #23b47e50;border-radius:14px;padding:20px;margin-bottom:22px;color:#a3ecd2}.customer-feedback-success p{margin:6px 0;font-size:14px}.customer-feedback-success small{overflow-wrap:anywhere}
+.admin-feedback-list{display:grid;gap:18px;margin-top:20px}.admin-feedback-card.is-new{border-left:3px solid #fb3f61}
+.admin-feedback-card header{display:flex;align-items:center;gap:14px;font-size:12px;color:#9da8bb;flex-wrap:wrap}.admin-feedback-card time{margin-left:auto}
+.customer-feedback-status{border-radius:20px;padding:5px 10px;background:#77839320;color:#b9c2d2}.customer-feedback-status.is-new{background:#ff3d6020;color:#ff8fa3}.customer-feedback-status.is-resolved{background:#23b47e20;color:#82ddba}
+.admin-feedback-card h3{font-size:18px;margin:20px 0 8px;overflow-wrap:anywhere}.admin-feedback-sender{color:#9ba6b9;font-size:13px;overflow-wrap:anywhere}.admin-feedback-message{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75;font-size:14px}
+.admin-feedback-video-link{display:inline-flex;align-items:center;gap:8px;color:#ff8298;min-height:44px}.admin-feedback-card pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:#bac2d0;max-height:300px;overflow:auto;padding:15px;background:#090d14;border-radius:10px}
+.admin-feedback-card footer{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:20px;padding-top:18px;border-top:1px solid #2b303b}.admin-feedback-card footer small{color:#818ea3;overflow-wrap:anywhere}.admin-feedback-card footer label{min-width:150px;font-size:12px}.admin-feedback-card select{min-height:44px}
+.customer-feedback-pagination{display:flex;align-items:center;justify-content:center;gap:18px;margin:25px 0}.customer-feedback-pagination .btn{min-height:44px}.customer-feedback-pagination span{font-size:13px;color:#abb5c5}
+@media(max-width:900px){.customer-feedback-layout{grid-template-columns:1fr}.customer-feedback-guide ul{display:block}.customer-feedback-guide li{margin-bottom:6px}.customer-feedback-guide p{margin-top:10px}}
+@media(max-width:560px){.customer-feedback-form,.customer-feedback-guide,.admin-feedback-card{padding:18px;border-radius:13px}.customer-feedback-intro{align-items:start}.customer-feedback-symbol{flex-basis:44px;height:44px}.customer-feedback-submit,.admin-feedback-card footer{flex-direction:column;align-items:stretch}.customer-feedback-submit .btn{justify-content:center}.admin-feedback-card time{margin-left:0}.customer-feedback-pagination{gap:10px}.customer-feedback-pagination .btn{padding-inline:12px}}
