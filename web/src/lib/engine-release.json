@@ -1,18 +1,17 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.36",
+    "version": "0.2.37",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.36/ReupAI-Setup-0.2.36.exe",
-    "sha256": "9de0e3497ea09e62b57e5a6204b51830647319991634e86d9a1f144f67d3f8b7",
-    "size": 464850162,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.37/ReupAI-Setup-0.2.37.exe",
+    "sha256": "5db57cda6d2644e29478956311d0140e12d1d4fd7d3da47ee4836f761a6b862e",
+    "size": 464873537,
     "notes": [
-      "Tự mở Google trong tab đang dùng, không phụ thuộc trình duyệt mặc định Windows.",
-      "Sau khi cấp quyền, tự quay lại ReupAI và hoàn tất kết nối Gemini.",
-      "Có liên kết dự phòng, giới hạn thời gian chờ và hủy lượt đăng nhập an toàn."
+      "Tự tìm và điền project riêng của khách sau khi kết nối Google.",
+      "Một project thì tự lưu; nhiều project cho chọn; giữ lựa chọn theo tài khoản."
     ],
-    "publishedAt": "2026-11-06T04:36:01+00:00"
+    "publishedAt": "2026-11-06T05:37:34+00:00"
   },
-  "signature": "C8A12ert3AS1urg/zea64gSAM3RD7SvktB5+raXfJ667JpFs+fMqHtxDjIN4heO802i1n2pHqFoCzbHnfb6TAA=="
+  "signature": "Hz4iLuN2bfC+hRHVf5I/iN7+XZp9W2Cs58aPRfaHosjz6eup0Qk/OgJeddv2+Xt6lPIyH00EDcKWVJSdu5l4BA=="
 }
