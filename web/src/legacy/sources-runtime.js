@@ -2330,6 +2330,12 @@ function friendlyProcessStage(message, isError) {
         if (/^(?:command:|\$\s|traceback)/i.test(value)) return 'Đang xử lý video trên máy.';
         return value;
     }
+    if (/bilibili/i.test(value) && /HTTP\s*412/i.test(value)) {
+        return 'Bilibili yêu cầu kiểm tra phiên truy cập. Mở video trong Chrome/Edge trên máy này, hoàn tất xác minh nếu có rồi thử lại sau.';
+    }
+    if (/bilibili/i.test(value) && /HTTP\s*429/i.test(value)) {
+        return 'Bilibili đang giới hạn yêu cầu. Hãy chờ vài phút trước khi tải lại.';
+    }
     if (/yt-dlp|download that bai|CalledProcessError.*(?:bilibili|douyin)|không thể tải video/i.test(value)) {
         return 'Không tải được video nguồn. Kiểm tra liên kết và quyền xem video rồi thử lại.';
     }

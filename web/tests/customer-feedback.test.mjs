@@ -65,3 +65,23 @@ test('admin pagination has no missing extra record and status changes preserve o
   await assert.rejects(()=>updateCustomerFeedback(f.storage,'../../other','resolved'),error=>error.status===400);
   await assert.rejects(()=>updateCustomerFeedback(f.storage,page.items[0].id,'invalid'),error=>error.status===400);
 });
+
+test('corrupt or unavailable feedback does not take down the remaining inbox', async () => {
+  const f=fixture();const now=1794000000000;
+  const good=await submitCustomerFeedback(f.storage,user,{},input,now);
+  const broken=await submitCustomerFeedback(f.storage,user,{},input,now+60000);
+  f.objects.set(`${broken.id}.json`,'{broken json');
+  const page=await listCustomerFeedback(f.storage);
+  assert.equal(page.items.length,2);assert.equal(page.unavailableCount,1);
+  assert.equal(page.items.find(item=>item.id===broken.id).unavailable,true);
+  assert.equal(page.items.find(item=>item.id===good.id).message,input.message);
+});
+
+test('pagination skips non-ticket files without dropping the next valid ticket', async () => {
+  const f=fixture();const now=1794000000000;
+  for(let i=0;i<22;i++)await submitCustomerFeedback(f.storage,user,{},input,now+i*60000);
+  f.objects.set('zz-provision-check.json','{}');
+  const first=await listCustomerFeedback(f.storage), next=await listCustomerFeedback(f.storage,first.nextOffset);
+  assert.equal(first.nextOffset,21);assert.equal(first.items.length,20);assert.equal(next.items.length,2);
+  assert.equal(new Set([...first.items,...next.items].map(item=>item.id)).size,22);
+});

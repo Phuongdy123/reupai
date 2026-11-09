@@ -50,7 +50,11 @@ async function readRecord(storage, id) {
   if (error) throw new FeedbackError('Không đọc được phản hồi. Hãy thử lại.', code(error) === 404 ? 404 : 503);
   let record;
   try { record = JSON.parse(await data.text()); } catch { throw new FeedbackError('Không đọc được nội dung phản hồi.'); }
-  if (record?.id !== id) throw new FeedbackError('Dữ liệu phản hồi không hợp lệ.');
+  if (record?.id !== id || !UUID.test(record.userId || '') || record.userId !== id.slice(14)
+      || !Object.hasOwn(FEEDBACK_STATUSES, record.status) || !Number.isFinite(Date.parse(record.createdAt))
+      || ['subject','message','details','link','email','displayName'].some(key => typeof record[key] !== 'string')) {
+    throw new FeedbackError('Dữ liệu phản hồi không hợp lệ.');
+  }
   return record;
 }
 
@@ -77,11 +81,20 @@ export async function submitCustomerFeedback(storage, user, profile, input, now 
 
 export async function listCustomerFeedback(storage, offset = 0) {
   await ensureFeedbackBucket(storage);
-  const { data, error } = await storage.from(FEEDBACK_BUCKET).list('', { limit: 21, offset, sortBy: { column: 'name', order: 'desc' } });
+  const { data, error } = await storage.from(FEEDBACK_BUCKET).list('', { limit: 100, offset, sortBy: { column: 'name', order: 'desc' } });
   if (error) throw new FeedbackError('Chưa tải được hộp thư phản hồi.');
-  const files = (data || []).filter(item => feedbackIdValid(item.name?.replace(/\.json$/, '')));
-  const records = await Promise.all(files.slice(0, 20).map(file => readRecord(storage, file.name.replace(/\.json$/, ''))));
-  return { items: records, hasMore: files.length > 20 };
+  const entries = Array.isArray(data) ? data : [];
+  const files = entries.map((file, index) => ({ file, index })).filter(({ file }) => feedbackIdValid(file.name?.replace(/\.json$/, '')));
+  const selected = files.slice(0, 20);
+  const results = await Promise.allSettled(selected.map(({ file }) => readRecord(storage, file.name.replace(/\.json$/, ''))));
+  const records = results.map((result, index) => result.status === 'fulfilled' ? result.value : {
+    id: selected[index].file.name.replace(/\.json$/, ''), unavailable: true,
+    subject: 'Chưa đọc được phản hồi này', message: 'Dữ liệu có thể đang gián đoạn hoặc không hợp lệ. Bấm Làm mới để kiểm tra lại.',
+    createdAt: new Date(Number(selected[index].file.name.slice(0,13))).toISOString(), status: 'unavailable',
+  });
+  const nextOffset = selected.length ? offset + selected.at(-1).index + 1 : offset + entries.length;
+  return { items: records, hasMore: files.length > 20 || entries.length === 100,
+    nextOffset, unavailableCount: results.filter(result => result.status === 'rejected').length };
 }
 
 export async function updateCustomerFeedback(storage, id, status) {

@@ -47,7 +47,16 @@ def _request(context, method, path, **kwargs):
         if not credentials or not credentials.token:
             raise AccountChanged()
         headers = {'Authorization': f'Bearer {credentials.token}'}
-    return requests.request(method, _BASE + path, headers=headers, timeout=15, **kwargs)
+    response = requests.request(method, _BASE + path, headers=headers, timeout=15, **kwargs)
+    if response.status_code == 401:
+        with oauth._lock:
+            _check(context)
+            credentials = oauth.refresh_credentials()
+            if not credentials or not credentials.token:
+                return response
+            headers = {'Authorization': f'Bearer {credentials.token}'}
+        response = requests.request(method, _BASE + path, headers=headers, timeout=15, **kwargs)
+    return response
 
 
 def _path(context):
@@ -62,6 +71,7 @@ def _read(context):
     data = json.loads(path.read_text(encoding='utf-8'))
     if (not isinstance(data, dict) or not oauth.PROJECT_ID_PATTERN.fullmatch(str(data.get('project_id', '')))
             or not re.fullmatch(r'[a-f0-9]{16}', str(data.get('marker', '')))
+            or data.get('replaced_project') is not None and not oauth.PROJECT_ID_PATTERN.fullmatch(str(data['replaced_project']))
             or data.get('operation') and not _OPERATION.fullmatch(str(data['operation']))):
         raise ValueError('Invalid project setup journal')
     return data
@@ -83,6 +93,8 @@ def _failure(code, payload):
     # Never display raw Google errors, which may contain account information.
     error = payload.get('error', {}) if isinstance(payload, dict) else {}
     detail = str(error).lower()
+    if 'access_token_scope_insufficient' in detail or 'insufficient authentication scopes' in detail:
+        return _result('reauthorization_required', 'Phiên Google thiếu quyền tạo project. Kết nối lại Google để cấp đủ quyền rồi tiếp tục cùng lần tạo.')
     if any(word in detail for word in ('terms', 'tos_', 'tos ', 'agreement')):
         return _result('terms_required', 'Google cần bạn chấp nhận điều khoản. Mở Google Cloud bằng đúng tài khoản, hoàn tất rồi bấm thử lại.')
     if code in (429, 8) or any(word in detail for word in ('quota', 'resource_exhausted', 'limit exceeded')):
@@ -103,8 +115,9 @@ def _body(response):
 
 
 def _finish(context, journal, project):
+    labels = project.get('labels')
     if (project.get('projectId') != journal['project_id'] or project.get('state') != 'ACTIVE'
-            or project.get('labels', {}).get('reupai-setup') != journal['marker']):
+            or not isinstance(labels, dict) or labels.get('reupai-setup') != journal['marker']):
         return _result('verification_required', 'Chưa xác minh được project của lần tạo này. Mở Google Cloud để kiểm tra và chọn project thủ công.')
     with oauth._lock:
         _check(context)
@@ -129,7 +142,8 @@ def _resume(context, journal):
             if data.get('error'):
                 journal.update(operation=None, state='failed')
                 _write(context, journal)
-                return _failure(data['error'].get('code'), data)
+                operation_error = data['error']
+                return _failure(operation_error.get('code') if isinstance(operation_error, dict) else None, data)
         elif response.status_code == 404:
             journal.update(operation=None)
             _write(context, journal)
@@ -157,7 +171,9 @@ def project_setup(*, create=False, replace_project=None):
             replacing = bool(selected and (replace_project == selected or journal and journal.get('replaced_project') == selected))
             if selected and not replacing:
                 return _result('selected', 'Đang dùng project đã lưu.', project_id=selected)
-            if replacing and not journal:
+            replace_completed = bool(replacing and create and replace_project == selected
+                                     and journal and journal.get('state') == 'created')
+            if replacing and (not journal or replace_completed):
                 # A replacement is explicit and only allowed when we have
                 # verified this account cannot complete setup on the old one.
                 permissions = setup_permissions(oauth, selected)
@@ -168,6 +184,14 @@ def project_setup(*, create=False, replace_project=None):
                     return _result('selected', 'Project hiện tại đã có quyền thiết lập. Đang kiểm tra Gemini.', project_id=selected)
                 if not create:
                     return _result('idle', '')
+                if replace_completed:
+                    # Keep the completed receipt, but do not resume a finished
+                    # creation forever when the user explicitly replaces it.
+                    # No new POST can happen before the next journal is saved.
+                    archive = _path(context).parent / 'archive'
+                    archive.mkdir(parents=True, exist_ok=True)
+                    _path(context).replace(archive / f'{_path(context).stem}-{journal["project_id"]}.json')
+                    journal = None
             if journal:
                 resumed = _resume(context, journal)
                 if not create or resumed['state'] != 'retry_required' or journal.get('operation'):

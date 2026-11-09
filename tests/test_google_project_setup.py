@@ -27,6 +27,7 @@ class ProjectSetupTests(unittest.TestCase):
         patch.object(setup, 'get_config_dir', return_value=Path(self.temp.name)).start()
         patch.object(setup, '_identity', side_effect=lambda _: self.identity).start()
         patch.object(oauth, 'get_credentials', return_value=SimpleNamespace(token='fixture-only')).start()
+        self.refresh = patch.object(oauth, 'refresh_credentials', return_value=None).start()
         patch.object(oauth, 'get_project_id', side_effect=lambda: self.selected).start()
         def save(value): self.selected = value; return value
         self.save = patch.object(oauth, 'set_project_id', side_effect=save).start()
@@ -49,6 +50,49 @@ class ProjectSetupTests(unittest.TestCase):
     def test_get_is_read_only_and_never_creates(self):
         self.assertEqual(setup.project_setup()['state'], 'idle')
         self.http.assert_not_called(); self.detect.assert_not_called()
+
+    def test_expired_access_token_refreshes_once_without_creating_a_second_project(self):
+        self.refresh.return_value=SimpleNamespace(token='refreshed-fixture')
+        self.http.side_effect=[response(status=401),response({'name':'operations/pc.fixture'}),response({'done':False})]
+        self.assertEqual(setup.project_setup(create=True)['state'],'creating')
+        self.refresh.assert_called_once()
+        first,retry=self.http.call_args_list[:2]
+        self.assertEqual(first.kwargs['json'],retry.kwargs['json'])
+        self.assertEqual(retry.kwargs['headers']['Authorization'],'Bearer refreshed-fixture')
+
+    def test_account_switch_on_401_never_refreshes_or_replays_for_new_owner(self):
+        def switched(*args,**kwargs):
+            self.identity='other-account'
+            return response(status=401)
+        self.http.side_effect=switched
+        self.assertEqual(setup.project_setup(create=True)['state'],'account_changed')
+        self.refresh.assert_not_called()
+        self.assertEqual(self.http.call_count,1)
+
+    def test_malformed_project_labels_and_operation_errors_do_not_crash_or_select(self):
+        setup.project_setup(create=True)
+        self.http.side_effect=lambda method,url,**kw: response({'done':True}) if '/operations/' in url else response({**self.created[0],'state':'ACTIVE','labels':None})
+        self.assertEqual(setup.project_setup()['state'],'verification_required')
+        self.save.assert_not_called()
+        self.http.side_effect=lambda *a,**kw: response({'done':True,'error':'unexpected upstream error'})
+        self.assertEqual(setup.project_setup()['state'],'retry_required')
+
+    def test_missing_scope_on_project_create_requires_reauthorization(self):
+        result=setup._failure(403,{'error':{'details':[{'reason':'ACCESS_TOKEN_SCOPE_INSUFFICIENT'}]}})
+        self.assertEqual(result['state'],'reauthorization_required')
+
+    def test_completed_journal_does_not_trap_explicit_replacement_on_old_project(self):
+        setup.project_setup(create=True); self.finish(); setup.project_setup()
+        old_project=self.selected
+        self.http.side_effect=self.google
+        result=setup.project_setup(create=True,replace_project=old_project)
+        self.assertEqual(result['state'],'creating')
+        self.assertEqual(len(self.created),2)
+        self.assertNotEqual(self.created[0]['projectId'],self.created[1]['projectId'])
+        self.assertEqual(self.selected,old_project)
+        setup.project_setup(create=True,replace_project=old_project)
+        self.assertEqual(len(self.created),2)
+        self.assertEqual(len(list((setup._path(setup._context()).parent/'archive').glob('*.json'))),1)
 
     def test_explicit_replacement_preserves_old_selection_until_new_project_verified(self):
         self.selected='old-project'

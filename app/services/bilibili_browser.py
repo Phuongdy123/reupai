@@ -5,8 +5,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import Request, urlopen
+from uuid import uuid4
+
+from services.download_space import ensure_download_space
 
 
 USER_AGENT = (
@@ -14,6 +18,22 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/131.0.0.0 Safari/537.36"
 )
+
+
+class BilibiliAccessError(RuntimeError):
+    """The source needs user action; retrying the same request is unhelpful."""
+
+    def __init__(self, status: int):
+        self.status = status
+        messages = {
+            401: "Bilibili yêu cầu đăng nhập để xem video. Mở đúng link bằng trình duyệt trên máy này và kiểm tra quyền xem.",
+            403: "Bilibili từ chối quyền xem hoặc tải video. Kiểm tra video bằng trình duyệt trên máy này.",
+            404: "Video Bilibili không tồn tại hoặc đã bị gỡ. Kiểm tra lại liên kết.",
+            410: "Video Bilibili đã bị gỡ. Chọn video nguồn khác.",
+            412: "Bilibili yêu cầu kiểm tra phiên truy cập (HTTP 412). Mở đúng link video trong Chrome/Edge trên máy này, hoàn tất xác minh nếu có rồi thử lại sau. Chưa đủ thông tin để kết luận chặn IP.",
+            429: "Bilibili đang giới hạn yêu cầu (HTTP 429). Dừng gửi thêm yêu cầu và thử lại sau ít phút.",
+        }
+        super().__init__(messages.get(status, f"Bilibili trả HTTP {status} khi mở video. Hãy kiểm tra nguồn rồi thử lại."))
 
 
 def _browser_executable() -> str | None:
@@ -41,8 +61,47 @@ def _value(stream: dict, *names: str) -> str:
 
 def _download(url: str, destination: Path, referer: str) -> None:
     request = Request(url, headers={"User-Agent": USER_AGENT, "Referer": referer})
-    with urlopen(request, timeout=60) as response, destination.open("wb") as output:
-        shutil.copyfileobj(response, output)
+    with urlopen(request, timeout=60) as response:
+        content_length = response.headers.get("Content-Length", "")
+        expected_bytes = int(content_length) if content_length.isdecimal() else 0
+        ensure_download_space(
+            destination.parent,
+            expected_bytes=expected_bytes,
+            operation="tải luồng video tạm",
+        )
+        written = 0
+        next_space_check = 64 * 1024 * 1024
+        with destination.open("wb") as output:
+            while chunk := response.read(1024 * 1024):
+                output.write(chunk)
+                written += len(chunk)
+                if written >= next_space_check:
+                    ensure_download_space(
+                        destination.parent,
+                        expected_bytes=max(0, expected_bytes - written),
+                        operation="tải luồng video tạm",
+                    )
+                    next_space_check += 64 * 1024 * 1024
+        if expected_bytes and written != expected_bytes:
+            raise RuntimeError(
+                "Bilibili gửi thiếu dữ liệu video; kết nối có thể đã bị ngắt."
+            )
+
+
+@contextmanager
+def _staged_output(output_path: Path):
+    """Keep incomplete mux output separate and remove it on every failure."""
+    staged = output_path.with_name(
+        f"{output_path.stem}.pending.{uuid4().hex}{output_path.suffix}"
+    )
+    try:
+        yield staged
+    finally:
+        try:
+            staged.unlink(missing_ok=True)
+        except OSError:
+            # A cleanup failure must not conceal the actual download result.
+            pass
 
 
 def download_video(url: str, output_path: Path) -> Path:
@@ -68,7 +127,11 @@ def download_video(url: str, output_path: Path) -> Path:
         )
         try:
             page = browser.new_page(viewport={"width": 1365, "height": 900}, user_agent=USER_AGENT)
-            page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            if response is not None and response.status >= 400:
+                raise BilibiliAccessError(response.status)
+            if "passport.bilibili.com" in page.url:
+                raise BilibiliAccessError(401)
             # __playinfo__ is created before the asynchronous play URL request
             # finishes.  Waiting only for the object races that request and
             # yields an empty ``data`` object for some Bilibili videos.
@@ -98,7 +161,9 @@ def download_video(url: str, output_path: Path) -> Path:
     video_url = _value(video or {}, "baseUrl", "base_url")
     audio_url = _value(audio or {}, "baseUrl", "base_url")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="reupai-bilibili-") as folder:
+    with _staged_output(output_path) as staged_path, tempfile.TemporaryDirectory(
+        prefix="reupai-bilibili-", dir=output_path.parent
+    ) as folder:
         folder_path = Path(folder)
 
         # Bilibili returns a classic progressive MP4 (``durl``) for some
@@ -116,15 +181,25 @@ def download_video(url: str, output_path: Path) -> Path:
                 parts.append(part)
 
             if len(parts) == 1:
-                shutil.copyfile(parts[0], output_path)
+                ensure_download_space(
+                    output_path.parent,
+                    expected_bytes=parts[0].stat().st_size,
+                    operation="lưu video nguồn",
+                )
+                shutil.copyfile(parts[0], staged_path)
             else:
+                ensure_download_space(
+                    output_path.parent,
+                    expected_bytes=sum(part.stat().st_size for part in parts),
+                    operation="ghép video nguồn",
+                )
                 manifest = folder_path / "concat.txt"
                 manifest.write_text(
                     "".join(f"file '{part.as_posix()}'\n" for part in parts),
                     encoding="utf-8",
                 )
                 result = subprocess.run(
-                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(output_path)],
+                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(staged_path)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -132,6 +207,9 @@ def download_video(url: str, output_path: Path) -> Path:
                 )
                 if result.returncode != 0:
                     raise RuntimeError("Bilibili browser fallback không ghép được các đoạn MP4: " + result.stderr[-500:])
+            if not staged_path.is_file() or staged_path.stat().st_size < 1024:
+                raise RuntimeError("Bilibili browser fallback không tạo được MP4 hoàn chỉnh.")
+            staged_path.replace(output_path)
             return output_path
 
         if not video_url or not audio_url:
@@ -140,13 +218,19 @@ def download_video(url: str, output_path: Path) -> Path:
         video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
         _download(video_url, video_file, url)
         _download(audio_url, audio_file, url)
+        ensure_download_space(
+            output_path.parent,
+            expected_bytes=video_file.stat().st_size + audio_file.stat().st_size,
+            operation="ghép video và âm thanh",
+        )
         result = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video_file), "-i", str(audio_file), "-c", "copy", str(output_path)],
+            ["ffmpeg", "-y", "-i", str(video_file), "-i", str(audio_file), "-c", "copy", str(staged_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             text=True,
             check=False,
         )
-    if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size < 1024:
-        raise RuntimeError("Bilibili browser fallback không ghép được video: " + result.stderr[-500:])
-    return output_path
+        if result.returncode != 0 or not staged_path.is_file() or staged_path.stat().st_size < 1024:
+            raise RuntimeError("Bilibili browser fallback không ghép được video: " + result.stderr[-500:])
+        staged_path.replace(output_path)
+        return output_path

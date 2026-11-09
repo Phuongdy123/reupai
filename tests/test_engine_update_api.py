@@ -50,7 +50,7 @@ with patch.object(google_project_setup, 'project_setup', return_value={'state':'
     setup.assert_called_once_with()
     setup.reset_mock()
     assert client.post('/api/gemini/projects/setup', headers=headers, json={'confirmed':True}).status_code == 200
-    setup.assert_called_once_with(create=True)
+    setup.assert_called_once_with(create=True, replace_project=None)
 assert client.get('/api/updates').status_code == 401
 assert client.post('/api/updates/start').status_code == 401
 assert client.post('/api/updates/start', headers={**headers, 'Origin':'https://untrusted.example'}).status_code == 403
