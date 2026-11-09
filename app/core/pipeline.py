@@ -1237,6 +1237,7 @@ def download_video(
     )
 
     last_error = None
+    attempted_commands = set()
 
     for use_cookies, reliable in attempts:
 
@@ -1249,6 +1250,11 @@ def download_video(
                 reliable=reliable,
             )
         )
+
+        command_key = tuple(str(part) for part in command)
+        if command_key in attempted_commands:
+            continue
+        attempted_commands.add(command_key)
 
         print(
             "\n[yt-dlp] cookies:",

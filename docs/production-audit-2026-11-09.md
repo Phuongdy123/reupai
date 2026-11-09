@@ -16,6 +16,7 @@ every customer machine or third-party service will work without errors.
 | Google refuses project creation because OAuth scope is missing | Request renewed consent rather than claiming IAM permission is absent | Structured Google ErrorInfo fixture |
 | An explicitly requested replacement follows a completed project-creation journal | Archive the completed receipt and track the new creation durably; repeated clicks resume it | Completed-journal replacement test |
 | Bilibili returns 401/403/404/410/412/429 | Close the fallback browser, stop stream transfer and explain the source-specific next step | Fixture browser tests; no Bilibili requests made |
+| Anonymous extractor modes produce identical commands | Execute each distinct command once; retain the cookie attempt and browser fallback | Command-deduplication regression with failing extractor fixtures |
 | Windows temporary storage is on a different drive | Put fallback media temporary files on the job volume; preserve existing source and clean staging on transfer failure | Successful and interrupted transfer tests |
 
 ## Validation and rollout
