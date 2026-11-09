@@ -28,6 +28,11 @@ and nine rendered Gemini project/enablement scenarios passed. The web build
 completed successfully. Fixtures did not contact Google/Bilibili or send a
 customer report.
 
+The packaged 0.2.40 EXE reported version 0.2.40 and passed its isolated config
+check (OCR reader/postprocess and TTS phoneme modules), Whisper native import
+check, and FFmpeg audio processing check. These are local packaged checks,
+not clean-VM installation or customer-network/GPU-inference validation.
+
 - Run the complete Python unit suite and Node test suite after the patch.
 - Build the web and run the rendered feedback and Gemini project fixtures.
 - Build Engine 0.2.40; check required bundle files and run the packaged config
