@@ -4,6 +4,8 @@ import { validateFeedback, ensureFeedbackBucket, submitCustomerFeedback, listCus
 
 const user = { id:'12345678-1234-1234-1234-123456789abc', email:'customer@example.test' };
 const input = { category:'bug', subject:'Không tải được video', message:'Bilibili trả lỗi HTTP 412 khi tải.', details:'HTTP 412', link:'https://www.bilibili.com/video/fixture', requestId:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' };
+const inputFor = i => ({ ...input, requestId:`bbbbbbbb-bbbb-bbbb-bbbb-${i.toString(16).padStart(12,'0')}` });
+const ticketCount = objects => [...objects.keys()].filter(key=>/^\d{13}-/.test(key)).length;
 function fixture() {
   const objects = new Map(); let publicBucket = false;
   const storage = {
@@ -18,7 +20,7 @@ function fixture() {
           objects.set(path, body); return {data:{path}};
         },
         async download(path) { return objects.has(path) ? {data:new Blob([objects.get(path)])} : {error:{statusCode:404}}; },
-        async list(_, options) { assert.deepEqual(options.sortBy,{column:'name',order:'desc'}); return {data:[...objects.keys()].sort().reverse().slice(options.offset, options.offset+options.limit).map(name=>({name}))}; },
+        async list(_, options) { assert.deepEqual(options.sortBy,{column:'name',order:'desc'}); return {data:[...new Set([...objects.keys()].map(path=>path.split('/')[0]))].sort().reverse().slice(options.offset, options.offset+options.limit).map(name=>({name}))}; },
         async update(path, body) { if(!objects.has(path)) return {error:{statusCode:404}}; objects.set(path,body); return {data:{path}}; },
       };
     },
@@ -44,20 +46,20 @@ test('receipt requires a durable upload, uses authenticated identity and keeps c
   const receipt=await submitCustomerFeedback(f.storage,user,{display_name:'Khách'}, {...input,userId:'forged',email:'forged@example.test'}, 1794000000000);
   const stored=JSON.parse(f.objects.get(`${receipt.id}.json`));
   assert.equal(stored.userId,user.id);assert.equal(stored.email,user.email);assert.equal(stored.status,'new');assert.equal(stored.message,input.message);
-  const failure=fixture();failure.storage.from=()=>({upload:async()=>({error:{statusCode:500,message:'secret server detail'}})});
+  const failure=fixture();const originalFrom=failure.storage.from.bind(failure.storage);failure.storage.from=bucket=>({...originalFrom(bucket),upload:async()=>({error:{statusCode:500,message:'secret server detail'}})});
   await assert.rejects(()=>submitCustomerFeedback(failure.storage,user,{},input),error=>error.status===503&&!error.message.includes('secret server detail'));
 });
 test('atomic minute slot prevents concurrent duplicates and limits new submissions', async () => {
   const f=fixture();const now=1794000000000;
   const receipts=await Promise.all([submitCustomerFeedback(f.storage,user,{},input,now),submitCustomerFeedback(f.storage,user,{},input,now)]);
-  assert.equal(receipts[0].id,receipts[1].id);assert.equal(f.objects.size,1);
+  assert.equal(receipts[0].id,receipts[1].id);assert.equal(ticketCount(f.objects),1);
   await assert.rejects(()=>submitCustomerFeedback(f.storage,user,{}, {...input,requestId:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'},now),error=>error.status===429);
-  await submitCustomerFeedback(f.storage,user,{},input,now+60000);assert.equal(f.objects.size,2);
+  await submitCustomerFeedback(f.storage,user,{},inputFor(1),now+60000);assert.equal(ticketCount(f.objects),2);
 });
 test('admin pagination has no missing extra record and status changes preserve original content', async () => {
   const f=fixture();const now=1794000000000;
-  for(let i=0;i<22;i++) await submitCustomerFeedback(f.storage,user,{},input,now+i*60000);
-  const page=await listCustomerFeedback(f.storage,0), next=await listCustomerFeedback(f.storage,20);
+  for(let i=0;i<22;i++) await submitCustomerFeedback(f.storage,user,{},inputFor(i),now+i*60000);
+  const page=await listCustomerFeedback(f.storage,0), next=await listCustomerFeedback(f.storage,page.nextOffset);
   assert.equal(page.items.length,20);assert.equal(page.hasMore,true);assert.equal(next.items.length,2);assert.equal(next.hasMore,false);
   assert.equal(new Set([...page.items,...next.items].map(item=>item.id)).size,22);
   const updated=await updateCustomerFeedback(f.storage,page.items[0].id,'resolved');
@@ -69,7 +71,7 @@ test('admin pagination has no missing extra record and status changes preserve o
 test('corrupt or unavailable feedback does not take down the remaining inbox', async () => {
   const f=fixture();const now=1794000000000;
   const good=await submitCustomerFeedback(f.storage,user,{},input,now);
-  const broken=await submitCustomerFeedback(f.storage,user,{},input,now+60000);
+  const broken=await submitCustomerFeedback(f.storage,user,{},inputFor(1),now+60000);
   f.objects.set(`${broken.id}.json`,'{broken json');
   const page=await listCustomerFeedback(f.storage);
   assert.equal(page.items.length,2);assert.equal(page.unavailableCount,1);
@@ -79,9 +81,44 @@ test('corrupt or unavailable feedback does not take down the remaining inbox', a
 
 test('pagination skips non-ticket files without dropping the next valid ticket', async () => {
   const f=fixture();const now=1794000000000;
-  for(let i=0;i<22;i++)await submitCustomerFeedback(f.storage,user,{},input,now+i*60000);
+  for(let i=0;i<22;i++)await submitCustomerFeedback(f.storage,user,{},inputFor(i),now+i*60000);
   f.objects.set('zz-provision-check.json','{}');
   const first=await listCustomerFeedback(f.storage), next=await listCustomerFeedback(f.storage,first.nextOffset);
-  assert.equal(first.nextOffset,21);assert.equal(first.items.length,20);assert.equal(next.items.length,2);
+  assert.equal(first.nextOffset,22);assert.equal(first.items.length,20);assert.equal(next.items.length,2);
   assert.equal(new Set([...first.items,...next.items].map(item=>item.id)).size,22);
+});
+
+test('a lost success response can be retried another day without creating a duplicate', async () => {
+  const f=fixture();const now=1794000000000;const originalFrom=f.storage.from.bind(f.storage);let lose=true;
+  f.storage.from=bucket=>{const api=originalFrom(bucket);return {...api,upload:async(path,body,options)=>{
+    const result=await api.upload(path,body,options);
+    if(lose&&!path.startsWith('_receipts/')){lose=false;return {error:{statusCode:503}};}
+    return result;
+  }};};
+  await assert.rejects(()=>submitCustomerFeedback(f.storage,user,{},input,now));
+  const receipt=await submitCustomerFeedback(f.storage,user,{},input,now+86400000);
+  assert.equal(receipt.id,`${now}-${user.id}`);assert.equal(ticketCount(f.objects),1);
+});
+
+test('receipt timeout before ticket write resumes the original slot and rejects changed content', async () => {
+  const f=fixture();const now=1794000000000;const originalFrom=f.storage.from.bind(f.storage);let lose=true;
+  f.storage.from=bucket=>{const api=originalFrom(bucket);return {...api,upload:async(path,body,options)=>{
+    const result=await api.upload(path,body,options);
+    if(lose&&path.startsWith('_receipts/')){lose=false;return {error:{statusCode:503}};}
+    return result;
+  }};};
+  await assert.rejects(()=>submitCustomerFeedback(f.storage,user,{},input,now));
+  assert.equal(ticketCount(f.objects),0);
+  const receipt=await submitCustomerFeedback(f.storage,user,{},input,now+120000);
+  assert.equal(receipt.id,`${now}-${user.id}`);assert.equal(ticketCount(f.objects),1);
+  await assert.rejects(()=>submitCustomerFeedback(f.storage,user,{}, {...input,message:'Nội dung đã thay đổi trong lượt gửi cũ.'},now+180000),error=>error.status===400);
+});
+
+test('maximum Unicode feedback stays within private storage size even with an oversized display name', async () => {
+  const f=fixture();
+  const large={...input,subject:'😀'.repeat(60),message:'😀'.repeat(2000),details:'😀'.repeat(3000)};
+  const receipt=await submitCustomerFeedback(f.storage,user,{display_name:'N'.repeat(100000)},large,1794000000000);
+  const saved=f.objects.get(`${receipt.id}.json`),record=JSON.parse(saved);
+  assert.equal(record.message,large.message);assert.equal(record.details,large.details);
+  assert.equal(record.displayName.length,200);assert.ok(Buffer.byteLength(saved,'utf8')<65536);
 });

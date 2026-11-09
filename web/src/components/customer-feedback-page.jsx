@@ -21,7 +21,10 @@ export function CustomerFeedbackPage() {
       const response = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, requestId: attempt.current.requestId }), signal: controller.signal });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Chưa gửi được phản hồi. Hãy thử lại.');
+      if (!response.ok) {
+        if (response.status >= 400 && response.status < 500) attempt.current = null;
+        throw new Error(result.error || 'Chưa gửi được phản hồi. Hãy thử lại.');
+      }
       setReceipt(result); setForm(EMPTY); attempt.current = null;
     } catch (caught) { setError(caught.name === 'AbortError' ? 'Kết nối chậm. Bạn có thể gửi lại; hệ thống sẽ kiểm tra để tránh gửi trùng.' : caught.message); }
     finally { clearTimeout(timer); submitting.current = false; setBusy(false); }

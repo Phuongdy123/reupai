@@ -58,15 +58,47 @@ async function readRecord(storage, id) {
   return record;
 }
 
+async function reserveReceipt(storage, userId, value, now) {
+  const path = `_receipts/${userId}/${value.requestId}.json`;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value)));
+  const fingerprint = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  const read = async () => {
+    const { data, error } = await storage.from(FEEDBACK_BUCKET).download(path);
+    if (error) {
+      if (code(error) === 404 || /not found|does not exist/i.test(error.message || '')) return null;
+      throw new FeedbackError('Chưa kiểm tra được biên nhận phản hồi. Hãy thử lại.');
+    }
+    let receipt;
+    try { receipt = JSON.parse(await data.text()); } catch { throw new FeedbackError('Biên nhận phản hồi chưa đọc được. Hãy thử lại.'); }
+    if (!feedbackIdValid(receipt?.id) || receipt.id.slice(14) !== userId || receipt.fingerprint !== fingerprint
+        || !Number.isFinite(Date.parse(receipt.createdAt))) throw new FeedbackError('Lượt gửi đã thay đổi nội dung. Gửi lại bằng một lượt mới.', 400);
+    return receipt;
+  };
+  const previous = await read();
+  if (previous) return previous;
+  const receipt = { id: `${String(Math.floor(now / 60000) * 60000).padStart(13, '0')}-${userId}`,
+    fingerprint, createdAt: new Date(now).toISOString() };
+  // Reserve the durable request ID before writing the ticket. A timeout at
+  // either write can then safely resume the same slot even on another day.
+  const { error } = await storage.from(FEEDBACK_BUCKET).upload(path, JSON.stringify(receipt), { contentType: 'application/json', cacheControl: '0', upsert: false });
+  if (!error) return receipt;
+  if (code(error) === 409 || /already exists|duplicate/i.test(error.message || '')) {
+    const winner = await read();
+    if (winner) return winner;
+  }
+  throw new FeedbackError('Chưa giữ được lượt gửi phản hồi. Nội dung vẫn được giữ để thử lại.');
+}
+
 export async function submitCustomerFeedback(storage, user, profile, input, now = Date.now()) {
   const value = validateFeedback(input);
   if (!UUID.test(user?.id || '')) throw new FeedbackError('Hãy đăng nhập để gửi phản hồi.', 401);
   await ensureFeedbackBucket(storage);
-  // One durable slot per account per minute; atomic upload prevents spam
-  // across multiple browsers and server instances without an in-memory limit.
-  const id = `${String(Math.floor(now / 60000) * 60000).padStart(13, '0')}-${user.id}`;
-  const record = { ...value, id, userId: user.id, email: user.email || '',
-    displayName: profile?.display_name || '', status: 'new', createdAt: new Date(now).toISOString(), updatedAt: null };
+  // The receipt anchors retries to their original minute. The slot upload is
+  // atomic across browsers and server instances, without an in-memory limit.
+  const receipt = await reserveReceipt(storage, user.id, value, now);
+  const id = receipt.id;
+  const record = { ...value, id, userId: user.id, email: String(user.email || '').slice(0,320),
+    displayName: String(profile?.display_name || '').slice(0,200), status: 'new', createdAt: receipt.createdAt, updatedAt: null };
   const { error } = await storage.from(FEEDBACK_BUCKET).upload(`${id}.json`, JSON.stringify(record), { contentType: 'application/json', cacheControl: '0', upsert: false });
   if (error) {
     if (code(error) === 409 || /already exists|duplicate/i.test(error.message || '')) {

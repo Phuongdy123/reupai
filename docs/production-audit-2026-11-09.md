@@ -9,6 +9,8 @@ every customer machine or third-party service will work without errors.
 | Scenario | Behavior after this patch | Evidence |
 | --- | --- | --- |
 | One feedback object is corrupt or temporarily unreadable | Other feedback stays readable; the affected item is marked for retry and cannot be marked resolved | Fault-injection tests for malformed JSON and a mixed valid/invalid inbox |
+| Feedback succeeds but its response is lost, or a receipt write times out | Reserve an immutable request receipt before writing the ticket; delayed retries recover the original slot and cannot silently change its content | Tests retry after another day and after a timeout before the ticket write |
+| Valid Unicode text exceeds an overly small request-body limit | Align the request limit with the storage bound and bound sender metadata; preserve the message body | Maximum-length Unicode and oversized display-name fixture |
 | Non-ticket files appear in the feedback bucket | Pagination advances using the raw storage cursor and does not skip valid feedback | Two-page test with a provisioning file mixed into 22 records |
 | An older inbox request finishes after a newer action | Results from obsolete requests are ignored; refresh is disabled during status changes | Request sequence guard and rendered inbox tests |
 | Google returns malformed project labels or an unexpected operation error | Setup returns an actionable verification/retry state instead of crashing or selecting an unverified project | Mocked Google responses; no real resources created |
@@ -20,6 +22,11 @@ every customer machine or third-party service will work without errors.
 | Windows temporary storage is on a different drive | Put fallback media temporary files on the job volume; preserve existing source and clean staging on transfer failure | Successful and interrupted transfer tests |
 
 ## Validation and rollout
+
+Recorded checks: 133 Python tests, 36 Node tests, six rendered feedback checks
+and nine rendered Gemini project/enablement scenarios passed. The web build
+completed successfully. Fixtures did not contact Google/Bilibili or send a
+customer report.
 
 - Run the complete Python unit suite and Node test suite after the patch.
 - Build the web and run the rendered feedback and Gemini project fixtures.
@@ -35,7 +42,6 @@ every customer machine or third-party service will work without errors.
 | --- | --- |
 | Bilibili challenges a customer session, blocks requests, removes a video, or requires access | Do not promise an IP bypass or keep retrying a rejected request. Ask the customer to check the exact video in their browser and complete any required verification. Validate successful downloads on that customer's network. |
 | Google requires terms, project-creation quota, organization approval or billing | Show the applicable action. Do not silently accept terms, grant IAM roles or link a billing account. |
-| Feedback retry crosses the per-minute submission boundary | The existing atomic slot prevents duplicates within a minute; it is not permanent idempotency across arbitrarily delayed retries. A transactional receipt ledger would be needed for that stronger guarantee. |
 | A new feedback arrives while the admin paginates | Cursor offsets refer to a changing object list; refresh the inbox to obtain the newest view. A database keyset cursor would provide snapshot-style pagination at larger volumes. |
 | Native GPU/OCR/TTS failure on hardware not available here | Unit/import checks do not prove behavior on every driver or clean Windows installation. Keep the CPU fallback and collect customer feedback with the relevant error. |
 | Antivirus, power loss, port conflict, full disks or interrupted updates | Preserve source data, retain installation integrity checks and show recovery instructions. Test installation/update on a clean Windows VM and a customer machine before a broad rollout. |

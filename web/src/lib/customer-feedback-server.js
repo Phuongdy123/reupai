@@ -15,7 +15,7 @@ export async function feedbackRequestBody(request) {
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) throw new FeedbackError('Nguồn yêu cầu không hợp lệ.', 403);
   if (!request.headers.get('content-type')?.includes('application/json')) throw new FeedbackError('Định dạng gửi không hợp lệ.', 415);
-  if (Number(request.headers.get('content-length')) > 32768) throw new FeedbackError('Phản hồi quá dài.', 413);
+  if (Number(request.headers.get('content-length')) > 65536) throw new FeedbackError('Phản hồi quá dài.', 413);
   const reader = request.body?.getReader();
   if (!reader) throw new FeedbackError('Chưa có nội dung phản hồi.', 400);
   const chunks = []; let length = 0;
@@ -23,7 +23,7 @@ export async function feedbackRequestBody(request) {
     const { done, value } = await reader.read();
     if (done) break;
     length += value.byteLength;
-    if (length > 32768) { await reader.cancel(); throw new FeedbackError('Phản hồi quá dài.', 413); }
+    if (length > 65536) { await reader.cancel(); throw new FeedbackError('Phản hồi quá dài.', 413); }
     chunks.push(Buffer.from(value));
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }

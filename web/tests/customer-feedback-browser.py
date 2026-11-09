@@ -24,7 +24,7 @@ async def main():
         request = route.request; path = urlparse(request.url).path
         if path == '/api/feedback':
             sent.append(request.post_data_json)
-            return await route.fulfill(status=503 if state['fail'] else 201, content_type='application/json', body=json.dumps({'error':'Lỗi mạng thử nghiệm'} if state['fail'] else {'id':item['id']}))
+            return await route.fulfill(status=state.get('failure_status',503) if state['fail'] else 201, content_type='application/json', body=json.dumps({'error':'Lỗi mạng thử nghiệm'} if state['fail'] else {'id':item['id']}))
         if path == '/api/admin/feedback':
             if request.method == 'PATCH':
                 state['status'] = request.post_data_json['status']
@@ -49,6 +49,15 @@ async def main():
             await page.get_by_role('button', name='Gửi phản hồi', exact=True).click()
             await expect(page.locator('.customer-feedback-success')).to_be_visible()
             assert sent[0]['requestId'] == sent[1]['requestId'], 'retry lost idempotency key'
+            await page.get_by_label('Tiêu đề', exact=True).fill(item['subject'])
+            await page.get_by_label('Nội dung phản hồi').fill(item['message'])
+            state.update(fail=True,failure_status=429)
+            await page.get_by_role('button', name='Gửi phản hồi', exact=True).click()
+            await expect(page.locator('.customer-feedback-error')).to_be_visible()
+            state['fail']=False
+            await page.get_by_role('button', name='Gửi phản hồi', exact=True).click()
+            await expect(page.locator('.customer-feedback-success')).to_be_visible()
+            assert sent[2]['requestId'] != sent[3]['requestId'], 'definite rate rejection trapped the next submission'
             for width in (1366, 390):
                 await page.set_viewport_size({'width':width, 'height':900})
                 if width < 940:
@@ -67,6 +76,6 @@ async def main():
             await browser.close()
     finally:
         server.shutdown(); server.server_close()
-    print(json.dumps({'passed':['send failure preserves draft', 'retry keeps request id', 'successful receipt', 'desktop/mobile no overflow', 'admin reads details and resolves'], 'screenshots':str(out)}, ensure_ascii=False))
+    print(json.dumps({'passed':['send failure preserves draft', 'retry keeps request id', 'rate rejection starts fresh attempt', 'successful receipt', 'desktop/mobile no overflow', 'admin reads details and resolves'], 'screenshots':str(out)}, ensure_ascii=False))
 
 asyncio.run(main())
