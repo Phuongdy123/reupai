@@ -1,17 +1,16 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.42",
+    "version": "0.2.43",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.42/ReupAI-Setup-0.2.42.exe",
-    "sha256": "51b77513a7bb25d2336da60711cbf0bfc8c90b08f03e42256c267ee7709995a6",
-    "size": 464882133,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.43/ReupAI-Setup-0.2.43.exe",
+    "sha256": "6118ab3c5c5dc1e3d369967328b7caf5da069ba3b9a32a8d0a112d13d69adfb0",
+    "size": 464878975,
     "notes": [
-      "Sửa fallback Bilibili /vi/video/: lấy mã CID từ trang và gọi API phát video thay vì chờ __playinfo__ hết hạn.",
-      "Đã tải thử trọn video BV1S7446fEFw thành MP4 140 MB ngay cả khi phiên cookie trình duyệt không đọc được trên máy thử."
+      "Bilibili: ưu tiên API phát công khai không cần đăng nhập; xử lý dự phòng HTTP 412 bằng phiên trình duyệt riêng khi Bilibili yêu cầu xác minh."
     ],
-    "publishedAt": "2026-11-10T05:15:13+00:00"
+    "publishedAt": "2026-11-10T06:54:54+00:00"
   },
-  "signature": "Ik7OFJigSb0NEjvBkHfdI1ubq/DQjHyOHrrlbdjxlY0ZLbdE8RV2Xv+GVxY6lEKjdsaBPTgm2woCfzC9ifwbAw=="
+  "signature": "FyhoTtkU8/erSyfauUiL6n7PpescPX2wSQv9B6gFGWCFCsjgMdnuMQki+lnGb37sLmAdpClCbDSbjJcQFAdfDQ=="
 }
