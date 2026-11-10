@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.39",
+    "version": "0.2.40",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.39/ReupAI-Setup-0.2.39.exe",
-    "sha256": "d470a1df4e6ddfc618324467c3e8be041653e04bcc265fa5e1225725caeecf0e",
-    "size": 464847023,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.40/ReupAI-Setup-0.2.40.exe",
+    "sha256": "c22cf08824925f1007f85b086fc96a5888d26731a62cc01bdfa31b866b785311",
+    "size": 464886528,
     "notes": [
-      "Phân biệt đúng lỗi quyền Google, scope, điều khoản, billing và lỗi tạm thời khi thiết lập Gemini.",
-      "Kiểm tra quyền trước khi tự chọn project; cho phép tạo project riêng thay thế khi project hiện tại thiếu quyền.",
-      "Giữ lần tạo theo tài khoản và chỉ chuyển kết nối sau khi xác minh project mới; không tự liên kết thanh toán."
+      "Bỏ lượt tải yt-dlp trùng; thông báo đúng khi Bilibili trả 412/429, giữ nguồn cũ và dọn file tạm nếu tải bị ngắt.",
+      "Làm mới phiên Google một lần khi tạo project gặp 401; xử lý dữ liệu Google bất thường và tiếp tục đúng lần tạo project thay thế.",
+      "Tăng độ bền của hộp thư phản hồi, chống gửi trùng sau timeout và xử lý được phản hồi dài có Unicode."
     ],
-    "publishedAt": "2026-11-06T08:00:35+00:00"
+    "publishedAt": "2026-11-10T03:39:12+00:00"
   },
-  "signature": "3AITsb+aqAeiTKD+Tfa0qx01J9g5OWTgSqSofgZs6wm1mKPFO/xBkmsEzuaabJIf2r+d1I/kHgFP+AJTTlNgDw=="
+  "signature": "yQ5EGmdsYzt6f20gKzVAnwmirZWPicjnUmSMud26RVqGEMAK3KgBR8q1IoKFAwUnEaDkCtxUcGwrUS/TafvlAg=="
 }
