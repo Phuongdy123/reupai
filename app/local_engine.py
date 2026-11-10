@@ -102,7 +102,7 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.40"
+ENGINE_VERSION = "0.2.41"
 ENGINE_CAPABILITIES = {
     "verified_updates": True,
     "google_oauth_browser_fallback": True,

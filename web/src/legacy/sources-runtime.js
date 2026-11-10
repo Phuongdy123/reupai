@@ -2330,6 +2330,9 @@ function friendlyProcessStage(message, isError) {
         if (/^(?:command:|\$\s|traceback)/i.test(value)) return 'Đang xử lý video trên máy.';
         return value;
     }
+    if (/bilibili/i.test(value) && /HTTP\s*412/i.test(value) && /chưa đọc được phiên/i.test(value)) {
+        return 'ReupAI chưa đọc được phiên Bilibili của trình duyệt. Kiểm tra đúng hồ sơ Chrome/Edge và tài khoản Windows; gửi phản hồi kèm chi tiết lỗi nếu vẫn chưa kết nối được.';
+    }
     if (/bilibili/i.test(value) && /HTTP\s*412/i.test(value)) {
         return 'Bilibili yêu cầu kiểm tra phiên truy cập. Mở video trong Chrome/Edge trên máy này, hoàn tất xác minh nếu có rồi thử lại sau.';
     }
