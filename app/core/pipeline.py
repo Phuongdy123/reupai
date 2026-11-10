@@ -352,26 +352,8 @@ def normalize_music_url(value) -> str:
 
 
 def normalize_video_url(value) -> str:
-    """Accept a plain video URL or the Markdown link format copied from chat.
-
-    Browser chat clients frequently copy a URL as ``[label](url)``.  yt-dlp
-    receives command arguments verbatim, so passing that wrapper makes an
-    otherwise valid Bilibili or Douyin URL fail before it can read cookies.
-    """
-    raw = str(value or "").strip()
-    if not raw:
-        raise ValueError("Chưa có link video.")
-    if len(raw) > 4096:
-        raise ValueError("Link video quá dài.")
-
-    markdown = re.fullmatch(r"\[([^\]]*)\]\((https?://[^\s)]+)\)", raw)
-    if markdown:
-        raw = markdown.group(2)
-
-    parsed = urlparse(raw)
-    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("Link video phải bắt đầu bằng http:// hoặc https://.")
-    return raw
+    from services.video_urls import normalize_source_url
+    return normalize_source_url(value, resolve_short=True, allow_generic=True)
 
 
 def normalize_music_volume(value, default: float = 0.25) -> float:
@@ -618,67 +600,18 @@ def require_command(name: str):
 
 
 
-def detect_platform(
-    url: str,
-) -> str:
-
-    value = (
-        str(url)
-        .strip()
-        .lower()
-    )
-
-    if (
-        "bilibili.com"
-        in value
-        or "b23.tv"
-        in value
-    ):
-        return "bilibili"
-
-    if (
-        "douyin.com"
-        in value
-    ):
-        return "douyin"
-
-    return "unknown"
+def detect_platform(url: str) -> str:
+    from services.video_urls import source_platform
+    return source_platform(url)
 
 
 def get_job_id(url: str) -> str:
-
-    match = re.search(
-        r"\b(BV[0-9A-Za-z]+)\b",
-        url,
-    )
-
-    if match:
-        return match.group(1)
-
-    patterns = [
-        r"douyin\.com/video/(\d{10,25})",
-        r"[?&]modal_id=(\d{10,25})",
-        r"[?&]vid=(\d{10,25})",
-    ]
-
-    for pattern in patterns:
-        match = re.search(
-            pattern,
-            url,
-        )
-
-        if match:
-            return match.group(1)
-
-    digest = hashlib.sha1(
-        url.encode(
-            "utf-8"
-        )
-    ).hexdigest()[:12]
-
-    return (
-        f"job_{digest}"
-    )
+    from services.video_urls import video_identity
+    identifier = video_identity(url)
+    if identifier:
+        return identifier
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
+    return f"job_{digest}"
 
 
 def normalize_channel_key(channel: str | None) -> str | None:

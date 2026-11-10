@@ -40,3 +40,22 @@ The complete Python suite (137 tests) and Node suite (36 tests) passed. Browser
 fixtures never read real customer cookies or contact Bilibili. Customer-network
 validation of video `BV1S7446fEFw` is still required; a passed fixture is not
 proof that Bilibili will accept a particular customer session.
+# URL compatibility in 0.2.41
+
+Direct video input accepts full Bilibili/Douyin links, bare BV/AV identifiers,
+mobile and localized Bilibili `/vi/video/` URLs, Markdown links and share text.
+Official `b23.tv` and `v.douyin.com` redirects are resolved locally with bounded
+timeouts; redirects to unsupported hosts or insecure destinations are rejected.
+Tracking parameters are discarded while Bilibili `p` (episode) and `t` are kept.
+BV identifiers retain their case. Multipart selections use a distinct `_pN`
+library/job key so an existing first-part download is not reused for another part.
+
+The website detects direct-video input even when the channel selector was left
+selected. Channel/profile synchronization continues through its existing path.
+This covers video link formats, not every content type (e.g. Douyin image notes
+or Bilibili channel pages in the one-video input). It does not establish that a
+source will allow the download or eliminate HTTP 412.
+
+Validation: 143 Python tests and 37 web unit tests passed, including shared-text,
+locale, tracking, multipart identity, official redirect and hostile-host fixtures.
+Customer playback/session compatibility still requires an actual customer test.

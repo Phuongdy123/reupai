@@ -141,25 +141,9 @@ def user_id_from_request(
     )
 
 
-def detect_platform(
-    url,
-):
-    value = str(
-        url
-    ).lower()
-
-    if (
-        "bilibili.com"
-        in value
-        or "b23.tv"
-        in value
-    ):
-        return "bilibili"
-
-    if "douyin.com" in value:
-        return "douyin"
-
-    return "unknown"
+def detect_platform(url):
+    from services.video_urls import source_platform
+    return source_platform(url)
 
 
 def normalize_profile_url(
@@ -242,47 +226,12 @@ def normalize_profile_url(
     )
 
 
-def parse_video_id(
-    platform,
-    url,
-):
-    value = str(
-        url
-    ).strip()
-
-    if platform == "bilibili":
-
-        match = re.search(
-            r"\b(BV[0-9A-Za-z]+)\b",
-            value,
-        )
-
-        if match:
-            return (
-                match.group(1)
-            )
-
-    if platform == "douyin":
-
-        patterns = [
-            r"douyin\.com/video/(\d{10,25})",
-            r"[?&]modal_id=(\d{10,25})",
-            r"[?&]vid=(\d{10,25})",
-        ]
-
-        for pattern in patterns:
-
-            match = re.search(
-                pattern,
-                value,
-            )
-
-            if match:
-                return (
-                    match.group(1)
-                )
-
-    return None
+def parse_video_id(platform, url):
+    from services.video_urls import normalize_source_url, video_identity
+    try:
+        return video_identity(normalize_source_url(url))
+    except ValueError:
+        return None
 
 
 def canonical_video_url(
@@ -290,12 +239,20 @@ def canonical_video_url(
     video_id,
     original_url,
 ):
+    from services.video_urls import normalize_source_url
+    try:
+        normalized = normalize_source_url(original_url)
+        if parse_video_id(platform, normalized) == video_id:
+            return normalized
+    except ValueError:
+        pass
 
     if platform == "bilibili":
 
         return (
             "https://www.bilibili.com/video/"
-            + video_id
+            + video_id.split('_p', 1)[0]
+            + ('/?p=' + video_id.split('_p', 1)[1] if '_p' in video_id else '')
         )
 
     if platform == "douyin":
@@ -772,9 +729,11 @@ def api_direct_video(
     body: DirectVideoBody,
 ):
 
-    url = (
-        body.url.strip()
-    )
+    from services.video_urls import normalize_source_url
+    try:
+        url = normalize_source_url(body.url, resolve_short=True)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
     platform = (
         detect_platform(

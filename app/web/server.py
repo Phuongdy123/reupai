@@ -571,7 +571,7 @@ def validate_video_id(
 
     # Bilibili
     if re.fullmatch(
-        r"BV[0-9A-Za-z]{6,20}",
+        r"(?:BV[0-9A-Za-z]{6,20}|av[0-9]{1,20})(?:_p[0-9]{1,5})?",
         value,
     ):
         return value

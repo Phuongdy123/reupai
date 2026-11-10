@@ -1,5 +1,6 @@
 // Generated from the mature local Sources UI by web/scripts/sync-source-ui.mjs.
 // All API and media transport is supplied by the shared LocalEngineClient.
+import { prepareSourceInput, isDirectVideoInput } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
 
 export function startSourcesRuntime(environment) {
@@ -1081,7 +1082,7 @@ async function loadPage(
 
 async function loadVideos(refresh = false) {
 
-    const sourceUrl = (
+    const sourceUrl = prepareSourceInput(
         document
         .getElementById(
             'sourceUrl'
@@ -1090,7 +1091,7 @@ async function loadVideos(refresh = false) {
         .trim()
     );
 
-    const inputMode = (
+    const inputMode = isDirectVideoInput(sourceUrl) ? 'video' : (
         document
         .getElementById(
             'sourceInputMode'
@@ -5884,7 +5885,7 @@ async function inspectDirectVideo() {
         .value
     );
 
-    const url = (
+    const url = prepareSourceInput(
         input.value
         .trim()
     );
@@ -8061,69 +8062,16 @@ function bindV13Manager() {
 // V13.7 TRACKED SOURCES
 // =========================================================
 
-function normalizeSourceUrlClient(
-    value
-) {
-
+function normalizeSourceUrlClient(value) {
     try {
-
-        const url = (
-            new URL(
-                String(
-                    value
-                    || ''
-                ),
-                window.location.origin
-            )
-        );
-
-        url.hash =
-            '';
-
-        url.search =
-            '';
-
-        let path = (
-            url.pathname
-            || '/'
-        );
-
-        if (
-            path.length > 1
-        ) {
-
-            path = (
-                path.replace(
-                    /\/+$/,
-                    ''
-                )
-            );
+        const url = new URL(prepareSourceInput(value));
+        url.hash = '';
+        for (const key of [...url.searchParams.keys()]) {
+            if (!['p', 't', 'modal_id', 'vid', 'bvid'].includes(key)) url.searchParams.delete(key);
         }
-
-        return (
-            `${url.protocol}//${url.host}${path}`
-        )
-        .toLowerCase();
-
-    } catch {
-
-        return (
-            String(
-                value
-                || ''
-            )
-            .trim()
-            .replace(
-                /[?#].*$/,
-                ''
-            )
-            .replace(
-                /\/+$/,
-                ''
-            )
-            .toLowerCase()
-        );
-    }
+        url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+        return url.toString();
+    } catch { return String(value || '').trim(); }
 }
 
 
