@@ -5,16 +5,20 @@ from __future__ import annotations
 import shutil
 import os
 import re
+import socket
 import subprocess
 import tempfile
 import time
+from email.utils import parsedate_to_datetime
+from http.client import IncompleteRead
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
-from services.download_space import ensure_download_space
+from services.download_space import DownloadStorageError, ensure_download_space
 
 
 USER_AGENT = (
@@ -66,6 +70,21 @@ def _value(stream: dict, *names: str) -> str:
             return str(value)
     backups = stream.get("backupUrl") or stream.get("backup_url") or []
     return str(backups[0]) if backups else ""
+
+
+def _stream_urls(stream: dict, *names: str) -> list[str]:
+    """Return primary and backup CDN URLs without duplicates."""
+    urls = []
+    for name in names:
+        value = stream.get(name)
+        if isinstance(value, str) and value:
+            urls.append(value)
+    for name in ("backupUrl", "backup_url"):
+        backups = stream.get(name) or []
+        if isinstance(backups, str):
+            backups = [backups]
+        urls.extend(value for value in backups if isinstance(value, str) and value)
+    return list(dict.fromkeys(urls))
 
 
 def _bilibili_cookies() -> tuple[list[dict], str]:
@@ -216,32 +235,135 @@ def _open_persistent_bilibili_page(playwright, browser_path: str, url: str):
 
 
 def _download(url: str, destination: Path, referer: str, *, user_agent: str = USER_AGENT) -> None:
-    request = Request(url, headers={"User-Agent": user_agent, "Referer": referer})
-    with urlopen(request, timeout=60) as response:
-        content_length = response.headers.get("Content-Length", "")
-        expected_bytes = int(content_length) if content_length.isdecimal() else 0
-        ensure_download_space(
-            destination.parent,
-            expected_bytes=expected_bytes,
-            operation="tải luồng video tạm",
-        )
-        written = 0
-        next_space_check = 64 * 1024 * 1024
-        with destination.open("wb") as output:
-            while chunk := response.read(1024 * 1024):
-                output.write(chunk)
-                written += len(chunk)
-                if written >= next_space_check:
+    """Download a CDN stream with bounded retries and HTTP Range resume."""
+    partial = destination.with_name(destination.name + ".part")
+    max_attempts = 5
+
+    def retry_delay(error: BaseException, attempt: int) -> float | None:
+        if isinstance(error, HTTPError):
+            if error.code not in {408, 425, 429, 500, 502, 503, 504}:
+                return None
+            retry_after = error.headers.get("Retry-After", "") if error.headers else ""
+            try:
+                return min(30.0, max(1.0, float(retry_after)))
+            except (TypeError, ValueError):
+                try:
+                    when = parsedate_to_datetime(retry_after).timestamp()
+                    return min(30.0, max(1.0, when - time.time()))
+                except (TypeError, ValueError, OverflowError):
+                    return min(8.0, 1.5 ** attempt)
+        if isinstance(error, URLError):
+            reason = error.reason
+            if isinstance(reason, OSError) and getattr(reason, "errno", None) in {28, 39}:
+                return None
+        if isinstance(error, (TimeoutError, socket.timeout, ConnectionError, IncompleteRead, URLError)):
+            return min(8.0, 1.5 ** attempt)
+        return None
+
+    last_error: BaseException | None = None
+    try:
+        for attempt in range(max_attempts):
+            offset = partial.stat().st_size if partial.exists() else 0
+            headers = {"User-Agent": user_agent, "Referer": referer}
+            if offset:
+                headers["Range"] = f"bytes={offset}-"
+            try:
+                request = Request(url, headers=headers)
+                with urlopen(request, timeout=90) as response:
+                    status = getattr(response, "status", response.getcode())
+                    # Some CDNs ignore Range. In that case, restart the
+                    # temporary file rather than append a duplicate payload.
+                    append = bool(offset and status == 206)
+                    if offset and not append:
+                        offset = 0
+                    content_range = response.headers.get("Content-Range", "")
+                    total_bytes = 0
+                    if content_range:
+                        match = re.search(r"bytes\s+(\d+)-\d+/(\d+)", content_range, re.IGNORECASE)
+                        if match:
+                            range_start, total_bytes = int(match.group(1)), int(match.group(2))
+                            if append and range_start != offset:
+                                partial.unlink(missing_ok=True)
+                                raise ConnectionError("CDN trả sai vị trí tiếp tục tải.")
+                        elif append:
+                            partial.unlink(missing_ok=True)
+                            raise ConnectionError("CDN không xác nhận vị trí tiếp tục tải.")
+                    content_length = response.headers.get("Content-Length", "")
+                    response_bytes = int(content_length) if content_length.isdecimal() else 0
+                    if total_bytes <= 0 and response_bytes:
+                        total_bytes = offset + response_bytes
                     ensure_download_space(
                         destination.parent,
-                        expected_bytes=max(0, expected_bytes - written),
-                        operation="tải luồng video tạm",
+                        expected_bytes=response_bytes,
+                        operation="tiếp tục tải luồng video tạm",
                     )
-                    next_space_check += 64 * 1024 * 1024
-        if expected_bytes and written != expected_bytes:
-            raise RuntimeError(
-                "Bilibili gửi thiếu dữ liệu video; kết nối có thể đã bị ngắt."
-            )
+                    written = 0
+                    next_space_check = 64 * 1024 * 1024
+                    mode = "ab" if append else "wb"
+                    with partial.open(mode) as output:
+                        while chunk := response.read(1024 * 1024):
+                            output.write(chunk)
+                            written += len(chunk)
+                            if written >= next_space_check:
+                                remaining = max(0, response_bytes - written) if response_bytes else 0
+                                ensure_download_space(
+                                    destination.parent,
+                                    expected_bytes=remaining,
+                                    operation="tiếp tục tải luồng video tạm",
+                                )
+                                next_space_check += 64 * 1024 * 1024
+                    final_size = partial.stat().st_size
+                    if response_bytes and written != response_bytes:
+                        raise ConnectionError("Bilibili gửi thiếu dữ liệu trong luồng video.")
+                    if total_bytes and final_size != total_bytes:
+                        raise ConnectionError("Luồng video Bilibili chưa tải đủ số byte.")
+                    if final_size < 1024:
+                        raise RuntimeError("Bilibili trả về luồng video rỗng hoặc không hợp lệ.")
+                partial.replace(destination)
+                return
+            except (HTTPError, URLError, TimeoutError, socket.timeout, ConnectionError, IncompleteRead) as error:
+                last_error = error
+                delay = retry_delay(error, attempt)
+                if delay is None or attempt + 1 >= max_attempts:
+                    if isinstance(error, HTTPError):
+                        raise RuntimeError(f"CDN Bilibili trả HTTP {error.code} khi tải luồng video.") from error
+                    raise RuntimeError(
+                        f"Kết nối CDN Bilibili bị gián đoạn sau {attempt + 1} lần thử; "
+                        "không thể hoàn tất luồng video."
+                    ) from error
+                print(f"[bilibili] stream interrupted; resuming byte {partial.stat().st_size if partial.exists() else 0} after retry {attempt + 1}/{max_attempts}")
+                time.sleep(delay)
+    finally:
+        # Partial data is intentionally retained only for retries within this
+        # call. The caller's temporary job folder removes it after failure.
+        if partial.exists() and not destination.exists():
+            partial.unlink(missing_ok=True)
+
+
+def _download_stream(
+    stream: dict,
+    destination: Path,
+    referer: str,
+    *,
+    names: tuple[str, ...],
+    user_agent: str,
+) -> None:
+    """Try the primary CDN then each Bilibili-provided backup URL."""
+    urls = _stream_urls(stream, *names)
+    if not urls:
+        raise RuntimeError("Bilibili trả về luồng video không có URL tải.")
+    last_error = None
+    for index, stream_url in enumerate(urls):
+        try:
+            _download(stream_url, destination, referer, user_agent=user_agent)
+            return
+        except DownloadStorageError:
+            raise
+        except RuntimeError as error:
+            last_error = error
+            if index + 1 < len(urls):
+                print(f"[bilibili] CDN chính lỗi; thử URL dự phòng {index + 1}/{len(urls) - 1}")
+    raise last_error or RuntimeError("Không tải được luồng video Bilibili.")
 
 
 @contextmanager
@@ -391,11 +513,14 @@ def download_video(url: str, output_path: Path) -> Path:
         if durls:
             parts: list[Path] = []
             for index, item in enumerate(durls):
-                stream_url = _value(item, "url", "baseUrl", "base_url")
-                if not stream_url:
-                    raise RuntimeError("Bilibili trả về một đoạn MP4 không có URL tải.")
-                part = folder_path / f"part-{index:03d}.mp4"
-                _download(stream_url, part, url, user_agent=user_agent)
+                part = folder_path / f"part-{index:06d}.mp4"
+                _download_stream(
+                    item,
+                    part,
+                    url,
+                    names=("url", "baseUrl", "base_url"),
+                    user_agent=user_agent,
+                )
                 parts.append(part)
 
             if len(parts) == 1:
@@ -434,8 +559,8 @@ def download_video(url: str, output_path: Path) -> Path:
             raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
 
         video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
-        _download(video_url, video_file, url, user_agent=user_agent)
-        _download(audio_url, audio_file, url, user_agent=user_agent)
+        _download_stream(video or {}, video_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
+        _download_stream(audio or {}, audio_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
         ensure_download_space(
             output_path.parent,
             expected_bytes=video_file.stat().st_size + audio_file.stat().st_size,

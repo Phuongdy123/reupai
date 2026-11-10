@@ -1,16 +1,16 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.43",
+    "version": "0.2.44",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.43/ReupAI-Setup-0.2.43.exe",
-    "sha256": "6118ab3c5c5dc1e3d369967328b7caf5da069ba3b9a32a8d0a112d13d69adfb0",
-    "size": 464878975,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.44/ReupAI-Setup-0.2.44.exe",
+    "sha256": "8ef5e0f49fff6cb8d3e146f3eea742b7981f9faf6fbe480747f1624a5afc02b1",
+    "size": 464927787,
     "notes": [
-      "Bilibili: ưu tiên API phát công khai không cần đăng nhập; xử lý dự phòng HTTP 412 bằng phiên trình duyệt riêng khi Bilibili yêu cầu xác minh."
+      "Video dài: tiếp tục tải từ byte cuối khi mạng gián đoạn, kiểm tra đủ dữ liệu và thử CDN dự phòng."
     ],
-    "publishedAt": "2026-11-10T06:54:54+00:00"
+    "publishedAt": "2026-11-10T10:15:06+00:00"
   },
-  "signature": "FyhoTtkU8/erSyfauUiL6n7PpescPX2wSQv9B6gFGWCFCsjgMdnuMQki+lnGb37sLmAdpClCbDSbjJcQFAdfDQ=="
+  "signature": "CgNHCGhNYTqDJK11o0Gp3ZJ3mn7/q0keejzoXM0PBLS2OZ69vyQmz+wIYnxODg8livLbQN7+ktxOgvRe74oJAA=="
 }
