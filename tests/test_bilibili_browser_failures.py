@@ -51,6 +51,24 @@ class BrowserFailureTests(unittest.TestCase):
         self.assertEqual(result,self.output);self.assertEqual(result.stat().st_size,2048)
         self.assertEqual(list(self.output.parent.iterdir()),[self.output])
 
+    def test_localized_page_uses_official_player_api_without_waiting_for_playinfo(self):
+        self.page.evaluate.side_effect = lambda expression: (
+            'FixtureBrowser/1.0' if 'navigator.userAgent' in expression else
+            {'videoData': {'bvid': 'BV1S7446fEFw', 'cid': 100,
+                           'pages': [{'cid': 100}, {'cid': 200}]}} if '__INITIAL_STATE__' in expression else {}
+        )
+        api = self.browser.new_context.return_value.request.get.return_value
+        api.status = 200
+        api.json.return_value = {'code': 0, 'data': {'durl': [{'url': 'https://cdn.example.test/media'}]}}
+        def transfer(url, destination, referer, **kwargs):
+            destination.write_bytes(b'v' * 2048)
+        with patch.object(source, '_download', side_effect=transfer):
+            result = source.download_video('https://www.bilibili.com/vi/video/BV1S7446fEFw/?p=2', self.output)
+        self.assertEqual(result, self.output)
+        self.assertEqual(api.json.call_count, 1)
+        self.assertEqual(self.browser.new_context.return_value.request.get.call_args.kwargs['params']['cid'], 200)
+        self.page.wait_for_function.assert_not_called()
+
     def test_transfer_failure_keeps_existing_source_and_cleans_staging(self):
         self.output.parent.mkdir();self.output.write_bytes(b'previous-good-video')
         def transfer(url,destination,referer,**kwargs):

@@ -10,6 +10,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from services.download_space import ensure_download_space
@@ -181,22 +182,51 @@ def download_video(url: str, output_path: Path) -> Path:
                 raise BilibiliAccessError(response.status)
             if "passport.bilibili.com" in page.url:
                 raise BilibiliAccessError(401)
-            # __playinfo__ is created before the asynchronous play URL request
-            # finishes.  Waiting only for the object races that request and
-            # yields an empty ``data`` object for some Bilibili videos.
-            page.wait_for_function(
-                """() => {
-                    const data = window.__playinfo__?.data || {};
-                    const progressive = Array.isArray(data.durl)
-                        && data.durl.some(item => item && (item.url || item.baseUrl || item.base_url));
-                    const dash = data.dash || {};
-                    const separate = Array.isArray(dash.video) && dash.video.length > 0
-                        && Array.isArray(dash.audio) && dash.audio.length > 0;
-                    return progressive || separate;
-                }""",
-                timeout=30_000,
-            )
-            playinfo = page.evaluate("() => window.__playinfo__") or {}
+            # Localized pages can omit __playinfo__ entirely. The embedded
+            # initial state contains the selected CID; ask the official player
+            # endpoint using this temporary browser context and its cookies.
+            initial = page.evaluate("() => window.__INITIAL_STATE__ || {}") or {}
+            video_data = initial.get('videoData', {}) if isinstance(initial, dict) else {}
+            parts = video_data.get('pages') or []
+            selected = (parse_qs(urlsplit(url).query).get('p') or ['1'])[0]
+            index = int(selected) - 1 if str(selected).isdecimal() else 0
+            cid = (parts[index].get('cid') if 0 <= index < len(parts) else None) or video_data.get('cid')
+            bvid = video_data.get('bvid')
+            playinfo = {}
+            if cid and bvid:
+                try:
+                    result = context.request.get(
+                        'https://api.bilibili.com/x/player/playurl',
+                        params={'bvid': bvid, 'cid': cid, 'qn': 64, 'fnval': 16, 'fourk': 1},
+                        headers={'Referer': url}, timeout=15_000,
+                    )
+                    if result.status == 200:
+                        candidate = result.json()
+                        if candidate.get('code') == 0 and isinstance(candidate.get('data'), dict):
+                            playinfo = candidate
+                    elif result.status in {401, 403, 412, 429}:
+                        raise BilibiliAccessError(result.status)
+                except BilibiliAccessError:
+                    raise
+                except Exception:
+                    pass  # The page player below may still have a usable stream.
+            if not (playinfo.get('data') or {}).get('dash') and not (playinfo.get('data') or {}).get('durl'):
+                try:
+                    page.wait_for_function(
+                        """() => {
+                            const data = window.__playinfo__?.data || {};
+                            return (Array.isArray(data.durl) && data.durl.some(x => x?.url || x?.baseUrl))
+                                || (Array.isArray(data.dash?.video) && data.dash.video.length > 0
+                                    && Array.isArray(data.dash?.audio) && data.dash.audio.length > 0);
+                        }""", timeout=8_000,
+                    )
+                    playinfo = page.evaluate("() => window.__playinfo__") or {}
+                except Exception as error:
+                    raise RuntimeError(
+                        'Chưa lấy được luồng phát Bilibili. Trang có thể yêu cầu phiên trình duyệt; '
+                        'kiểm tra Chrome/Edge đang đăng nhập và thử lại. '
+                        f'Trạng thái phiên: {session_state}.'
+                    ) from error
         finally:
             browser.close()
 
