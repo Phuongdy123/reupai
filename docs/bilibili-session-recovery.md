@@ -65,3 +65,18 @@ Packaged 0.2.41 smoke checks: OCR reader/postprocessing, TTS phoneme data,
 Whisper native imports and FFmpeg audio processing passed. The module is present
 in the PyInstaller analysis. Running arbitrary modules through `--python-module`
 remains intentionally denied; only yt-dlp is allowed.
+
+## 0.2.42 localized-player recovery
+
+The `/vi/video/` page can provide `__INITIAL_STATE__.videoData` with its BVID
+and CID but never populate `__playinfo__`. The fallback now requests Bilibili's
+player stream endpoint inside the browser context with the selected page's CID;
+it only waits briefly for `__playinfo__` if that endpoint does not return a
+usable stream. This removes the 30-second blind timeout for the reported case.
+
+On 2026-11-10, the exact reported BV1S7446fEFw URL completed a full
+140,146,614-byte MP4 download and mux on the development machine with
+`browser session: unavailable` and zero imported cookies. A headless page and
+player API check also returned HTTP 200. This establishes that public playback
+works for that source on this machine; source-side access on a customer's
+network still needs a customer test. The Python suite passed 144 tests.
