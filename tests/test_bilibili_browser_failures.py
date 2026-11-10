@@ -16,13 +16,14 @@ class BrowserFailureTests(unittest.TestCase):
         self.output = Path(self.temp.name) / 'job' / 'source.mp4'
         self.page = MagicMock(); self.page.url = 'https://www.bilibili.com/video/fixture'
         self.page.goto.return_value = SimpleNamespace(status=200)
-        self.page.evaluate.return_value = {'data': {'durl': [{'url':'https://cdn.example.test/media'}]}}
-        self.browser = MagicMock(); self.browser.new_page.return_value = self.page
+        self.page.evaluate.side_effect = lambda expression: 'FixtureBrowser/1.0' if 'navigator.userAgent' in expression else {'data': {'durl': [{'url':'https://cdn.example.test/media'}]}}
+        self.browser = MagicMock(); self.browser.new_context.return_value.new_page.return_value = self.page
         manager = MagicMock(); manager.__enter__.return_value.chromium.launch.return_value = self.browser
         self.addCleanup(patch.stopall)
         patch('playwright.sync_api.sync_playwright', return_value=manager).start()
         patch.object(source, '_browser_executable', return_value='fixture-browser').start()
         patch.object(source, 'ensure_download_space').start()
+        self.cookies = patch.object(source, '_bilibili_cookies', return_value=([], 'empty')).start()
 
     def test_412_429_and_deleted_videos_close_browser_without_attempting_stream_transfer(self):
         with patch.object(source, '_download') as transfer:
@@ -41,7 +42,8 @@ class BrowserFailureTests(unittest.TestCase):
         self.assertEqual(caught.exception.status,401);self.browser.close.assert_called_once()
 
     def test_temporary_media_uses_job_volume_and_success_replaces_source_atomically(self):
-        def transfer(url,destination,referer):
+        def transfer(url,destination,referer,**kwargs):
+            self.assertEqual(kwargs['user_agent'],'FixtureBrowser/1.0')
             self.assertEqual(destination.parent.parent,self.output.parent)
             destination.write_bytes(b'v'*2048)
         with patch.object(source,'_download',side_effect=transfer):
@@ -51,12 +53,43 @@ class BrowserFailureTests(unittest.TestCase):
 
     def test_transfer_failure_keeps_existing_source_and_cleans_staging(self):
         self.output.parent.mkdir();self.output.write_bytes(b'previous-good-video')
-        def transfer(url,destination,referer):
+        def transfer(url,destination,referer,**kwargs):
             destination.write_bytes(b'partial');raise OSError('connection interrupted')
         with patch.object(source,'_download',side_effect=transfer), self.assertRaisesRegex(OSError,'interrupted'):
             source.download_video(self.page.url,self.output)
         self.assertEqual(self.output.read_bytes(),b'previous-good-video')
         self.assertEqual(list(self.output.parent.iterdir()),[self.output])
+
+    def test_existing_bilibili_session_is_added_before_opening_video(self):
+        cookie={'name':'fixture','value':'fixture-only','domain':'.bilibili.com','path':'/'}
+        self.cookies.return_value=([cookie],'available')
+        order=[]
+        self.browser.new_context.return_value.add_cookies.side_effect=lambda values:order.append('cookies')
+        self.page.goto.side_effect=lambda *a,**kw:(order.append('goto') or SimpleNamespace(status=412))
+        with self.assertRaises(source.BilibiliAccessError):source.download_video(self.page.url,self.output)
+        self.assertEqual(order,['cookies','goto'])
+        self.browser.new_context.return_value.add_cookies.assert_called_once_with([cookie])
+
+    def test_unreadable_session_is_not_reported_as_an_ip_ban(self):
+        self.cookies.return_value=([],'unavailable');self.page.goto.return_value.status=412
+        with self.assertRaisesRegex(RuntimeError,'chưa đọc được phiên trình duyệt'):
+            source.download_video(self.page.url,self.output)
+
+
+class BrowserCookieTests(unittest.TestCase):
+    def cookie(self, domain, expires=None):
+        return SimpleNamespace(domain=domain,name='fixture',value='fixture-secret',path='/',secure=True,expires=expires,_rest={'HttpOnly':None})
+
+    def test_only_live_bilibili_cookies_are_imported_without_exporting_other_sites(self):
+        with patch('yt_dlp.cookies.extract_cookies_from_browser',return_value=[self.cookie('.bilibili.com'),self.cookie('passport.bilibili.com'),self.cookie('evilbilibili.com'),self.cookie('google.com'),self.cookie('.bilibili.com',1)]),patch.dict(source.os.environ,{'REUP_COOKIE_BROWSER':'chrome:Profile 1'}):
+            cookies,state=source._bilibili_cookies()
+        self.assertEqual(state,'available');self.assertEqual(len(cookies),2)
+        self.assertTrue(all(cookie['httpOnly'] for cookie in cookies))
+
+    def test_cookie_decryption_error_is_actionable_without_exposing_raw_error(self):
+        with patch('yt_dlp.cookies.extract_cookies_from_browser',side_effect=RuntimeError('fixture-secret decryption failed')):
+            cookies,state=source._bilibili_cookies()
+        self.assertEqual((cookies,state),([],'unavailable'))
 
 
 if __name__=='__main__':unittest.main()

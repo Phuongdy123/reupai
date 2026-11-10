@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import shutil
+import os
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -37,13 +39,18 @@ class BilibiliAccessError(RuntimeError):
 
 
 def _browser_executable() -> str | None:
-    candidates = (
+    chrome = (
         shutil.which("chrome"),
-        shutil.which("msedge"),
         r"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         r"C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-        r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        str(Path(os.getenv('LOCALAPPDATA', '')) / 'Google/Chrome/Application/chrome.exe'),
     )
+    edge = (
+        shutil.which("msedge"),
+        r"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        str(Path(os.getenv('LOCALAPPDATA', '')) / 'Microsoft/Edge/Application/msedge.exe'),
+    )
+    candidates = edge + chrome if os.getenv('REUP_COOKIE_BROWSER', 'chrome').split(':',1)[0] == 'edge' else chrome + edge
     for candidate in candidates:
         if candidate and Path(candidate).is_file():
             return candidate
@@ -59,8 +66,47 @@ def _value(stream: dict, *names: str) -> str:
     return str(backups[0]) if backups else ""
 
 
-def _download(url: str, destination: Path, referer: str) -> None:
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Referer": referer})
+def _bilibili_cookies() -> tuple[list[dict], str]:
+    """Read the configured customer's profile, importing only Bilibili cookies.
+
+    Never persist/export cookies or silently switch to another browser/account.
+    Chrome may deny decryption; that is reported without exposing cookie data.
+    """
+    specification = os.getenv('REUP_COOKIE_BROWSER', 'chrome').strip()
+    browser, _, profile = specification.partition(':')
+    if browser not in {'chrome', 'edge', 'firefox', 'brave', 'chromium'}:
+        return [], 'unavailable'
+    class QuietLogger:
+        def debug(self, *args, **kwargs): pass
+        def info(self, *args, **kwargs): pass
+        def warning(self, *args, **kwargs): pass
+        def error(self, *args, **kwargs): pass
+    try:
+        from yt_dlp.cookies import extract_cookies_from_browser
+        jar = extract_cookies_from_browser(browser, profile=profile or None, logger=QuietLogger())
+        cookies = []
+        for item in jar:
+            domain = str(item.domain or '').lstrip('.').lower()
+            if not (domain == 'bilibili.com' or domain.endswith('.bilibili.com')):
+                continue
+            if not item.name or item.value is None or item.expires is not None and item.expires <= time.time():
+                continue
+            cookie = {'name': item.name, 'value': item.value, 'domain': item.domain,
+                      'path': item.path if str(item.path or '').startswith('/') else '/', 'secure': bool(item.secure)}
+            if item.expires is not None:
+                cookie['expires'] = item.expires
+            rest = getattr(item, '_rest', {})
+            cookie['httpOnly'] = any(str(key).lower() == 'httponly' for key in rest)
+            cookies.append(cookie)
+        return cookies, 'available' if cookies else 'empty'
+    except Exception:
+        # Do not log raw extraction errors: they can contain profile paths or
+        # credential data. The caller reports the browser/session state only.
+        return [], 'unavailable'
+
+
+def _download(url: str, destination: Path, referer: str, *, user_agent: str = USER_AGENT) -> None:
+    request = Request(url, headers={"User-Agent": user_agent, "Referer": referer})
     with urlopen(request, timeout=60) as response:
         content_length = response.headers.get("Content-Length", "")
         expected_bytes = int(content_length) if content_length.isdecimal() else 0
@@ -105,11 +151,7 @@ def _staged_output(output_path: Path):
 
 
 def download_video(url: str, output_path: Path) -> Path:
-    """Download an anonymous Bilibili stream through local Chrome/Edge.
-
-    We use a temporary headless profile, so this never reads customer cookies
-    or changes their existing browser session.
-    """
+    """Try the configured Bilibili session in a temporary local browser."""
     browser_path = _browser_executable()
     if not browser_path:
         raise RuntimeError("Không tìm thấy Chrome hoặc Edge để tải Bilibili fallback.")
@@ -119,16 +161,23 @@ def download_video(url: str, output_path: Path) -> Path:
     except ImportError as error:
         raise RuntimeError("Local Engine thiếu Playwright cho Bilibili fallback.") from error
 
+    cookies, session_state = _bilibili_cookies()
+    print(f'[bilibili] browser session: {session_state}; imported Bilibili cookies: {len(cookies)}')
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             executable_path=browser_path,
             headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
         )
         try:
-            page = browser.new_page(viewport={"width": 1365, "height": 900}, user_agent=USER_AGENT)
+            context = browser.new_context(viewport={"width": 1365, "height": 900})
+            if cookies:
+                context.add_cookies(cookies)
+            page = context.new_page()
+            user_agent = page.evaluate('() => navigator.userAgent')
             response = page.goto(url, wait_until="domcontentloaded", timeout=45_000)
             if response is not None and response.status >= 400:
+                if response.status == 412 and session_state == 'unavailable':
+                    raise RuntimeError('Bilibili trả HTTP 412 và ReupAI chưa đọc được phiên trình duyệt đã chọn. Kiểm tra đúng hồ sơ Chrome/Edge và tài khoản Windows; trình duyệt có thể đang khóa hoặc bảo vệ cookie. Không thể dùng phiên ẩn danh thay cho phiên đang xem được.')
                 raise BilibiliAccessError(response.status)
             if "passport.bilibili.com" in page.url:
                 raise BilibiliAccessError(401)
@@ -177,7 +226,7 @@ def download_video(url: str, output_path: Path) -> Path:
                 if not stream_url:
                     raise RuntimeError("Bilibili trả về một đoạn MP4 không có URL tải.")
                 part = folder_path / f"part-{index:03d}.mp4"
-                _download(stream_url, part, url)
+                _download(stream_url, part, url, user_agent=user_agent)
                 parts.append(part)
 
             if len(parts) == 1:
@@ -216,8 +265,8 @@ def download_video(url: str, output_path: Path) -> Path:
             raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
 
         video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
-        _download(video_url, video_file, url)
-        _download(audio_url, audio_file, url)
+        _download(video_url, video_file, url, user_agent=user_agent)
+        _download(audio_url, audio_file, url, user_agent=user_agent)
         ensure_download_space(
             output_path.parent,
             expected_bytes=video_file.stat().st_size + audio_file.stat().st_size,
