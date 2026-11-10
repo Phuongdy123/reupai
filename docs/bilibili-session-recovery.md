@@ -40,6 +40,7 @@ The complete Python suite (137 tests) and Node suite (36 tests) passed. Browser
 fixtures never read real customer cookies or contact Bilibili. Customer-network
 validation of video `BV1S7446fEFw` is still required; a passed fixture is not
 proof that Bilibili will accept a particular customer session.
+
 # URL compatibility in 0.2.41
 
 Direct video input accepts full Bilibili/Douyin links, bare BV/AV identifiers,
@@ -56,6 +57,11 @@ This covers video link formats, not every content type (e.g. Douyin image notes
 or Bilibili channel pages in the one-video input). It does not establish that a
 source will allow the download or eliminate HTTP 412.
 
-Validation: 143 Python tests and 37 web unit tests passed, including shared-text,
+Validation: 143 Python tests and 38 web unit tests passed, including shared-text,
 locale, tracking, multipart identity, official redirect and hostile-host fixtures.
 Customer playback/session compatibility still requires an actual customer test.
+
+Packaged 0.2.41 smoke checks: OCR reader/postprocessing, TTS phoneme data,
+Whisper native imports and FFmpeg audio processing passed. The module is present
+in the PyInstaller analysis. Running arbitrary modules through `--python-module`
+remains intentionally denied; only yt-dlp is allowed.

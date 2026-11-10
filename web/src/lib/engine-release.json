@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.40",
+    "version": "0.2.41",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.40/ReupAI-Setup-0.2.40.exe",
-    "sha256": "c22cf08824925f1007f85b086fc96a5888d26731a62cc01bdfa31b866b785311",
-    "size": 464886528,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.41/ReupAI-Setup-0.2.41.exe",
+    "sha256": "3dceba19e6ae8ed4f99c0ebdde3615a50b0ff2aede4a9bc406ebe127e9537197",
+    "size": 464902968,
     "notes": [
-      "Bỏ lượt tải yt-dlp trùng; thông báo đúng khi Bilibili trả 412/429, giữ nguồn cũ và dọn file tạm nếu tải bị ngắt.",
-      "Làm mới phiên Google một lần khi tạo project gặp 401; xử lý dữ liệu Google bất thường và tiếp tục đúng lần tạo project thay thế.",
-      "Tăng độ bền của hộp thư phản hồi, chống gửi trùng sau timeout và xử lý được phản hồi dài có Unicode."
+      "Chuẩn hóa link Bilibili/Douyin, nội dung chia sẻ, link rút gọn và /vi/video/; giữ đúng mã BV và tập đang chọn.",
+      "Tái sử dụng cookie Bilibili đọc được từ trình duyệt đã cấu hình khi tải fallback; báo rõ khi không đọc được phiên.",
+      "Phân biệt công việc của từng tập, tránh dùng nhầm video nguồn đã tải của tập trước."
     ],
-    "publishedAt": "2026-11-10T03:39:12+00:00"
+    "publishedAt": "2026-11-10T04:39:01+00:00"
   },
-  "signature": "yQ5EGmdsYzt6f20gKzVAnwmirZWPicjnUmSMud26RVqGEMAK3KgBR8q1IoKFAwUnEaDkCtxUcGwrUS/TafvlAg=="
+  "signature": "os0TLV+FF7N4Ti6s5J6pq+wk74ospQOB4xQv9Tm7MdANTRYk9mhULmucIeE5N381ePv7Zk0RcsmsfNGDKBfdCA=="
 }
