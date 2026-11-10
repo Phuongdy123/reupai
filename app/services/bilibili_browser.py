@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -106,6 +107,114 @@ def _bilibili_cookies() -> tuple[list[dict], str]:
         return [], 'unavailable'
 
 
+def _bilibili_profile_dir() -> Path:
+    browser_name = os.getenv('REUP_COOKIE_BROWSER', 'chrome').split(':', 1)[0].strip()
+    base = Path(os.getenv('LOCALAPPDATA') or (Path.home() / 'AppData/Local'))
+    return base / 'ReupAI' / 'browser-profiles' / f'bilibili-{browser_name}'
+
+
+def _public_playinfo(context, url: str) -> dict:
+    """Ask Bilibili's public metadata/player endpoints before loading the page.
+
+    This path needs no Bilibili login. It is useful when the ordinary video
+    page is rate-limited with HTTP 412 while public playback APIs still work.
+    A failed/blocked endpoint is only a signal to try the browser fallback.
+    """
+    parts = urlsplit(url)
+    match = re.search(r'(?i)/(BV[0-9A-Za-z]+|av\d+)(?:/|$)', parts.path)
+    if not match:
+        return {}
+    video_id = match.group(1)
+    key, value = ('aid', video_id[2:]) if video_id.lower().startswith('av') else ('bvid', video_id)
+    headers = {'Referer': url, 'Accept': 'application/json'}
+    try:
+        view = context.request.get(
+            'https://api.bilibili.com/x/web-interface/view',
+            params={key: value}, headers=headers, timeout=12_000,
+        )
+        if view.status != 200:
+            return {}
+        payload = view.json()
+        video_data = payload.get('data') if isinstance(payload, dict) and payload.get('code') == 0 else None
+        if not isinstance(video_data, dict):
+            return {}
+        selected = (parse_qs(parts.query).get('p') or ['1'])[0]
+        index = int(selected) - 1 if str(selected).isdecimal() else 0
+        pages = video_data.get('pages') or []
+        cid = (pages[index].get('cid') if 0 <= index < len(pages) else None) or video_data.get('cid')
+        bvid = video_data.get('bvid') or (video_id if key == 'bvid' else None)
+        if not (cid and bvid):
+            return {}
+        player = context.request.get(
+            'https://api.bilibili.com/x/player/playurl',
+            params={'bvid': bvid, 'cid': cid, 'qn': 64, 'fnval': 16, 'fourk': 1},
+            headers=headers, timeout=15_000,
+        )
+        if player.status != 200:
+            return {}
+        result = player.json()
+        if result.get('code') == 0 and isinstance(result.get('data'), dict):
+            return result
+    except Exception:
+        # Keep the browser route available, and never log signed/media URLs.
+        return {}
+    return {}
+
+
+def _open_persistent_bilibili_page(playwright, browser_path: str, url: str):
+    """Open a visible ReupAI browser profile only for Bilibili verification."""
+    profile_dir = _bilibili_profile_dir()
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    context = playwright.chromium.launch_persistent_context(
+        user_data_dir=str(profile_dir),
+        executable_path=browser_path,
+        headless=False,
+        viewport={"width": 1365, "height": 900},
+    )
+    page = context.new_page()
+    print('[bilibili] opening ReupAI browser profile for interactive verification')
+    try:
+        response = page.goto(url, wait_until='domcontentloaded', timeout=45_000)
+    except Exception:
+        context.close()
+        raise
+
+    deadline = time.monotonic() + 180
+    last_status = response.status if response is not None else None
+    announced = False
+    while time.monotonic() < deadline:
+        current_url = str(page.url or '')
+        if 'passport.bilibili.com' in current_url:
+            if not announced:
+                print('[bilibili] if requested by the source, sign in or complete verification in the opened browser; waiting up to 3 minutes')
+                announced = True
+            page.wait_for_timeout(1_000)
+            continue
+        if last_status == 412:
+            if not announced:
+                print('[bilibili] complete any verification in the opened browser; waiting up to 3 minutes')
+                announced = True
+            page.wait_for_timeout(8_000)
+            try:
+                response = page.reload(wait_until='domcontentloaded', timeout=20_000)
+                last_status = response.status if response is not None else None
+            except Exception:
+                last_status = 412
+            continue
+        if last_status is not None and last_status >= 400:
+            context.close()
+            raise BilibiliAccessError(last_status)
+        return context, page
+
+    context.close()
+    raise RuntimeError(
+        'Bilibili chưa cho phép mở video sau khi chờ xác minh 3 phút. '
+        'Hoàn tất xác minh trong cửa sổ ReupAI nếu trang yêu cầu rồi thử lại; '
+        'đăng nhập chỉ cần thiết nếu chính video yêu cầu. '
+        'Phiên trình duyệt ReupAI được lưu riêng trên máy.'
+    )
+
+
 def _download(url: str, destination: Path, referer: str, *, user_agent: str = USER_AGENT) -> None:
     request = Request(url, headers={"User-Agent": user_agent, "Referer": referer})
     with urlopen(request, timeout=60) as response:
@@ -165,21 +274,48 @@ def download_video(url: str, output_path: Path) -> Path:
     cookies, session_state = _bilibili_cookies()
     print(f'[bilibili] browser session: {session_state}; imported Bilibili cookies: {len(cookies)}')
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            executable_path=browser_path,
-            headless=True,
-        )
+        browser = None
+        context = None
         try:
-            context = browser.new_context(viewport={"width": 1365, "height": 900})
-            if cookies:
-                context.add_cookies(cookies)
+            # Once the customer has signed in through ReupAI's own profile,
+            # reuse that profile headlessly for normal jobs. This avoids both
+            # Chrome's App-Bound cookie decryption and an interactive window
+            # on every subsequent download.
+            profile_dir = _bilibili_profile_dir()
+            if profile_dir.is_dir():
+                context = playwright.chromium.launch_persistent_context(
+                    user_data_dir=str(profile_dir),
+                    executable_path=browser_path,
+                    headless=True,
+                    viewport={"width": 1365, "height": 900},
+                )
+            else:
+                browser = playwright.chromium.launch(
+                    executable_path=browser_path,
+                    headless=True,
+                )
+                context = browser.new_context(viewport={"width": 1365, "height": 900})
+                if cookies:
+                    context.add_cookies(cookies)
             page = context.new_page()
             user_agent = page.evaluate('() => navigator.userAgent')
-            response = page.goto(url, wait_until="domcontentloaded", timeout=45_000)
+            playinfo = _public_playinfo(context, url)
+            streams = playinfo.get('data') or {}
+            has_stream = bool(streams.get('durl') or (streams.get('dash') or {}).get('video'))
+            response = None
+            if not has_stream:
+                response = page.goto(url, wait_until="domcontentloaded", timeout=45_000)
             if response is not None and response.status >= 400:
-                if response.status == 412 and session_state == 'unavailable':
-                    raise RuntimeError('Bilibili trả HTTP 412 và ReupAI chưa đọc được phiên trình duyệt đã chọn. Kiểm tra đúng hồ sơ Chrome/Edge và tài khoản Windows; trình duyệt có thể đang khóa hoặc bảo vệ cookie. Không thể dùng phiên ẩn danh thay cho phiên đang xem được.')
-                raise BilibiliAccessError(response.status)
+                if response.status != 412:
+                    raise BilibiliAccessError(response.status)
+                print('[bilibili] HTTP 412; switching to the persistent interactive browser profile')
+                context.close()
+                context = None
+                if browser is not None:
+                    browser.close()
+                    browser = None
+                context, page = _open_persistent_bilibili_page(playwright, browser_path, url)
+                user_agent = page.evaluate('() => navigator.userAgent')
             if "passport.bilibili.com" in page.url:
                 raise BilibiliAccessError(401)
             # Localized pages can omit __playinfo__ entirely. The embedded
@@ -192,7 +328,6 @@ def download_video(url: str, output_path: Path) -> Path:
             index = int(selected) - 1 if str(selected).isdecimal() else 0
             cid = (parts[index].get('cid') if 0 <= index < len(parts) else None) or video_data.get('cid')
             bvid = video_data.get('bvid')
-            playinfo = {}
             if cid and bvid:
                 try:
                     result = context.request.get(
@@ -223,12 +358,16 @@ def download_video(url: str, output_path: Path) -> Path:
                     playinfo = page.evaluate("() => window.__playinfo__") or {}
                 except Exception as error:
                     raise RuntimeError(
-                        'Chưa lấy được luồng phát Bilibili. Trang có thể yêu cầu phiên trình duyệt; '
-                        'kiểm tra Chrome/Edge đang đăng nhập và thử lại. '
+                        'Chưa lấy được luồng phát công khai của Bilibili. ReupAI đã thử API không cần đăng nhập '
+                        'và browser fallback; Bilibili vẫn đang giới hạn yêu cầu. Thử lại sau ít phút; '
+                        'chỉ đăng nhập nếu chính video yêu cầu quyền xem. '
                         f'Trạng thái phiên: {session_state}.'
                     ) from error
         finally:
-            browser.close()
+            if context is not None:
+                context.close()
+            if browser is not None:
+                browser.close()
 
     data = playinfo.get("data") or {}
     dash = data.get("dash") or {}
