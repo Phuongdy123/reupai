@@ -24,3 +24,10 @@ export function isDirectVideoInput(value) {
       || (/(^|\.)(?:douyin\.com|iesdouyin\.com)$/.test(url.hostname) && (/\/(?:share\/)?video\/\d+/.test(url.pathname) || url.searchParams.has('modal_id')));
   } catch { return false; }
 }
+
+export function videoUrlForIdentity(value) {
+  const id = String(value || '');
+  const bili = /^(BV[\da-z]{10}|av\d{1,20})(?:_p([1-9]\d{0,4}))?$/i.exec(id);
+  if (bili) return `https://www.bilibili.com/video/${bili[1]}/${bili[2] ? `?p=${Number(bili[2])}` : ''}`;
+  return /^\d{10,25}$/.test(id) ? `https://www.douyin.com/video/${id}` : '';
+}

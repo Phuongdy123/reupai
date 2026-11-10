@@ -1,6 +1,6 @@
 // Generated from the mature local Sources UI by web/scripts/sync-source-ui.mjs.
 // All API and media transport is supplied by the shared LocalEngineClient.
-import { prepareSourceInput, isDirectVideoInput } from "../lib/source-url-input.js";
+import { prepareSourceInput, isDirectVideoInput, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
 
 export function startSourcesRuntime(environment) {
@@ -12554,13 +12554,7 @@ const ready = initializeV13().then(async () => {
         // Library cards can outlive their local DB row (or refer to a video
         // that has never been downloaded). Resolve a recognizable platform
         // ID directly instead of failing before the user can process it.
-        let directUrl = '';
-        if (/^BV[0-9A-Za-z]+$/.test(id)) {
-            if (id.length !== 12) throw new Error(`Mã Bilibili chưa đầy đủ (${id}). Hãy mở video và dùng link đầy đủ thay vì mã bị cắt.`);
-            directUrl = `https://www.bilibili.com/video/${id}/`;
-        } else if (/^\d{15,22}$/.test(id)) {
-            directUrl = `https://www.douyin.com/video/${id}`;
-        }
+        const directUrl = videoUrlForIdentity(id);
         const sourceInput = document.getElementById('sourceUrl');
         const sourceMode = document.getElementById('sourceInputMode');
         if (directUrl && sourceInput && sourceMode) {
