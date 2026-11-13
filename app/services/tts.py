@@ -1,5 +1,6 @@
 import atexit
 import asyncio
+import ctypes
 import json
 import os
 import re
@@ -82,14 +83,46 @@ try:
 except ValueError:
     VIENEU_THREADS = 0
 
-try:
-    # CPU/ONNX inference is serialized inside one VieNeu engine.  Two engines
-    # use more RAM but can synthesize separate subtitle lines concurrently.
-    TTS_ONNX_WORKERS = int(os.getenv("REUP_TTS_ONNX_WORKERS", "1"))
-except ValueError:
-    TTS_ONNX_WORKERS = 1
+def _available_memory_gb():
+    """Return currently available physical RAM, or zero when it cannot be read."""
+    try:
+        if os.name == "nt":
+            class _MemoryStatus(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            status = _MemoryStatus()
+            status.dwLength = ctypes.sizeof(_MemoryStatus)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return status.ullAvailPhys / (1024 ** 3)
+        else:
+            available_pages = os.sysconf("SC_AVPHYS_PAGES")
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            return available_pages * page_size / (1024 ** 3)
+    except (AttributeError, OSError, ValueError):
+        pass
+    return 0.0
 
-TTS_ONNX_WORKERS = max(1, min(TTS_ONNX_WORKERS, 2))
+
+def _auto_tts_workers():
+    """Use two ONNX sessions only when CPU and free RAM leave room for them."""
+    if (os.cpu_count() or 1) >= 8 and _available_memory_gb() >= 8:
+        return 2
+    return 1
+
+
+_tts_workers_setting = os.getenv("REUP_TTS_ONNX_WORKERS", "auto").strip().lower()
+if _tts_workers_setting == "auto":
+    TTS_ONNX_WORKERS = _auto_tts_workers()
+else:
+    try:
+        TTS_ONNX_WORKERS = max(1, min(int(_tts_workers_setting), 2))
+    except ValueError:
+        TTS_ONNX_WORKERS = _auto_tts_workers()
 
 try:
     VIENEU_TEMPERATURE = float(
@@ -213,12 +246,11 @@ def _create_vieneu_engine():
         ) from error
 
     kwargs = {"backend": VIENEU_BACKEND}
-    if VIENEU_THREADS > 0:
-        # In Turbo mode each worker owns a separate ONNX runtime. Divide the
-        # configured CPU budget between them so REUP_VIENEU_THREADS=8 means
-        # two engines x four threads, instead of oversubscribing sixteen.
-        workers = TTS_ONNX_WORKERS if _parallel_onnx_enabled() else 1
-        kwargs["threads"] = max(1, VIENEU_THREADS // workers)
+    # Divide a bounded CPU budget between ONNX engines. This avoids each
+    # concurrent model independently claiming half of all logical processors.
+    workers = TTS_ONNX_WORKERS if _parallel_onnx_enabled() else 1
+    thread_budget = VIENEU_THREADS or min(8, max(4, (os.cpu_count() or 4) - 2))
+    kwargs["threads"] = max(1, thread_budget // workers)
     return Vieneu(**kwargs)
 
 
@@ -975,7 +1007,7 @@ def _parallel_onnx_enabled():
     )
 
 
-def _generate_parallel_raw_tts(pending):
+def _generate_parallel_raw_tts(pending, on_progress=None):
     """Generate independent subtitle lines concurrently with separate ONNX engines.
 
     Each worker owns an engine because the ONNX engine serializes its sessions.
@@ -1009,6 +1041,8 @@ def _generate_parallel_raw_tts(pending):
             index, subtitle_id = futures[future]
             future.result()
             completed += 1
+            if on_progress is not None:
+                on_progress("raw", completed, total)
             print(
                 f"[TTS Turbo] {completed}/{total} xong "
                 f"(subtitle {index}, ID {subtitle_id})."
@@ -1022,6 +1056,7 @@ def _generate_parallel_raw_tts(pending):
 def create_tts_clips(
     subtitles,
     reuse_fitted=False,
+    on_progress=None,
 ):
     os.makedirs(
         TTS_FOLDER,
@@ -1038,8 +1073,8 @@ def create_tts_clips(
         _safe_voice_slug()
     )
 
-    # The default remains one engine.  Turbo is opt-in through engine.env so
-    # existing installations preserve their current memory footprint.
+    # Auto mode enables two workers only when the CPU and free-memory budget
+    # can support them; REUP_TTS_ONNX_WORKERS=1 keeps a low-memory fallback.
     if _parallel_onnx_enabled():
         pending = []
         for index, subtitle in enumerate(subtitles, start=1):
@@ -1047,7 +1082,7 @@ def create_tts_clips(
             raw_wav, _ = _tts_file_paths(subtitle_id, voice_slug)
             if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
                 pending.append((index, subtitle_id, subtitle["text"], raw_wav))
-        _generate_parallel_raw_tts(pending)
+        _generate_parallel_raw_tts(pending, on_progress=on_progress)
 
     for index, subtitle in enumerate(
         subtitles,
@@ -1213,10 +1248,13 @@ def create_tts_clips(
             }
         )
 
-        save_json(
-            manifest,
-            MANIFEST_FILE,
-        )
+        # Fitted WAV files are independently reusable after interruption.
+        # Persist the growing manifest in batches to avoid quadratic writes
+        # for multi-hour videos with thousands of subtitle lines.
+        if index % 25 == 0 or index == total:
+            save_json(manifest, MANIFEST_FILE)
+        if on_progress is not None:
+            on_progress("clips", index, total)
 
     return manifest
 
@@ -1227,7 +1265,8 @@ def create_tts_clips(
 
 def build_voice_timeline(
     manifest,
-    total_duration_ms
+    total_duration_ms,
+    on_progress=None,
 ):
     print(
         "\n=============================="
@@ -1241,71 +1280,75 @@ def build_voice_timeline(
         "=============================="
     )
 
-    timeline = (
-        AudioSegment.silent(
-            duration=
-                total_duration_ms,
-            frame_rate=44100,
-        )
-        .set_channels(2)
-        .set_sample_width(2)
-    )
+    # Overlaying each line onto a full-length AudioSegment copies the entire
+    # timeline per line.  A one-hour 44.1 kHz stereo timeline is ~635 MB, so
+    # thousands of subtitles would copy terabytes of data and can exhaust RAM.
+    # Assemble fixed-size windows and append PCM to one WAV instead.  The
+    # output format and overlapping-clip mix stay the same as before.
+    duration_ms = max(0, int(total_duration_ms))
+    output_path = Path(OUTPUT_AUDIO)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = output_path.with_name(output_path.name + ".tmp.wav")
+    window_ms = 30_000
+    window_count = (duration_ms + window_ms - 1) // window_ms
+    window_clips = [[] for _ in range(window_count)]
+    for item in manifest:
+        audio_path = str(item["audio_file"])
+        start_ms = max(0, int(item["start_ms"]))
+        duration_seconds = item.get("final_audio_duration")
+        if duration_seconds is None:
+            duration_seconds = get_audio_duration(audio_path)
+        clip_duration_ms = max(0, int(round(float(duration_seconds) * 1000)))
+        if clip_duration_ms and start_ms < duration_ms:
+            clip_end = min(duration_ms, start_ms + clip_duration_ms)
+            for window_index in range(start_ms // window_ms, (clip_end - 1) // window_ms + 1):
+                window_clips[window_index].append((start_ms, clip_end, audio_path))
 
-    for index, item in enumerate(
-        manifest,
-        start=1,
-    ):
-        audio = (
-            AudioSegment
-            .from_file(
-                item[
-                    "audio_file"
-                ]
-            )
-        )
+    try:
+        with wave.open(str(temporary_path), "wb") as output:
+            output.setnchannels(2)
+            output.setsampwidth(2)
+            output.setframerate(44100)
 
-        start_ms = (
-            item[
-                "start_ms"
-            ]
-        )
-
-        print(
-            f"Overlay "
-            f"{index}/{len(manifest)} "
-            f"tai "
-            f"{start_ms / 1000:.2f}s"
-        )
-
-        timeline = (
-            timeline.overlay(
-                audio,
-                position=
-                    start_ms,
-            )
-        )
-
-    output_dir = os.path.dirname(
-        OUTPUT_AUDIO
-    )
-
-    if output_dir:
-        os.makedirs(
-            output_dir,
-            exist_ok=True,
-        )
-
-    timeline.export(
-        OUTPUT_AUDIO,
-        format="wav",
-    )
+            for window_index, window_start in enumerate(range(0, duration_ms, window_ms)):
+                window_end = min(duration_ms, window_start + window_ms)
+                timeline = (
+                    AudioSegment.silent(
+                        duration=window_end - window_start,
+                        frame_rate=44100,
+                    )
+                    .set_channels(2)
+                    .set_sample_width(2)
+                )
+                for clip_start, clip_end, audio_path in window_clips[window_index]:
+                    audio = AudioSegment.from_file(audio_path)
+                    audio = audio.set_frame_rate(44100).set_channels(2).set_sample_width(2)
+                    clip_offset = max(0, window_start - clip_start)
+                    clip_limit = min(len(audio), window_end - clip_start)
+                    if clip_limit <= clip_offset:
+                        continue
+                    timeline = timeline.overlay(
+                        audio[clip_offset:clip_limit],
+                        position=max(0, clip_start - window_start),
+                    )
+                output.writeframes(timeline.raw_data)
+                if on_progress is not None:
+                    on_progress("timeline", window_end, duration_ms)
+                print(
+                    f"Voice timeline: {window_end / 1000:.0f}/"
+                    f"{duration_ms / 1000:.0f}s"
+                )
+        temporary_path.replace(output_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
 
     print(
         "\nDa tao voice timeline:"
     )
 
     print(
-        OUTPUT_AUDIO
+        output_path
     )
 
 

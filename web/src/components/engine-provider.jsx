@@ -6,6 +6,15 @@ import { localEngineClient } from "../lib/local-engine-client";
 
 const EngineContext = createContext(null);
 
+const guestConnection = {
+  guest: true, preview: true, status: "disconnected", client: { baseUrl: "", hasPersistentGrant: false },
+  check: async () => {}, connect: async () => {}, revoke: async () => {},
+};
+
+export function EngineGuestProvider({ children }) {
+  return <EngineContext.Provider value={guestConnection}>{children}</EngineContext.Provider>;
+}
+
 export function EngineProvider({ children }) {
   const [connection, setConnection] = useState(localEngineClient.connection);
   const manager = useMemo(

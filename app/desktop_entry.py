@@ -23,7 +23,7 @@ APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
-CHILD_MODES = {"--pipeline", "--python-module", "--check-config", "--check-voice", "--check-media"}
+CHILD_MODES = {"--pipeline", "--python-module", "--check-config", "--check-voice", "--check-media", "--check-whisper"}
 
 
 def _is_child_mode() -> bool:
@@ -183,6 +183,27 @@ def _dispatch_child_mode() -> bool:
         return False
     mode = sys.argv[1]
     os.environ["REUP_CHILD_MODE"] = "1"
+    if mode == "--check-whisper":
+        from runtime_paths import get_logs_dir
+
+        output_path = (
+            Path(sys.argv[2])
+            if len(sys.argv) > 2
+            else get_logs_dir() / "whisper-check.json"
+        )
+        report = {"ready": False}
+        try:
+            import ctranslate2  # noqa: F401
+            from faster_whisper import WhisperModel  # noqa: F401
+
+            report["ready"] = True
+        except Exception as error:
+            report["error"] = f"{type(error).__name__}: {error}"[:320]
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(report, ensure_ascii=False), encoding="utf-8")
+        if not report["ready"]:
+            raise SystemExit(1)
+        return True
     if mode == "--check-config":
         from dotenv import dotenv_values
         from runtime_paths import get_config_dir, get_logs_dir
@@ -365,6 +386,18 @@ def run_desktop() -> int:
     def open_engine(_icon=None, _item=None):
         webbrowser.open("http://127.0.0.1:17888/")
 
+    def open_updates(_icon=None, _item=None):
+        from services.windows_distribution import distribution_info, open_store_updates
+        distribution = distribution_info()
+        if distribution["channel"] == "msix":
+            try:
+                open_store_updates()
+            except (ValueError, RuntimeError) as error:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(0, str(error), "Cập nhật ReupAI", 0x40)
+        elif not distribution["managedUpdates"]:
+            webbrowser.open("https://www.reupai.cloud/local-engine?updates=1")
+
     def open_logs(_icon=None, _item=None):
         os.startfile(str(get_logs_dir()))
 
@@ -379,7 +412,7 @@ def run_desktop() -> int:
     menu = Menu(
         MenuItem("Mở ReupAI", open_web, default=True),
         MenuItem("Trạng thái Local Engine", open_engine),
-        MenuItem("Kiểm tra bản cập nhật", lambda *_: webbrowser.open("https://www.reupai.cloud/local-engine?updates=1")),
+        MenuItem("Kiểm tra bản cập nhật", open_updates),
         MenuItem("Mở thư mục log", open_logs),
         Menu.SEPARATOR,
         MenuItem("Khởi động lại", restart_app),

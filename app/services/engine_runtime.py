@@ -167,6 +167,9 @@ def runtime_diagnostics() -> dict[str, Any]:
     }
     components = {
         "ocr": all(_module_available(name) for name in ("paddle", "paddlex", "paddleocr")),
+        # Importability alone cannot prove native DLL readiness. The settings
+        # page offers an explicit isolated Whisper probe for that distinction.
+        "whisper_modules": all(_module_available(name) for name in ("ctranslate2", "faster_whisper")),
         "vietnamese_tts": all(_module_available(name) for name in ("vieneu", "vieneu_utils", "sea_g2p")) and _sea_g2p_dictionary_available(),
     }
     api_key_configured = bool(
@@ -179,7 +182,7 @@ def runtime_diagnostics() -> dict[str, Any]:
     except Exception:
         oauth = {"configured": False, "connected": False, "connecting": False, "error": None}
     gemini_configured = api_key_configured or (
-        bool(oauth.get("connected")) and not bool(oauth.get("needs_reauthorization"))
+        bool(oauth.get("connected")) and bool(oauth.get("project_id")) and not bool(oauth.get("needs_reauthorization"))
     )
     return {
         "platform": platform.system(),

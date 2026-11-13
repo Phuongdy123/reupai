@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icon";
+import { useGuestAccess } from "./guest-access";
 
 const CHAT_STORAGE_KEY = "reupai:assistant-chat-v1";
+const GUEST_DRAFT_KEY = "reupai:guest-assistant-draft";
 export const PENDING_SOURCE_KEY = "reupai:assistant-pending-source";
 const VIDEO_HOSTS = new Set(["bilibili.com", "www.bilibili.com", "m.bilibili.com", "space.bilibili.com", "b23.tv", "douyin.com", "www.douyin.com", "v.douyin.com"]);
 const PROMPTS = ["Tạo Vietsub từ link", "Gợi ý cấu hình video", "Hỏi về lỗi xử lý"];
@@ -54,6 +56,7 @@ function newMessage(role, text, extras = {}) {
 }
 
 export function WorkspaceAssistant({ client, connected, check }) {
+  const { isGuest, ensureAuthenticated } = useGuestAccess();
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [imageData, setImageData] = useState("");
@@ -70,20 +73,24 @@ export function WorkspaceAssistant({ client, connected, check }) {
   const cancelledRef = useRef(false);
 
   useEffect(() => {
+    if (isGuest) { setLoaded(true); return; }
     try {
       const saved = JSON.parse(window.sessionStorage.getItem(CHAT_STORAGE_KEY) || "[]");
       if (Array.isArray(saved)) setMessages(saved.slice(-30).filter((item) => item && ["user", "assistant"].includes(item.role) && typeof item.text === "string"));
+      const draft = window.sessionStorage.getItem(GUEST_DRAFT_KEY);
+      if (draft) { setMessage(draft); window.sessionStorage.removeItem(GUEST_DRAFT_KEY); }
     } catch { /* A damaged session never prevents opening the dashboard. */ }
     setLoaded(true);
-  }, []);
+  }, [isGuest]);
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || isGuest) return;
     try { window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages.slice(-30))); } catch { /* Private browsing can disable storage. */ }
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [messages, loaded, threadOpen]);
+  }, [messages, loaded, threadOpen, isGuest]);
   useEffect(() => () => requestRef.current?.abort(), []);
 
   async function attach(file) {
+    if (!ensureAuthenticated({ reason: "Đăng nhập để gửi ảnh và nhận gợi ý từ trợ lý AI." })) return;
     if (!file) return;
     if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 4 * 1024 * 1024) {
       setInputError("Chọn ảnh PNG, JPEG hoặc WebP dưới 4 MB.");
@@ -97,6 +104,7 @@ export function WorkspaceAssistant({ client, connected, check }) {
   }
 
   async function captureScreen() {
+    if (!ensureAuthenticated({ reason: "Đăng nhập để đính kèm ảnh màn hình và hỏi trợ lý AI." })) return;
     if (!navigator.mediaDevices?.getDisplayMedia) { setInputError("Trình duyệt này chưa hỗ trợ chụp màn hình. Hãy đính kèm ảnh."); return; }
     let stream;
     try {
@@ -121,6 +129,11 @@ export function WorkspaceAssistant({ client, connected, check }) {
     if (busy) return;
     const text = message.trim();
     if (!text) { setInputError("Nhập câu hỏi hoặc dán link video."); textareaRef.current?.focus(); return; }
+    if (isGuest) {
+      try { window.sessionStorage.setItem(GUEST_DRAFT_KEY, text); } catch {}
+      ensureAuthenticated({ reason: "Đăng nhập để trò chuyện với AI, tạo Vietsub và xử lý video. Nội dung bạn vừa nhập sẽ được giữ lại." });
+      return;
+    }
     const context = conversationRequest(messages, text);
     const attachedImage = imageData;
     const attachedName = imageName;
@@ -176,10 +189,17 @@ export function WorkspaceAssistant({ client, connected, check }) {
   }
 
   function openConfig(source, mode) {
+    if (!ensureAuthenticated({ next: "/sources", reason: "Đăng nhập để tạo Vietsub hoặc lồng tiếng cho video này." })) return;
     if (!connected) { setInputError("Mở Local Engine và kết nối lại trước khi xử lý video."); return; }
     try { window.sessionStorage.setItem(PENDING_SOURCE_KEY, JSON.stringify({ url: source.url, mode, createdAt: Date.now() })); }
     catch { setInputError("Trình duyệt không lưu được yêu cầu. Hãy dán link trực tiếp tại trang Nguồn video."); return; }
     router.push("/sources");
+  }
+
+  function newChat() {
+    setMessages([]); setThreadOpen(false); setMessage(""); setInputError("");
+    if (isGuest) { try { window.sessionStorage.removeItem(GUEST_DRAFT_KEY); } catch {} }
+    textareaRef.current?.focus();
   }
 
   return <section className="workspace-assistant assistant-home" aria-label="Trợ lý AI ReupAI">
@@ -188,14 +208,14 @@ export function WorkspaceAssistant({ client, connected, check }) {
         <h2>{threadOpen && messages.length ? <>Tiếp tục cùng <em>ReupAI</em></> : <>Bạn muốn làm gì <em>hôm nay?</em></>}</h2>
         <p>Dán link video, mô tả ý tưởng hoặc hỏi trợ lý cách thực hiện.</p>
       </div>
-      <button type="button" className="assistant-new-chat" disabled={busy} onClick={() => { setMessages([]); setThreadOpen(false); setMessage(""); setInputError(""); textareaRef.current?.focus(); }}>+ Chat mới</button>
+      <button type="button" className="assistant-new-chat" disabled={busy} onClick={newChat}>+ Chat mới</button>
     </div>
     {!threadOpen && <div className="assistant-starters">{PROMPTS.map((prompt) => <button type="button" key={prompt} onClick={() => { setMessage(prompt); textareaRef.current?.focus(); }}><Icon name="spark" size={15} />{prompt}</button>)}</div>}
     <form className="assistant-composer" onSubmit={submit}>
       <label className="sr-only" htmlFor="workspaceAssistantMessage">Nhắn cho Trợ lý ReupAI</label>
       <textarea id="workspaceAssistantMessage" ref={textareaRef} value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="Bạn muốn xử lý video nào? Dán link hoặc hỏi Trợ lý ReupAI…" maxLength={2000} rows={2} />
       <div className="assistant-composer-footer"><div className="assistant-attachments">
-        <label className="assistant-tool"><Icon name="plus" size={16} /> Đính kèm<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { void attach(event.target.files?.[0]); event.target.value = ""; }} /></label>
+        <label className="assistant-tool"><Icon name="plus" size={16} /> Đính kèm<input type="file" accept="image/png,image/jpeg,image/webp" onClick={(event) => { if (isGuest) { event.preventDefault(); ensureAuthenticated({ reason: "Đăng nhập để gửi ảnh và hỏi trợ lý AI." }); } }} onChange={(event) => { void attach(event.target.files?.[0]); event.target.value = ""; }} /></label>
         <button type="button" className="assistant-tool" onClick={captureScreen}><Icon name="source" size={16} /> Chụp màn hình</button>
         {imageName && <button type="button" className="assistant-image-chip" onClick={() => { setImageData(""); setImageName(""); }} title="Bỏ ảnh đính kèm">{imageName} ×</button>}
       </div><button type="submit" className="assistant-send" disabled={busy}>{busy ? "Đang chờ AI" : "Gửi"} <Icon name="spark" size={15} /></button></div>

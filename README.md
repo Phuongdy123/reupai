@@ -73,7 +73,7 @@ khi chạy production). Browser chỉ giữ credential grant dạng opaque để
 browser session mới sau khi Engine restart; grant bị xóa hoàn toàn khi bấm
 **Thu hồi**.
 
-Để dùng Gemini trên bản cài Windows, khách kết nối Google trong Cài đặt Local Engine và bật Gemini API cho Google Cloud project đã chọn. Có thể dùng `GEMINI_API_KEY` trong `%LOCALAPPDATA%\ReupAI\config\engine.env` như phương án thay thế. Bộ cài Windows đã kèm FFmpeg và FFprobe; môi trường phát triển cần có chúng trong `PATH`.
+Từ Engine 0.2.23, nút **Tiếp tục với Google và Gemini** trên trang đăng nhập mở một lần cấp quyền Google cho cả phiên website và Gemini. Engine lưu token Google bằng Windows DPAPI, tự làm mới bằng refresh token và chỉ yêu cầu **Kết nối lại Google** khi quyền đã bị thu hồi/hết hạn. Nếu mạng hoặc Gemini tạm bận, người dùng chỉ cần thử lại. Mỗi khách nhập **Project ID Google Cloud của mình** tại Cài đặt → Chẩn đoán xử lý; project đó phải bật Gemini API và tài khoản cần quyền sử dụng quota. Engine không tự dùng project `reupai` của nhà phát triển trên máy khách. Người đăng nhập website bằng email/mật khẩu vẫn có thể kết nối Google cho Gemini trong Cài đặt. Có thể dùng `GEMINI_API_KEY` trong `%LOCALAPPDATA%\ReupAI\config\engine.env` như phương án thay thế. Bộ cài Windows đã kèm FFmpeg và FFprobe; môi trường phát triển cần có chúng trong `PATH`.
 
 ## Điều chỉnh tốc độ tải và RAM
 
@@ -186,13 +186,17 @@ hoặc thành phẩm của người dùng.
 2. Cài thử bằng installer trên một Windows x64 khác, mở ReupAI hai lần, rồi
    xác nhận lần thứ hai chỉ mở website thay vì tạo thêm Local Engine.
 3. Vào **Cài đặt → Chẩn đoán xử lý**. FFmpeg, FFprobe, trình tải video và
-   trình duyệt nguồn phải báo sẵn sàng. Nếu dùng Vietsub hoặc Voice, thêm
-   `GEMINI_API_KEY=...` vào `%LOCALAPPDATA%\ReupAI\config\engine.env`, sau đó
-   khởi động lại Local Engine.
+   trình duyệt nguồn phải báo sẵn sàng. Nếu dùng Vietsub hoặc Voice, kết nối
+   Google/Gemini trong Cài đặt Local Engine hoặc cấu hình
+   `GEMINI_API_KEY=...` tại `%LOCALAPPDATA%\ReupAI\config\engine.env`, sau đó
+   khởi động lại Local Engine nếu vừa sửa file cấu hình.
 4. Chạy một video Vietsub, một video Voice, một link Douyin và một video có
    nhạc nền. Hệ thống thử Chrome, Microsoft Edge rồi Chromium đi kèm để đọc
    Douyin; có thể đặt `REUP_BROWSER_CHANNEL=chrome`, `msedge` hoặc `bundled`
    trong `engine.env` nếu cần cố định trình duyệt.
+   Với video dài hơn 1 giờ không có chữ phụ đề trên hình, chọn **Video gốc
+   không có chữ phụ đề** trong thiết lập xử lý và kiểm tra phụ đề/giọng ở đầu,
+   giữa và cuối video.
 5. Khi job lỗi, web chỉ hiện nguyên nhân có thể xử lý; nhật ký đầy đủ nằm ở
    `%LOCALAPPDATA%\ReupAI\logs` và log của từng job nằm trong thư mục job.
 
@@ -203,6 +207,10 @@ gắn với đúng origin để điều khiển Engine trên chính máy đó.
 ## Tài khoản website và phê duyệt truy cập
 
 Website production dùng Supabase cho **tài khoản và quyền truy cập**. Local Engine, video, jobs, SQLite và file thành phẩm vẫn chỉ nằm trên máy người dùng.
+
+Để dùng nút Google một lần, trong Supabase **Authentication → Providers → Google → Client IDs**, giữ Web client ID ở đầu và thêm Desktop client ID của `app/assets/google_oauth_client.json` sau dấu phẩy. Giữ nguyên Web client secret trong Supabase; không đưa secret này vào Engine hoặc frontend. Google Auth Platform cần cho phép các scope `openid`, `email`, `profile`, `cloud-platform` và `generative-language.retriever`, và ứng dụng có thể cần xác minh để phục vụ người dùng ngoài danh sách thử nghiệm. Không tắt kiểm tra nonce của Supabase. Chỉ triển khai website dùng luồng mới cùng Engine 0.2.23 trở lên. Khách hàng chọn project riêng trong Cài đặt; để ReupAI tự bật Gemini API, tài khoản của họ cần quyền quản lý dịch vụ trên project. Nếu thiếu quyền, quản trị viên project bật API và cấp quyền Service Usage Consumer cho tài khoản đó.
+
+Website mới dùng luồng Google + Gemini khi đăng nhập nếu không đặt `NEXT_PUBLIC_GOOGLE_GEMINI_LOGIN=false` trong Vercel. Khách cần Engine 0.2.23 trở lên. Nếu Engine chưa sẵn sàng hoặc Google không hoàn tất quyền Gemini, trang đăng nhập hiện lựa chọn chỉ đăng nhập website; khách có thể kết nối Gemini sau trong Cài đặt. Khi xử lý lỗi Gemini, nút **Sửa nhanh Gemini** mở phần chẩn đoán; lỗi thiếu hoặc hết quyền Google hiện **Đăng nhập lại Google** và mở thẳng lượt cấp quyền mới. Lỗi quota, project, API hoặc mạng vẫn cần xử lý theo nguyên nhân được hiển thị vì cấp quyền lại không tự khắc phục chúng. Cần thử tài khoản thật trước khi coi luồng đăng nhập và xử lý Gemini là đã xác nhận đầu cuối.
 
 1. Tạo một Supabase project, mở **SQL Editor** và chạy `supabase/migrations/20261014_account_access.sql`. Nếu project đã tạo trước khi cập nhật username login, chạy thêm `supabase/migrations/20261014_username_login.sql`.
 2. Trong Supabase Authentication, bật xác minh email; thêm `https://www.reupai.cloud/auth/callback` và `https://reupai.cloud/auth/callback` vào Redirect URLs.

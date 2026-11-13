@@ -1,8 +1,11 @@
 #define MyAppName "ReupAI Local Engine"
-#define MyAppVersion "0.2.44"
+#define MyAppVersion "0.2.45"
 #define MyAppPublisher "ReupAI"
 #define MyAppURL "https://www.reupai.cloud"
 #define MyAppExeName "ReupAI.exe"
+#ifndef MyInstallerRevision
+  #define MyInstallerRevision ""
+#endif
 
 [Setup]
 AppId={{72A51D30-33F4-4EF9-BBC6-76BB73BB47E9}
@@ -14,7 +17,7 @@ DefaultDirName={autopf}\ReupAI
 DefaultGroupName=ReupAI
 DisableProgramGroupPage=yes
 OutputDir=..\release
-OutputBaseFilename=ReupAI-Setup-{#MyAppVersion}
+OutputBaseFilename=ReupAI-Setup-{#MyAppVersion}{#MyInstallerRevision}
 Compression=lzma2/normal
 LZMANumBlockThreads=2
 SolidCompression=yes
@@ -33,6 +36,12 @@ Name: "startup"; Description: "Khởi động ReupAI cùng Windows"; GroupDescri
 [Files]
 Source: "..\dist\ReupAI\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "close-engine-for-update.ps1"; Flags: dontcopy
+
+[InstallDelete]
+; Older bundles installed Paddle's OpenMP DLL. Its exported symbols conflict
+; with the CTranslate2 DLL shipped in the current bundle. Delete this exact
+; obsolete binary on upgrade; do not touch user data in the install directory.
+Type: files; Name: "{app}\_internal\paddle\libs\libiomp5md.dll"
 
 [Icons]
 Name: "{autoprograms}\ReupAI"; Filename: "{app}\{#MyAppExeName}"
@@ -85,8 +94,8 @@ begin
     11: Result := 'Không đọc được trạng thái Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
     12: Result := 'Không tìm thấy cửa sổ điều khiển Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
     13: Result := 'Local Engine chưa thoát sau 20 giây. Hãy đóng ứng dụng rồi cài đặt lại.';
-    14: Result := 'Bản Local Engine đang chạy chưa báo đủ trạng thái công việc. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
-    15: Result := 'Không xác nhận được tiến trình Local Engine. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
+    14: Result := 'Bản Local Engine đang chạy chưa báo đủ trạng thái công việc hoặc mã tiến trình. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
+    15: Result := 'Không xác nhận được tiến trình Local Engine đang dùng cổng 17888. Hãy thoát ReupAI ở khay hệ thống rồi cài đặt lại.';
   else
     Result := 'Không thể đóng Local Engine để cập nhật (mã ' + IntToStr(ExitCode) + '). Hãy thoát ứng dụng rồi cài đặt lại.';
   end;

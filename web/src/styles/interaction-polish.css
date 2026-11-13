@@ -1,14 +1,29 @@
-/* Keep page controls comfortable to tap without moving the surrounding layout. */
-.bottom-pages {
-  gap: 8px;
+/* Tap/click feedback without moving the target under the pointer. */
+body.theme-xports :where(button, select, summary, input[type="button"], input[type="submit"], a[href], label[for]) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgb(230 230 240 / 12%);
 }
 
-.bottom-pages > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+body.theme-xports :where(button, summary, .btn, .button-primary, .button-secondary, .nav-item, .guest-library-add, .guest-empty-actions a) {
+  transition-property: background-color, border-color, color, opacity;
+  transition-duration: 120ms;
+  transition-timing-function: ease;
+}
+body.theme-xports :where(button:not(:disabled), summary, .btn:not([aria-disabled="true"]), .button-primary, .button-secondary):active {
+  opacity: .82;
+  transition-duration: 55ms;
+}
+body.theme-xports :where(button, a[href], summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--ui-accent, #dedee6);
+  outline-offset: 3px;
+}
+body.theme-xports :where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
 }
 
+/* Keep the entire page-number target stable as content changes. */
+.bottom-pages { gap: 8px; }
+.bottom-pages > span { display: inline-flex; align-items: center; gap: 8px; }
 .bottom-page-btn,
 .theme-xports .bottom-page-btn {
   min-width: 48px;
@@ -16,49 +31,69 @@
   height: 48px;
   padding-inline: 14px;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  -webkit-tap-highlight-color: rgb(230 230 240 / 12%);
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, opacity 80ms ease;
 }
-
 .bottom-page-btn:not(:disabled):hover {
-  border-color: #ff5267;
-  box-shadow: 0 0 0 3px rgba(255, 38, 70, .12);
+  border-color: #a6a6b1;
+  box-shadow: none;
 }
-
-.bottom-page-btn:not(:disabled):active {
-  transform: scale(.96);
-}
-
-.bottom-page-btn:focus-visible {
-  outline: 2px solid #ff5267;
-  outline-offset: 3px;
-}
-
-.bottom-page-btn:disabled {
-  cursor: default;
-  opacity: .55;
-}
-
-.bottom-page-btn.is-pending {
-  border-color: #ff5267;
-  box-shadow: 0 0 0 3px rgba(255, 38, 70, .18);
-}
+.bottom-page-btn:not(:disabled):active { transform: none; opacity: .8; }
+.bottom-page-btn:focus-visible { outline: 2px solid #dedee6; outline-offset: 3px; }
+.bottom-page-btn:disabled { cursor: default; opacity: .5; }
+.bottom-page-btn.is-pending { border-color: #dedee6; border-style: dashed; box-shadow: none; }
 
 #videos,
 .panel .control-bar,
-.panel .panel-head {
-  scroll-margin-top: 20px;
+.panel .panel-head { scroll-margin-top: 20px; }
+#videos.is-page-loading > .compact-video-card { opacity: .66; transition: opacity 120ms ease; }
+
+/* Native mobile targets are larger without enlarging desktop controls. */
+@media (any-pointer: coarse) {
+  body.theme-xports :is(.app-shell, .auth-premium, .landing-shell, .guest-auth-dialog) :is(button, select, summary, .btn, .button-primary, .button-secondary, .nav-item, .auth-tabs a, .guest-empty-actions a, .guest-library-add, .account-menu-links a, .quick-nav-dialog a, .guest-auth-primary, .guest-auth-secondary) {
+    min-height: 44px;
+  }
+  body.theme-xports :is(.app-shell, .auth-premium, .landing-shell) :is(.topbar-avatar, .quick-nav-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close, .engine-retry, .auth-password-toggle, .favorite-btn, .more-trigger),
+  body.theme-xports .guest-auth-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  body.theme-xports .app-shell #videos :is(.action-primary, .action-secondary, .compact-actions button, .compact-actions .more-menu > summary) {
+    height: auto !important;
+    min-height: 44px !important;
+  }
+  body.theme-xports .app-shell #videos :is(.favorite-btn, .more-trigger) {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  body.theme-xports :is(.auth-premium, .guest-browse, .quick-nav-dialog) input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]),
+  body.theme-xports :is(.guest-source-input, .guest-browse-search, .auth-input-wrap) {
+    min-height: 44px;
+  }
+  body.theme-xports :is(.auth-premium, .guest-browse, .quick-nav-dialog) input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"]) {
+    font-size: 16px;
+  }
+  body.theme-xports :is(.workspace-footer, .auth-page-footer) a {
+    min-height: 44px;
+    align-items: center;
+  }
+  body.theme-xports .auth-password-toggle { margin-block: -2px; }
+  body.theme-xports :is(.assistant-attachments, .assistant-starters, .guest-browse-filters, .library-actions, .settings-actions) { gap: 8px; }
 }
 
-#videos.is-page-loading > .compact-video-card {
-  opacity: .66;
-  transition: opacity 180ms ease;
+/* Touch browsers can keep :hover after a tap; avoid sticky floating-card feedback. */
+@media (hover: none) {
+  body.theme-xports :is(.button-primary, .button-secondary, .dashboard-create, .dashboard-recent-card, .dashboard-shortcut-card, .library-card, .tracked-channel-card):hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  body.theme-xports :where(button, summary, .btn, .button-primary, .button-secondary, .nav-item),
   .bottom-page-btn,
   .theme-xports .bottom-page-btn,
-  #videos.is-page-loading > .compact-video-card {
-    transition: none;
-  }
+  #videos.is-page-loading > .compact-video-card { transition: none; }
 }

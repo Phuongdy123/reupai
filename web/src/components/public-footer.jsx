@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 const columns = [
@@ -5,8 +7,8 @@ const columns = [
   { title: "ReupAI", links: [["Gói Free & Pro", "/plans"], ["Local Engine", "/giai-phap/xu-ly-video-tren-may"], ["Tạo tài khoản", "/sign-up"], ["Đăng nhập", "/sign-in"]] },
 ];
 
-export function PublicFooter() {
-  return <footer className="public-footer">
+export function PublicFooter({ variant = "default" }) {
+  return <footer className={`public-footer${variant === "workspace" ? " public-footer-workspace" : ""}`}>
     <div className="public-footer-main">
       <div className="public-footer-intro">
         <Link href="/" className="public-footer-brand" aria-label="ReupAI - Trang chủ">Reup<span>AI</span></Link>

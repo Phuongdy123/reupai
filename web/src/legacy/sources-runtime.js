@@ -14,6 +14,7 @@ let totalPages = null;
 let remoteHasMore = true;
 let loadingPage = false;
 let pendingPage = null;
+let loadingPageNumber = null;
 const PAGE_SIZE = 10;
 const pageCache = {};
 let sourceSyncPromise = null;
@@ -628,14 +629,17 @@ function renderPagination() {
             : 1
         );
 
-        effectiveTotalPages = (
-            highestCached
-            + (
-                remoteHasMore
-                ? 1
-                : 0
-            )
+        const furthestRequested = Math.max(
+            highestCached,
+            currentPage,
+            Number(pendingPage) || 1,
         );
+        // Totals are sometimes unavailable for a source. Keep a short window
+        // of direct page targets visible so users can jump to page 3+ without
+        // having to wait through every intermediate page.
+        effectiveTotalPages = remoteHasMore
+            ? furthestRequested + 3
+            : highestCached;
     }
 
     effectiveTotalPages = Math.max(
@@ -717,8 +721,9 @@ function renderPagination() {
                 item
             );
 
-        button.disabled =
-            loadingPage;
+        if (Number(item) === Number(pendingPage)) {
+            button.setAttribute('aria-busy', 'true');
+        }
 
         button.onclick =
             () => loadPage(
@@ -865,7 +870,20 @@ async function loadPage(
         page = totalPages;
     }
 
-    if (loadingPage || (!force && page === currentPage)) {
+    if (loadingPage) {
+        pendingPage = page;
+        const info = document.getElementById('info');
+        if (info) {
+            info.className = 'info-line';
+            info.textContent = page === loadingPageNumber
+                ? `Đang tải trang ${loadingPageNumber}...`
+                : `Đang tải trang ${loadingPageNumber}; sẽ mở trang ${page} ngay sau đó.`;
+        }
+        renderPagination();
+        return;
+    }
+
+    if (!force && page === currentPage) {
         return;
     }
 
@@ -916,6 +934,7 @@ async function loadPage(
         true;
 
     pendingPage = page;
+    loadingPageNumber = page;
     const videoList = document.getElementById('videos');
     const keepCurrentVideos = Boolean(videoList?.children.length && currentVideos.length);
     videoList?.classList.toggle('is-page-loading', keepCurrentVideos);
@@ -997,10 +1016,9 @@ async function loadPage(
         );
 
         if (
-            data.total
-            !== null
-            && data.total
-            !== undefined
+            data.total_is_exact === true
+            && data.total !== null
+            && data.total !== undefined
         ) {
 
             sourceTotal = Number(
@@ -1010,72 +1028,85 @@ async function loadPage(
             updateTotalPages();
         }
 
-        remoteHasMore =
-            !!data.has_more;
-
-        if (
-            videos.length
-            === 0
-        ) {
-
-            if (
-                !totalPages
-                || page >= totalPages
-            ) {
-
-                remoteHasMore =
-                    false;
-            }
-
-            throw new Error(
-                `Trang ${page} không có video.`
-            );
+        remoteHasMore = data.has_more !== undefined
+            ? !!data.has_more
+            : videos.length === PAGE_SIZE;
+        if (!remoteHasMore && pendingPage !== page && pendingPage > page) {
+            // The remote page confirmed this is the end; keep the last valid
+            // page visible instead of firing queued taps past the end.
+            pendingPage = page;
         }
 
-        pageCache[
-            page
-        ] = videos;
+        if (videos.length === 0) {
+            remoteHasMore = false;
+            const loadedPages = Object.keys(pageCache)
+                .map(Number)
+                .filter(Number.isFinite);
+            const lastAvailable = loadedPages.length
+                ? Math.max(...loadedPages)
+                : Math.max(1, currentPage - 1);
+            totalPages = lastAvailable;
+            const lastPageVideos = pageCache[lastAvailable];
+            if (lastPageVideos) {
+                currentPage = lastAvailable;
+                currentVideos = [...lastPageVideos];
+                sourceTotal = (lastAvailable - 1) * PAGE_SIZE + lastPageVideos.length;
+                renderVideos();
+                updateSourceInfo('Đã đến trang cuối');
+            }
+            pendingPage = null;
+            info.className = 'info-line';
+            info.textContent = `Đã đến trang cuối (${lastAvailable}).`;
+            return;
+        }
 
-        currentPage =
-            page;
+        pageCache[page] = videos;
 
-        currentVideos = [
-            ...videos
-        ];
-
-        renderVideos();
-
-        updateSourceInfo(
-            data.from_cache
-            ? 'cache SQLite'
-            : 'Bilibili'
-        );
-
-        if (!keepCurrentVideos) scrollToVideoList();
+        // If the user tapped another page while this request was running,
+        // cache this response but keep the current cards visible until the
+        // newest requested page is ready.
+        if (pendingPage === page) {
+            currentPage = page;
+            currentVideos = [...videos];
+            if (!remoteHasMore && data.total_is_exact !== true) {
+                sourceTotal = (page - 1) * PAGE_SIZE + videos.length;
+                updateTotalPages();
+            }
+            renderVideos();
+            updateSourceInfo(
+                data.from_cache ? 'cache SQLite' : 'Bilibili'
+            );
+            if (!keepCurrentVideos) scrollToVideoList();
+        }
 
     } catch (
         error
     ) {
 
-        info.className =
-            'info-line warning';
-
-        info.textContent =
-            (
-                'Lỗi: '
-                + error.message
-            );
+        if (pendingPage === page) {
+            info.className = 'info-line warning';
+            info.textContent = `Lỗi: ${error.message}`;
+        }
 
     } finally {
+
+        const nextPage = pendingPage !== page
+            ? pendingPage
+            : null;
 
         loadingPage =
             false;
 
         pendingPage = null;
+        loadingPageNumber = null;
         videoList?.classList.remove('is-page-loading');
         videoList?.removeAttribute('aria-busy');
 
         renderPagination();
+
+        if (nextPage && nextPage !== currentPage && remoteHasMore) {
+            void loadPage(nextPage);
+        }
     }
 }
 
@@ -1260,10 +1291,9 @@ async function loadVideos(refresh = false) {
         }
 
         sourceTotal = (
-            data.total
-            !== null
-            && data.total
-            !== undefined
+            data.total_is_exact === true
+            && data.total !== null
+            && data.total !== undefined
             ? Number(
                 data.total
             )

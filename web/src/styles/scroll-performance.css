@@ -1,24 +1,70 @@
-/* Keep user-driven scrolling on the browser's native, refresh-synced path. */
+/* Keep wheel, trackpad and touch scrolling on the browser's native path. */
 html,
-body {
+body { scroll-behavior: auto; }
+
+@supports (scrollbar-gutter: stable) {
+  html { scrollbar-gutter: stable; }
+}
+
+/* Fixed and sticky chrome should not re-blur the whole page during a scroll. */
+body.theme-xports :is(.topbar, .sidebar, .account-menu, .sidebar-backdrop) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+body.theme-xports :is(.sidebar, .main, .page-content) { will-change: auto; }
+
+body.theme-xports #processConfigDialog::backdrop,
+body.theme-xports .library-preview-dialog::backdrop,
+body.theme-xports #processConfigDialog .process-config-actions {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Keep the actual video blur preview intact; only decorative backdrop blur is removed. */
+body.theme-xports :is(.process-config-dialog, .library-preview-dialog, .assistant-thread, .quick-nav-dialog > div) {
+  overscroll-behavior: contain;
   scroll-behavior: auto;
+  scrollbar-width: thin;
 }
 
-/* Large translucent layers force expensive full-screen repaints while scrolling. */
-.theme-xports .topbar {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+/* Static placeholders avoid continuously repainting large grids while loading. */
+body.theme-xports .app-shell :is(.video-loading-thumb, .video-loading-lines span) {
+  animation: none;
+  background-size: 100% 100%;
 }
 
-body.theme-xports #processConfigDialog::backdrop {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+/* Gallery hover feedback stays in place instead of moving many media layers. */
+body.theme-xports .app-shell :is(.library-card, .dashboard-recent-card, .dashboard-shortcut-card, .tracked-channel-card),
+body.theme-xports .app-shell #videos .compact-video-card {
+  transition-property: border-color, background-color, color;
+  transition-duration: 120ms;
+  transition-timing-function: ease;
+}
+body.theme-xports .app-shell :is(.library-card, .dashboard-recent-card, .dashboard-shortcut-card, .tracked-channel-card):hover,
+body.theme-xports .app-shell #videos .compact-video-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+body.theme-xports .app-shell #videos .compact-cover img,
+body.theme-xports .app-shell #videos .compact-video-card:hover .compact-cover img {
+  transform: none;
+  transition: none;
+}
+
+@media (any-pointer: coarse) {
+  body.theme-xports :is(.feedback-scrim, .guest-auth-backdrop, .modal) {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html,
   body,
-  * {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

@@ -1217,14 +1217,32 @@ def download_video(
     if last_error is not None:
         if platform == "bilibili":
             print("[bilibili] yt-dlp bi chan, thu Chrome/Edge fallback...")
+            from services.download_space import (
+                DownloadStorageError,
+                is_disk_full_error,
+            )
+            output_path = job_dir / "source.mp4"
             try:
-                from services.bilibili_browser import download_video as browser_download_video
-
-                output_path = job_dir / "source.mp4"
+                from services.bilibili_browser import (
+                    download_video as browser_download_video,
+                )
                 browser_download_video(url, output_path)
                 print("[bilibili] Chrome/Edge fallback thanh cong.")
                 return output_path
+            except DownloadStorageError:
+                output_path.with_name(
+                    f"{output_path.stem}.pending{output_path.suffix}"
+                ).unlink(missing_ok=True)
+                raise
             except Exception as browser_error:
+                output_path.with_name(
+                    f"{output_path.stem}.pending{output_path.suffix}"
+                ).unlink(missing_ok=True)
+                if is_disk_full_error(browser_error):
+                    raise DownloadStorageError(
+                        "Ổ đĩa đã đầy khi tải Bilibili. Hãy giải phóng dung lượng "
+                        "trên ổ lưu job và ổ tạm của Windows rồi thử lại."
+                    ) from browser_error
                 print("[bilibili] Chrome/Edge fallback loi:", browser_error)
                 raise RuntimeError(
                     "Không thể tải video Bilibili bằng trình duyệt: "
@@ -1357,6 +1375,80 @@ def get_source_video(
 
 
 
+
+
+def check_processing_storage(
+    source_video: Path,
+    job_dir: Path,
+    audio_path: Path,
+    mode: str,
+    *,
+    voice_path: Path | None = None,
+    force_audio: bool = False,
+    force_voice: bool = False,
+    include_voice: bool = True,
+    preview_seconds: float | None = None,
+) -> None:
+    """Estimate extra workspace needed before a long video consumes hours of work.
+
+    Exact render size depends on the source codec and selected output format,
+    so this is a conservative preflight rather than a hard disk quota.
+    """
+    try:
+        probe = subprocess.run(
+            [
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", str(source_video),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=20,
+        )
+        duration_seconds = float((probe.stdout or "").strip())
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return  # The server's baseline free-space guard still applies.
+    if not 0 < duration_seconds < 1_000_000:
+        return
+
+    source_size = source_video.stat().st_size
+    # 16 kHz mono source WAV: 32,000 bytes/s.  Voice timeline retains the
+    # existing 44.1 kHz stereo PCM format: 176,400 bytes/s.
+    source_audio_bytes = (
+        0 if file_ok(audio_path) and not force_audio
+        else int(duration_seconds * 32_000)
+    )
+    voice_needed = include_voice and mode == "voiceover" and (
+        force_voice or voice_path is None or not file_ok(voice_path)
+    )
+    voice_bytes = int(duration_seconds * 176_400) if voice_needed else 0
+    # Raw and fitted TTS clips coexist until the job completes. Dense speech
+    # can occupy about another timeline's worth of temporary PCM data.
+    clip_bytes = int(duration_seconds * 200_000) if voice_needed else 0
+    if voice_bytes > 4 * 1024**3 - 128:
+        raise RuntimeError(
+            "Video quá dài cho định dạng WAV của track lồng tiếng (giới hạn khoảng 6 giờ). "
+            "Hãy chia video thành các phần ngắn hơn trước khi xử lý Voice."
+        )
+    render_duration = (
+        min(duration_seconds, preview_seconds)
+        if preview_seconds is not None and preview_seconds > 0
+        else duration_seconds
+    )
+    render_bytes = max(
+        int(source_size * render_duration / duration_seconds * 2),
+        int(render_duration * 1_500_000),
+    )
+    reserve_bytes = 512 * 1024**2
+    required = source_audio_bytes + voice_bytes + clip_bytes + render_bytes + reserve_bytes
+    free = shutil.disk_usage(job_dir).free
+    if free < required:
+        raise RuntimeError(
+            "Ổ lưu job không đủ dung lượng trống cho video dài. "
+            f"Ước tính cần thêm {required / 1024**3:.1f} GB, "
+            f"hiện có {free / 1024**3:.1f} GB. "
+            "Hãy giải phóng dung lượng hoặc chọn ổ dữ liệu khác rồi chạy lại."
+        )
 
 
 def extract_audio(source_video: Path, audio_path: Path, force=False):
@@ -1503,7 +1595,11 @@ def extract_audio(source_video: Path, audio_path: Path, force=False):
 
 
 
-def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False):
+class NoSpeechDetected(RuntimeError):
+    """Whisper completed successfully but found no spoken words."""
+
+
+def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False, on_progress=None, source_language="auto"):
 
 
 
@@ -1551,7 +1647,7 @@ def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False):
 
 
 
-    segments = transcriber.transcribe(rel(audio_path))
+    segments = transcriber.transcribe(rel(audio_path), on_progress=on_progress, language=None if source_language == "auto" else source_language)
 
 
 
@@ -1563,7 +1659,7 @@ def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False):
 
 
 
-        raise RuntimeError("Whisper khong tao duoc subtitle.")
+        raise NoSpeechDetected("Whisper khong tim thay loi thoai de tao phu de.")
 
 
 
@@ -1641,6 +1737,8 @@ def translate_srt(
 
     force=False,
 
+    source_language="auto",
+
 
 
 ):
@@ -1708,7 +1806,11 @@ def translate_srt(
 
 
 
+    if source_language == "vi":
+        vietnamese_srt.write_bytes(chinese_srt.read_bytes())
+        return
     from services import translator
+    translator.SOURCE_LANGUAGE = source_language
 
 
 
@@ -1914,6 +2016,8 @@ def create_voice(
 
     speed=None,
 
+    on_progress=None,
+
 
 
 ):
@@ -2034,7 +2138,9 @@ def create_voice(
 
 
 
-    manifest = tts.create_tts_clips(subtitles, reuse_fitted=not force)
+    manifest = tts.create_tts_clips(
+        subtitles, reuse_fitted=not force, on_progress=on_progress,
+    )
 
 
 
@@ -2058,7 +2164,9 @@ def create_voice(
 
 
 
-    tts.build_voice_timeline(manifest, video_duration)
+    tts.build_voice_timeline(
+        manifest, video_duration, on_progress=on_progress,
+    )
 
 
 
@@ -2313,7 +2421,17 @@ def resolve_subtitle_region(
     selected = config.get("blur_region")
     preset = config.get("blur_preset")
     has_selection = isinstance(selected, dict)
-    if has_selection or preset in {"top", "bottom", "center"}:
+    if config.get("source_subtitle_mode") == "none" or config.get("disable_main_blur"):
+        region = default_region_without_subtitle(source_video)
+        region["detected"] = {
+            "method": (
+                "source_subtitle_disabled"
+                if config.get("source_subtitle_mode") == "none"
+                else "main_blur_disabled"
+            ),
+            "confidence": 1.0,
+        }
+    elif has_selection or preset in {"top", "bottom", "center"}:
         region = default_region_without_subtitle(source_video)
         region["blur_enabled"] = True
         region["detected"] = {"method": "manual_subtitle_region"}
@@ -2332,8 +2450,17 @@ def resolve_subtitle_region(
     else:
         # Never use the previous job's effective/manual selection as OCR cache.
         auto_path = region_path.with_name("subtitle_region_auto.json")
+        if auto_path.is_file() and not force:
+            try:
+                cached_auto = json.loads(auto_path.read_text(encoding="utf-8"))
+                force = (cached_auto.get("detected") or {}).get("algorithm_version") != 3
+            except (OSError, ValueError, AttributeError):
+                force = True
         try:
             region = detect_subtitle_region(source_video, auto_path, preview_image, force=force)
+            region.setdefault("detected", {})["algorithm_version"] = 3
+            if force:
+                save_json(auto_path, region)
         except SubtitleRegionNotFound as error:
             region = default_region_without_subtitle(source_video)
             region["detected"] = {
@@ -2375,19 +2502,28 @@ def protect_auto_subtitle_from_top_watermark(region: dict) -> dict:
     # subtitles in this app are rendered in the lower band by default.
     if blur_center_y >= height * 0.35 and subtitle_y >= height * 0.35:
         return region
-    # Chỉ chừa một khoảng đệm nhỏ quanh subtitle, không phủ toàn chiều ngang
-    # như vùng watermark/logo ở đầu video.
-    box_width = max(160, int(width * 0.72))
-    box_x = max(0, int((width - box_width) / 2))
-    box_height = max(80, int(height * 0.16))
-    box_y = max(0, int(height * 0.78))
+    # A top OCR hit is often a fixed watermark. There is no evidence that the
+    # original subtitle is at the bottom, so never invent a large blur there.
+    # Keep a safe position for the translated subtitle and let the user mark
+    # the source-text area manually if the detector could not locate it.
+    box_width = max(2, int(width * 0.86))
+    box_x = max(0, (width - box_width) // 2)
+    box_height = max(2, int(height * 0.10))
+    box_y = min(height - box_height, int(height * 0.80))
     detected = dict(region.get("detected") or {})
     detected.update({
-        "auto_guard": "bottom_after_top_watermark",
+        "auto_guard": "top_text_ignored_no_blur",
         "original_blur": blur,
     })
+    warnings = list(region.get("warnings") or [])
+    warnings.append(
+        "OCR chỉ nhận được chữ ở mép trên, có thể là logo hoặc watermark. "
+        "ReupAI không tự làm mờ vùng khác để tránh che sai video; "
+        "hãy chọn vùng mờ sub thủ công nếu phụ đề gốc còn hiện."
+    )
     return {
         **region,
+        "blur_enabled": False,
         "blur": {"x": box_x, "y": box_y, "width": box_width, "height": box_height},
         "subtitle": {
             "x": width // 2,
@@ -2395,6 +2531,7 @@ def protect_auto_subtitle_from_top_watermark(region: dict) -> dict:
             "position_percent": round((box_y + box_height / 2) * 100 / height, 2),
         },
         "detected": detected,
+        "warnings": warnings,
     }
 
 
@@ -2450,6 +2587,7 @@ def render_voiceover(
     voice_volume=1.0,
 
     font_size=None,
+    subtitle_style="minimal",
 
     aspect_ratio=None,
 
@@ -2519,6 +2657,7 @@ def render_voiceover(
     renderer.VOICE_VOLUME = voice_volume
 
     renderer.FONT_SIZE_OVERRIDE = font_size
+    renderer.SUBTITLE_STYLE = subtitle_style
     renderer.OUTPUT_ASPECT_RATIO = aspect_ratio
     renderer.LOGO_SIZE_OVERRIDE = logo_size
     renderer.LOGO_X_OVERRIDE = logo_x
@@ -2594,6 +2733,7 @@ def render_subtitle_only(
     preview_seconds=None,
 
     font_size=None,
+    subtitle_style="minimal",
 
     aspect_ratio=None,
 
@@ -2655,6 +2795,7 @@ def render_subtitle_only(
     renderer.PREVIEW_SECONDS = preview_seconds
 
     renderer.FONT_SIZE_OVERRIDE = font_size
+    renderer.SUBTITLE_STYLE = subtitle_style
     renderer.OUTPUT_ASPECT_RATIO = aspect_ratio
     renderer.LOGO_SIZE_OVERRIDE = logo_size
     renderer.LOGO_X_OVERRIDE = logo_x
@@ -2714,13 +2855,14 @@ def rerender_existing_output(
     source_video = get_source_video(url, job_dir, source_file, force=False)
     if not vietnamese_srt.is_file():
         raise FileNotFoundError("Khong tim thay phu de Viet da tao truoc do.")
-    if mode == "voiceover" and not file_ok(voice_path):
+    no_speech = not vietnamese_srt.read_text(encoding="utf-8-sig").strip()
+    if mode == "voiceover" and not no_speech and not file_ok(voice_path):
         raise FileNotFoundError("Khong tim thay file voice da tao truoc do.")
 
     # A revision normally reuses voice.wav.  When the editor changed its
     # speaker or pace, regenerate TTS locally from the existing Vietnamese
     # subtitle and keep every other pipeline stage untouched.
-    if mode == "voiceover" and config.get("regenerate_voice"):
+    if mode == "voiceover" and not no_speech and config.get("regenerate_voice"):
         write_progress(job_dir, stage="tts", percent=24, status="running", message="Dang tao lai giong Viet da chon.", mode=mode)
         create_voice(
             source_video,
@@ -2737,16 +2879,27 @@ def rerender_existing_output(
 
     # Keep the last selection if an API caller omits it. Never invoke OCR for
     # an output-only revision unless there is no saved region at all.
+    previous_no_blur = False
     if not isinstance(config.get("blur_region"), dict) and region_path.is_file():
         try:
             previous_region = json.loads(region_path.read_text(encoding="utf-8"))
-            if isinstance(previous_region.get("blur"), dict):
-                config = {**config, "blur_region": previous_region["blur"]}
+            previous_no_blur = previous_region.get("blur_enabled") is False
+            if (
+                not previous_no_blur
+                and not config.get("disable_main_blur")
+                and isinstance(previous_region.get("blur"), dict)
+            ):
+                previous_blur = dict(previous_region["blur"])
+                previous_method = str((previous_region.get("detected") or {}).get("method", ""))
+                if previous_method.startswith("temporal_srt_paddleocr"):
+                    previous_blur["x"] = 0
+                    previous_blur["width"] = previous_region["video"]["width"]
+                config = {**config, "blur_region": previous_blur}
         except (OSError, ValueError, json.JSONDecodeError):
             pass
 
     write_progress(job_dir, stage="render", percent=15, status="running", message="Dang chuan bi xuat lai thanh pham.", mode=mode)
-    region = resolve_subtitle_region(source_video, region_path, region_preview, config=config, no_subtitle=False, force=True)
+    region = resolve_subtitle_region(source_video, region_path, region_preview, config=config, no_subtitle=previous_no_blur, force=True)
     intervals = [dict(item) for item in (config.get("blur_intervals") or []) if isinstance(item, dict)]
     custom_only = config.get("custom_blur_region")
     if isinstance(custom_only, dict) and not intervals:
@@ -2758,6 +2911,7 @@ def rerender_existing_output(
     common = {
         "preview_seconds": None,
         "font_size": config.get("subtitle_font_size"),
+        "subtitle_style": config.get("subtitle_style", "minimal"),
         "aspect_ratio": config.get("aspect_ratio"),
         "logo_size": config.get("logo_size"),
         "logo_x": config.get("logo_x"),
@@ -2771,7 +2925,7 @@ def rerender_existing_output(
         "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
         "force": True,
     }
-    if mode == "voiceover":
+    if mode == "voiceover" and not no_speech:
         render_voiceover(source_video, voice_path, vietnamese_srt, region_path, ass_path, temporary_output, region, original_volume=original_volume, voice_volume=voice_volume, **common)
     else:
         render_subtitle_only(source_video, vietnamese_srt, region_path, ass_path, temporary_output, region, **common)
@@ -3052,6 +3206,12 @@ def pipeline(
 
 
     translation_checkpoint = job_dir / "translation_checkpoint.json"
+    source_language = config.get("source_language", "auto")
+    source_language_path = job_dir / "source_language.txt"
+    previous_source_language = source_language_path.read_text(encoding="utf-8").strip() if source_language_path.is_file() else "auto"
+    language_force = source_language != previous_source_language
+    if language_force:
+        translation_checkpoint.unlink(missing_ok=True)
 
 
 
@@ -3404,6 +3564,12 @@ def pipeline(
 
         )
 
+        check_processing_storage(
+            source_video, job_dir, audio_path, mode,
+            voice_path=voice_path, force_audio=force, include_voice=False,
+            preview_seconds=preview_seconds,
+        )
+
 
 
 
@@ -3498,14 +3664,31 @@ def pipeline(
 
 
 
-        no_subtitle = False
+        no_speech = False
+        def on_transcription_progress(processed_seconds, total_seconds):
+            if total_seconds <= 0:
+                return
+            percent = 30 + min(19, int(19 * processed_seconds / total_seconds))
+            write_progress(
+                job_dir,
+                stage="whisper",
+                percent=percent,
+                status="running",
+                message=(
+                    "Đang nhận diện lời thoại: "
+                    f"{processed_seconds / 60:.0f}/{total_seconds / 60:.0f} phút."
+                ),
+                mode=mode,
+            )
         try:
-            transcribe_audio(audio_path, chinese_srt, force=force)
-        except RuntimeError as error:
-            if "subtitle" not in str(error).lower() and "frame" not in str(error).lower():
-                raise
-            no_subtitle = True
-            print(f"[SKIP] Khong tim thay subtitle: {error}")
+            transcribe_audio(
+                audio_path, chinese_srt, force=force or language_force,
+                on_progress=on_transcription_progress,
+                source_language=config.get("source_language", "auto"),
+            )
+        except NoSpeechDetected as error:
+            no_speech = True
+            print(f"[SKIP] Khong tim thay loi thoai: {error}")
             chinese_srt.write_text("", encoding="utf-8")
             vietnamese_srt.write_text("", encoding="utf-8")
 
@@ -3539,7 +3722,10 @@ def pipeline(
 
 
 
-            message="Dang dich Trung -> Viet bang Gemini AI.",
+            message=(
+                "Không có lời thoại, bỏ qua bước dịch."
+                if no_speech else "Dang dich Trung -> Viet bang Gemini AI."
+            ),
 
 
 
@@ -3555,7 +3741,8 @@ def pipeline(
 
 
 
-        translate_srt(
+        if not no_speech:
+            translate_srt(
 
 
 
@@ -3579,11 +3766,12 @@ def pipeline(
 
 
 
-            force=force,
+            force=force or language_force,
 
+            source_language=config.get("source_language", "auto"),
 
-
-        )
+            )
+            source_language_path.write_text(source_language, encoding="utf-8")
 
 
 
@@ -3595,7 +3783,7 @@ def pipeline(
 
 
 
-        if mode == "voiceover" and not no_subtitle:
+        if mode == "voiceover" and not no_speech:
 
 
 
@@ -3648,9 +3836,40 @@ def pipeline(
                     or cache_fingerprint_matches(tts_in_progress_fingerprint_path, tts_fingerprint)
                 )
             )
+            check_processing_storage(
+                source_video, job_dir, audio_path, mode,
+                voice_path=voice_path, force_voice=tts_force,
+                preview_seconds=preview_seconds,
+            )
             # Keep completed clips after an interruption only when subtitle,
             # voice and speed still match the configuration that made them.
             write_cache_fingerprint(tts_in_progress_fingerprint_path, tts_fingerprint)
+            last_tts_percent = 68
+            def on_voice_progress(phase, current, total):
+                nonlocal last_tts_percent
+                if total <= 0:
+                    return
+                fraction = min(1.0, max(0.0, current / total))
+                if phase == "raw":
+                    percent = 68 + int(3 * fraction)
+                    label = "Đang tạo giọng nói"
+                elif phase == "clips":
+                    percent = 71 + int(4 * fraction)
+                    label = "Đang ghép từng câu thoại"
+                else:
+                    percent = 75 + int(2 * fraction)
+                    label = "Đang tạo track giọng nói"
+                if percent <= last_tts_percent:
+                    return
+                last_tts_percent = percent
+                write_progress(
+                    job_dir,
+                    stage="tts",
+                    percent=percent,
+                    status="running",
+                    message=f"{label}: {fraction:.0%}.",
+                    mode=mode,
+                )
             create_voice(
 
 
@@ -3685,6 +3904,8 @@ def pipeline(
 
                 speed=config.get("tts_speed"),
 
+                on_progress=on_voice_progress,
+
 
 
             )
@@ -3697,7 +3918,7 @@ def pipeline(
 
 
 
-            print("\n[SKIP] TTS - khong co subtitle de tao giong Viet." if mode == "voiceover" else "\n[SKIP] TTS - mode subtitle chi tao Vietsub.")
+            print("\n[SKIP] TTS - khong co loi thoai de tao giong Viet." if mode == "voiceover" else "\n[SKIP] TTS - mode subtitle chi tao Vietsub.")
 
 
 
@@ -3747,7 +3968,7 @@ def pipeline(
 
         region = resolve_subtitle_region(
             source_video, region_path, region_preview,
-            config=config, no_subtitle=no_subtitle, force=force,
+            config=config, no_subtitle=no_speech, force=force,
         )
 
         # Vùng mờ subtitle và vùng mờ tùy chỉnh là hai lớp độc lập. Trước đây
@@ -3822,7 +4043,7 @@ def pipeline(
 
 
 
-        if mode == "voiceover" and not no_subtitle:
+        if mode == "voiceover" and not no_speech:
 
 
 
@@ -3869,6 +4090,7 @@ def pipeline(
                 voice_volume=voice_volume,
 
                 font_size=config.get("subtitle_font_size"),
+                subtitle_style=config.get("subtitle_style", "minimal"),
 
                 aspect_ratio=config.get("aspect_ratio"),
 
@@ -3936,6 +4158,7 @@ def pipeline(
                 preview_seconds=preview_seconds,
 
                 font_size=config.get("subtitle_font_size"),
+                subtitle_style=config.get("subtitle_style", "minimal"),
 
                 aspect_ratio=config.get("aspect_ratio"),
 
@@ -4037,7 +4260,7 @@ def pipeline(
 
 
 
-        if mode == "voiceover" and not no_subtitle:
+        if mode == "voiceover" and not no_speech:
 
 
 

@@ -255,6 +255,7 @@ def init_db():
             profile_url TEXT NOT NULL,
             videos_json TEXT NOT NULL DEFAULT '[]',
             total INTEGER,
+            total_is_exact INTEGER NOT NULL DEFAULT 0,
             has_more INTEGER NOT NULL DEFAULT 1,
             checked_at REAL NOT NULL,
             rate_limited_until REAL NOT NULL DEFAULT 0,
@@ -269,6 +270,7 @@ def init_db():
         ).fetchall()
     }
     for column, definition in (
+        ("total_is_exact", "INTEGER NOT NULL DEFAULT 0"),
         ("rate_limited_until", "REAL NOT NULL DEFAULT 0"),
         ("rate_limit_failures", "INTEGER NOT NULL DEFAULT 0"),
     ):

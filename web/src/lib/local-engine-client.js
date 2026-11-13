@@ -79,7 +79,7 @@ export class LocalEngineClient {
   }
 
   emit(status, error = null) {
-    this.connection = { status, error, version: this.health?.version || null, capabilities: this.health?.capabilities || {} };
+    this.connection = { status, error, version: this.health?.version || null, capabilities: this.health?.capabilities || {}, distribution: this.health?.distribution || null };
     this.listeners.forEach((listener) => listener(this.connection));
     if (isBrowser()) window.dispatchEvent(new CustomEvent("reupai:connection", { detail: this.connection }));
   }

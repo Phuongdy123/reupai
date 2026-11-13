@@ -15,6 +15,7 @@ import re
 
 
 import subprocess
+from functools import lru_cache
 
 
 
@@ -288,6 +289,7 @@ FONT_BOLD = True
 
 # Web jobs may override this while keeping automatic sizing as the default.
 FONT_SIZE_OVERRIDE = None
+SUBTITLE_STYLE = "minimal"
 
 OUTPUT_ASPECT_RATIO = None
 LOGO_SIZE_OVERRIDE = None
@@ -483,6 +485,7 @@ def file_ok(path):
 
 
 
+@lru_cache(maxsize=1)
 def ffmpeg_has_nvenc():
 
 
@@ -593,6 +596,38 @@ def ffmpeg_has_nvenc():
 
 
 
+
+
+@lru_cache(maxsize=1)
+def ffmpeg_has_cuda_hwaccel():
+    """Check whether the selected FFmpeg build advertises CUDA decode support."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-hwaccels"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            **_detached_media_process_kwargs(),
+        )
+    except OSError:
+        return False
+    output = (result.stdout or "") + (result.stderr or "")
+    return any(line.strip().lower() == "cuda" for line in output.splitlines())
+
+
+def _with_cuda_video_decode(command):
+    """Use NVDEC on the source input; filters can download frames to system RAM."""
+    if not ffmpeg_has_cuda_hwaccel() or "-hwaccel" in command:
+        return None
+    try:
+        input_index = command.index("-i")
+    except ValueError:
+        return None
+    accelerated = list(command)
+    accelerated[input_index:input_index] = ["-hwaccel", "cuda"]
+    return accelerated
 
 
 def ffmpeg_filter_path(path):
@@ -5512,6 +5547,15 @@ def create_ass(region):
 
 
 
+    style_profile = {
+        "minimal": ("&H00FFFFFF", "&H00101010", "&H80000000", 1, outline, 0, bold),
+        "bold": ("&H00FFFFFF", "&H000A0A0A", "&H80000000", 1, max(3, outline + 1), 0, -1),
+        "cinema": ("&H00E9F3FF", "&H00181818", "&H80000000", 1, max(2, outline - 1), 2, 0),
+        "neon": ("&H007346FF", "&H0020102A", "&H80000000", 1, outline, 2, -1),
+        "box": ("&H00FFFFFF", "&H00101010", "&H99101010", 3, 1, 0, -1),
+    }.get(SUBTITLE_STYLE, ("&H00FFFFFF", "&H00101010", "&H80000000", 1, outline, 0, bold))
+    primary_color, outline_color, back_color, border_style, style_outline, shadow, style_bold = style_profile
+
     header = f"""[Script Info]
 
 
@@ -5556,7 +5600,7 @@ Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackC
 
 
 
-Style: Default,{FONT_NAME},{font_size},&H00FFFFFF,&H000000FF,&H00101010,&H80000000,{bold},0,0,0,100,100,0,0,1,{outline},0,5,24,24,10,1
+Style: Default,{FONT_NAME},{font_size},{primary_color},&H000000FF,{outline_color},{back_color},{style_bold},0,0,0,100,100,0,0,{border_style},{style_outline},{shadow},5,24,24,10,1
 
 
 
@@ -6402,8 +6446,13 @@ def build_video_filter(
         parts.extend([
             "[0:v]split=2[base][crop_src]",
             f"[crop_src]crop={width}:{height}:{x}:{y},"
-            f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)}[blurred]",
-            f"[base][blurred]overlay={x}:{y}[clean_sub]",
+            f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)},"
+            "format=yuv420p[blurred]",
+            # Force matching pixel formats before overlay. Some source codecs
+            # are decoded as 10-bit/4:2:2 while NVENC later requests yuv420p;
+            # implicit overlay negotiation can otherwise produce green blocks.
+            f"[base]format=yuv420p[base_420]",
+            f"[base_420][blurred]overlay={x}:{y}:format=yuv420[clean_sub]",
         ])
         current = "clean_sub"
     else:
@@ -6426,8 +6475,9 @@ def build_video_filter(
             parts.extend([
                 f"[{current}]split=2[{src_label}][{crop_label}]",
                 f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},"
-                f"{_safe_boxblur_filter(bw, bh, 14, 2)}[{blur_label}]",
-                f"[{src_label}][{blur_label}]overlay={bx}:{by}[{out_label}]",
+                f"{_safe_boxblur_filter(bw, bh, 14, 2)},format=yuv420p[{blur_label}]",
+                f"[{src_label}]format=yuv420p[{src_label}_420]",
+                f"[{src_label}_420][{blur_label}]overlay={bx}:{by}:format=yuv420[{out_label}]",
             ])
             current = out_label
 
@@ -6453,8 +6503,9 @@ def build_video_filter(
         parts.extend([
             f"[{current}]split=2[{src_label}][{crop_label}]",
             f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},"
-            f"{_safe_boxblur_filter(bw, bh, 20, 2)}[{blur_label}]",
-            f"[{src_label}][{blur_label}]overlay={bx}:{by}:enable='between(t,{start},{end})'[{out_label}]",
+            f"{_safe_boxblur_filter(bw, bh, 20, 2)},format=yuv420p[{blur_label}]",
+            f"[{src_label}]format=yuv420p[{src_label}_420]",
+            f"[{src_label}_420][{blur_label}]overlay={bx}:{by}:format=yuv420:enable='between(t,{start},{end})'[{out_label}]",
         ])
         current = out_label
 
@@ -6829,6 +6880,12 @@ def run_ffmpeg_with_fallback(
 
     attempts = []
 
+    # The filter graph below uses software filters (crop, boxblur, overlay,
+    # libass). Decoding into CUDA surfaces and implicitly downloading them can
+    # corrupt the second half of an overlaid crop on some driver/FFmpeg pairs,
+    # producing a bright green rectangle behind subtitles. Decode in software
+    # and keep NVENC for the expensive encoding stage.
+
 
 
     def add_attempt(
@@ -6894,14 +6951,20 @@ def run_ffmpeg_with_fallback(
 
 
     if "h264_nvenc" in command:
-
-
+        software_decode_command = list(command)
+        try:
+            hwaccel_index = software_decode_command.index("-hwaccel")
+            if software_decode_command[hwaccel_index + 1] == "cuda":
+                del software_decode_command[hwaccel_index:hwaccel_index + 2]
+        except (ValueError, IndexError):
+            pass
+        add_attempt("software_decode_nvenc", software_decode_command)
 
         cpu_command = (
 
             _replace_video_encoder_with_cpu(
 
-                command
+                software_decode_command
 
             )
 

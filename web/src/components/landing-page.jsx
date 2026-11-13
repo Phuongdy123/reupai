@@ -2,15 +2,7 @@ import Link from "next/link";
 import { Icon } from "./icon";
 import { guideBase, guides } from "../lib/seo-guides";
 import { PublicFooter } from "./public-footer";
-
-const highlights = [
-  { icon: "download", label: "Tự động tải video" },
-  { icon: "spark", label: "AI dịch & Vietsub" },
-  { icon: "play", label: "Lồng tiếng AI" },
-  { icon: "settings", label: "Che mờ nội dung" },
-  { icon: "grid", label: "Tùy chỉnh dễ dàng" },
-  { icon: "check", label: "Giữ video trên máy" },
-];
+import { PublicStarfield } from "./public-starfield";
 
 const steps = [
   { number: "01", icon: "source", title: "Chọn nguồn", description: "Thêm video từ nguồn được hỗ trợ và chọn nội dung bạn muốn xử lý." },
@@ -20,23 +12,31 @@ const steps = [
 
 export function LandingPage() {
   return <main className="account-shell landing-shell">
+    <PublicStarfield />
     <header className="landing-nav">
       <Link href="/" className="landing-brand" aria-label="ReupAI - Trang chủ"><strong>Reup<span>AI</span></strong></Link>
       <nav className="landing-nav-links" aria-label="Giới thiệu"><a href="#tinh-nang">Tính năng</a><a href="#quy-trinh">Quy trình</a><Link href={guideBase}>Hướng dẫn</Link><Link href="/plans">Gói dịch vụ</Link></nav>
-      <div className="landing-nav-actions"><Link href="/sign-in" className="button-secondary">Đăng nhập</Link><Link href="/sign-up" className="button-primary">Bắt đầu ngay</Link></div>
+      <div className="landing-nav-actions"><Link href="/sign-in" className="button-secondary">Đăng nhập</Link><Link href="/app" className="button-primary">Bắt đầu ngay</Link></div>
     </header>
 
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-copy">
-        <div className="landing-lockup"><strong>Reup<span>AI</span></strong></div>
+        <p className="landing-eyebrow"><span className="landing-kicker-orb" aria-hidden="true" />KHÔNG GIAN LÀM VIDEO</p>
         <h1 id="landing-title">Từ video nguồn đến thành phẩm, chỉ trong vài bước.</h1>
         <p className="landing-lede">Công cụ tải, Vietsub và lồng tiếng video bằng AI. Sắp xếp nguồn, tùy chỉnh cách xử lý và theo dõi thành phẩm trong một không gian làm việc.</p>
-        <ul className="landing-highlights">{highlights.map(({ icon, label }) => <li key={label}><Icon name={icon} size={20} /><span>{label}</span></li>)}</ul>
-        <p className="landing-promise">Nhanh hơn <span>•</span> Thông minh hơn <span>•</span> Chủ động hơn</p>
-        <div className="landing-actions"><Link href="/sign-up" className="button-primary button-large">Bắt đầu ngay <span aria-hidden="true">→</span></Link><a href="#tinh-nang" className="button-secondary button-large">Tìm hiểu thêm</a></div>
-        <p className="landing-local-note"><Icon name="check" size={16} /> Video, dự án và file thành phẩm được giữ trên máy của bạn.</p>
+        <ul className="landing-highlights" aria-label="Tính năng chính">
+          <li><Icon name="download" size={16} /><span>Tải video</span></li>
+          <li><Icon name="spark" size={16} /><span>Vietsub AI</span></li>
+          <li><Icon name="play" size={16} /><span>Lồng tiếng</span></li>
+        </ul>
+        <div className="landing-actions"><Link href="/app" className="button-primary button-large">Bắt đầu ngay</Link><a href="#tinh-nang" className="button-secondary button-large">Tìm hiểu thêm</a></div>
+        <p className="landing-local-note"><Icon name="check" size={16} /> Video và thành phẩm được xử lý, lưu trên máy của bạn.</p>
       </div>
-      <div className="landing-showcase" aria-hidden="true"><div className="landing-showcase-image" /><div className="landing-showcase-vignette" /><div className="landing-showcase-chip"><span className="landing-chip-dot" /> LOCAL ENGINE <strong>Sẵn sàng</strong></div></div>
+      <div className="landing-visual" aria-hidden="true">
+        <div className="landing-orbit-art"><span className="landing-orbit-ring ring-one" /><span className="landing-orbit-ring ring-two" /><span className="landing-orbit-sphere" /><span className="landing-orbit-dot dot-one" /><span className="landing-orbit-dot dot-two" /></div>
+        <div className="landing-showcase"><div className="landing-showcase-image" /><div className="landing-showcase-vignette" /><div className="landing-showcase-chip"><span className="landing-chip-dot" /> LOCAL ENGINE <strong>Sẵn sàng</strong></div></div>
+        <span className="landing-ai-disc"><Icon name="spark" size={22} /><small>AI WORKFLOW</small></span>
+      </div>
     </section>
 
     <section className="landing-feature-section" id="tinh-nang" aria-labelledby="feature-title">

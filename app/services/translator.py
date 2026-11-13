@@ -10,7 +10,12 @@ from google import genai
 from runtime_paths import get_config_dir
 from google.genai import types
 import requests
-from services.gemini_oauth import get_credentials, get_project_id
+from services.gemini_oauth import (
+    authorized_request,
+    get_credentials,
+    get_project_id,
+    status as google_oauth_status,
+)
 
 
 # =========================================================
@@ -64,10 +69,15 @@ if not os.getenv("GEMINI_API_KEY"):
     load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 API_KEY = os.getenv("GEMINI_API_KEY")
+SOURCE_LANGUAGE = "auto"
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
-OAUTH_PROJECT_ID = get_project_id() if OAUTH_CREDENTIALS else None
 
 if not API_KEY and not OAUTH_CREDENTIALS:
+    oauth_health = google_oauth_status()
+    if oauth_health.get("needs_reauthorization"):
+        raise ValueError("Phiên Google đã hết hạn hoặc cần quyền mới. Mở Cài đặt Local Engine và chọn Kết nối lại Google.")
+    if oauth_health.get("temporary_error"):
+        raise RuntimeError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
     raise ValueError(
         "Chưa kết nối Google cho Gemini. Mở Cài đặt Local Engine, chọn Kết nối Google rồi thử lại."
     )
@@ -102,11 +112,15 @@ def _gemini_api_disabled_message(project_id: str | None) -> str:
 
 def _is_gemini_api_disabled(error: Exception) -> bool:
     value = _error_text(error).lower()
+    # Timeout exceptions include the request host
+    # "generativelanguage.googleapis.com" even while the API is enabled.
+    # Require an explicit disabled-service message from Google instead.
     return any(
         phrase in value
         for phrase in (
             "has not been used in project",
-            "generativelanguage.googleapis.com",
+            "service_disabled",
+            "service disabled",
             "gemini api is disabled",
             "gemini api has not been used",
         )
@@ -119,18 +133,32 @@ def ensure_translation_ready() -> None:
         return
     credentials = get_credentials()
     if not credentials or not credentials.token:
+        if google_oauth_status().get("temporary_error"):
+            raise GeminiSetupError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
         raise GeminiSetupError(
             "Phiên đăng nhập Google đã hết hạn. Mở Cài đặt Local Engine và kết nối Google lại."
         )
-    project_id = OAUTH_PROJECT_ID or get_project_id()
-    response = requests.get(
-        "https://generativelanguage.googleapis.com/v1beta/models",
-        headers={
-            "Authorization": f"Bearer {credentials.token}",
-            "x-goog-user-project": project_id or "",
-        },
-        timeout=15,
-    )
+    project_id = get_project_id()
+    if not project_id:
+        raise GeminiSetupError("Chưa chọn Google Cloud project. Mở Cài đặt Local Engine, nhập Project ID của bạn rồi kiểm tra Gemini.")
+    response = None
+    for attempt in range(3):
+        try:
+            response = authorized_request(
+                "GET",
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                project_id=project_id,
+                timeout=15,
+            )
+        except requests.RequestException:
+            if attempt == 2:
+                raise GeminiSetupError("Chưa liên lạc được với Gemini. Kiểm tra Internet rồi thử lại; không cần kết nối Google lại.")
+        if response is not None and response.status_code not in {429, 500, 502, 503, 504}:
+            break
+        if attempt < 2:
+            time.sleep(2 * (attempt + 1))
+    if response is None or response.status_code in {429, 500, 502, 503, 504}:
+        raise GeminiSetupError("Gemini đang bận hoặc giới hạn tạm thời. Hãy thử lại sau ít phút; không cần kết nối Google lại.")
     if response.ok:
         return
     try:
@@ -140,9 +168,14 @@ def ensure_translation_ready() -> None:
     error = RuntimeError(f"Gemini OAuth trả lỗi HTTP {response.status_code}: {details}")
     if _is_gemini_api_disabled(error):
         raise GeminiSetupError(_gemini_api_disabled_message(project_id)) from error
+    if response.status_code == 401:
+        raise GeminiSetupError("Phiên Google đã hết hạn. Mở Cài đặt Local Engine và chọn Kết nối lại Google.") from error
+    if response.status_code == 403:
+        if "serviceusage.services.use" in details.lower() or "service usage consumer" in details.lower():
+            raise GeminiSetupError("Tài khoản Google cần quyền Service Usage Consumer trên project đã chọn để dùng quota Gemini.") from error
+        raise GeminiSetupError("Tài khoản Google hoặc project chưa được cấp quyền Gemini. Kiểm tra quyền truy cập, Gemini API và billing của project.") from error
     raise GeminiSetupError(
-        "Không thể xác nhận quyền dùng Gemini với Google. "
-        "Mở Cài đặt Local Engine, đăng xuất rồi kết nối Google lại."
+        "Không thể xác nhận Gemini lúc này. Kiểm tra kết nối và thử lại; không cần đăng xuất Google."
     ) from error
 
 
@@ -150,22 +183,18 @@ def _oauth_generate_content(model_name: str, prompt: str) -> str:
     """Generate content through Gemini Developer API with local OAuth token."""
     credentials = get_credentials()
     if not credentials or not credentials.token:
-        raise ValueError(
-            "Phiên đăng nhập Google đã hết hạn. Mở Cài đặt Local Engine và kết nối Google lại."
-        )
-    project_id = OAUTH_PROJECT_ID or get_project_id()
+        if google_oauth_status().get("temporary_error"):
+            raise GeminiSetupError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
+        raise GeminiSetupError("Phiên Google đã hết hạn. Mở Cài đặt Local Engine và chọn Kết nối lại Google.")
+    project_id = get_project_id()
     if not project_id:
-        raise ValueError(
-            "Không xác định được Google Cloud project cho OAuth. Hãy cập nhật Local Engine do ReupAI phát hành."
-        )
+        raise GeminiSetupError("Chưa chọn Google Cloud project. Mở Cài đặt Local Engine, nhập Project ID của bạn rồi kiểm tra Gemini.")
 
-    response = requests.post(
+    response = authorized_request(
+        "POST",
         f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
-        headers={
-            "Authorization": f"Bearer {credentials.token}",
-            "x-goog-user-project": project_id,
-            "Content-Type": "application/json",
-        },
+        project_id=project_id,
+        headers={"Content-Type": "application/json"},
         json={
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -181,7 +210,16 @@ def _oauth_generate_content(model_name: str, prompt: str) -> str:
         except ValueError:
             details = ""
         suffix = f": {details}" if details else ""
-        raise RuntimeError(f"Gemini OAuth trả lỗi HTTP {response.status_code}{suffix}")
+        error = RuntimeError(f"Gemini OAuth trả lỗi HTTP {response.status_code}{suffix}")
+        if _is_gemini_api_disabled(error):
+            raise GeminiSetupError(_gemini_api_disabled_message(project_id)) from error
+        if response.status_code == 401:
+            raise GeminiSetupError("Phiên Google đã hết hạn. Mở Cài đặt Local Engine và chọn Kết nối lại Google.") from error
+        if response.status_code == 403:
+            if "serviceusage.services.use" in details.lower() or "service usage consumer" in details.lower():
+                raise GeminiSetupError("Tài khoản Google cần quyền Service Usage Consumer trên project đã chọn để dùng quota Gemini.") from error
+            raise GeminiSetupError("Tài khoản Google hoặc project chưa được cấp quyền Gemini. Kiểm tra quyền truy cập, Gemini API và billing của project.") from error
+        raise error
 
     try:
         parts = response.json()["candidates"][0]["content"]["parts"]
@@ -510,11 +548,12 @@ def build_prompt(
         else "Khong co. Day la doan dau."
     )
 
+    source_name = {"auto": "ngôn ngữ được tự động nhận diện", "zh": "tiếng Trung", "en": "tiếng Anh", "ja": "tiếng Nhật", "vi": "tiếng Việt"}.get(SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
     return f"""
-Ban la bien dich vien Trung -> Viet.
+Bạn là biên dịch viên dịch sang tiếng Việt.
 
-Day la transcript duoc Whisper nhan dien
-tu loi thoai trong video Trung Quoc.
+Đây là transcript được Whisper nhận diện từ lời thoại bằng {source_name}.
+Nếu transcript đã là tiếng Việt, giữ nguyên ý và câu chữ tự nhiên.
 
 NHIEM VU:
 Dich sang tieng Viet tu nhien de dung cho:
@@ -1071,13 +1110,16 @@ def translate_batch(
                     )
                 )
 
+                if isinstance(error, GeminiSetupError):
+                    raise
+
                 # Enabling the API is a project-level prerequisite. Trying
                 # every model and then a missing local fallback only makes the
                 # customer wait and hides the action they need to take.
                 if _is_gemini_api_disabled(error):
                     raise GeminiSetupError(
                         _gemini_api_disabled_message(
-                            OAUTH_PROJECT_ID or get_project_id()
+                            get_project_id()
                         )
                     ) from error
 
@@ -1176,7 +1218,7 @@ def translate_batch(
                 )
                 break
 
-    if LOCAL_FALLBACK_ENABLED:
+    if LOCAL_FALLBACK_ENABLED and SOURCE_LANGUAGE in {"auto", "zh"}:
         print(
             "\nTat ca Gemini hien tai deu khong dung duoc."
         )

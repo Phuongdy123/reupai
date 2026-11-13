@@ -1,6 +1,5 @@
-import releaseDocument from "../../src/lib/engine-release.json";
-import { verifiedRelease } from "../../src/lib/engine-release";
 import Link from "next/link";
+import { REUPAI_MICROSOFT_STORE_URL } from "../../src/lib/store-links";
 
 export const metadata = {
   title: "Tải ReupAI Local Engine cho Windows | Vietsub video",
@@ -8,9 +7,6 @@ export const metadata = {
 };
 
 export default function LocalEnginePage() {
-  let release;
-  try { release = verifiedRelease(releaseDocument); } catch {}
-  const downloadUrl = release ? "/api/engine/download" : process.env.NEXT_PUBLIC_LOCAL_ENGINE_DOWNLOAD_URL || "";
   return <main className="plans-page">
     <header className="plans-nav"><Link href="/" className="plans-brand">Reup<span>AI</span></Link><Link href="/app">Vào workspace →</Link></header>
     <div className="plans-content engine-download-page">
@@ -24,14 +20,13 @@ export default function LocalEnginePage() {
         <article><strong>Website không thể tự render</strong><p>Trình duyệt không có quyền chạy pipeline video, đọc file local hoặc xử lý dài hạn như ứng dụng Windows.</p></article>
       </div>
       <section className="engine-download-card">
-        <div><small>WINDOWS 10/11 · 64-BIT</small><h2>ReupAI Local Engine</h2><p>Sau khi cài, mở ứng dụng rồi quay lại website và bấm “Kết nối ReupAI”.</p></div>
-        {downloadUrl ? <a className="plans-button primary" href={downloadUrl}>Tải bản Windows {release?.version || ""} →</a> : <button className="plans-button primary" type="button" disabled>Bản cài đang được chuẩn bị</button>}
+        <div><small>WINDOWS 10/11 · 64-BIT · MICROSOFT STORE</small><h2>ReupAI Local Engine</h2><p>Cài bản đã được Microsoft chứng nhận. Sau khi cài, mở ứng dụng rồi quay lại website và bấm “Kết nối ReupAI”.</p></div>
+        <a className="plans-button primary" href={REUPAI_MICROSOFT_STORE_URL} target="_blank" rel="noopener noreferrer">Tải từ Microsoft Store →</a>
       </section>
       <section className="engine-download-card">
-        <div><h2>Cập nhật mà không mất thư viện</h2><p>Bản cũ: tải và cài vào thư mục ReupAI hiện tại. Từ bản 0.2.35: khi có phiên bản mới, bấm “Cập nhật ngay” trên website; ứng dụng sẽ tải bộ cài và chờ công việc hoàn tất trước khi cập nhật.</p><p>Đừng gỡ dữ liệu hoặc xóa thư viện để cập nhật. Nếu bộ cài báo đang có công việc, hãy chờ hoặc thoát Local Engine ở khay hệ thống rồi thử lại.</p></div>
+        <div><h2>Cập nhật mà không mất thư viện</h2><p>Bản cài từ Microsoft Store nhận cập nhật qua Store. Nếu bạn đang dùng bản cài trực tiếp cũ, hãy dùng chức năng “Cập nhật ngay” trong website để cập nhật đúng kênh đó.</p><p>Đừng gỡ dữ liệu hoặc xóa thư viện để cập nhật. Nếu bản cài cũ báo đang có công việc, hãy chờ hoặc thoát Local Engine ở khay hệ thống rồi thử lại.</p></div>
       </section>
-      {!downloadUrl && <div className="plans-banner" role="status">Kênh tải công khai chưa được cấu hình. Quản trị viên cần đặt biến <code>NEXT_PUBLIC_LOCAL_ENGINE_DOWNLOAD_URL</code> tới file cài chính thức.</div>}
-      <p className="plans-footnote">Yêu cầu khoảng 1,5 GB dung lượng trống. Chỉ tải bộ cài từ liên kết chính thức của ReupAI.</p>
+      <p className="plans-footnote">Trang Store sẽ mở để bạn cài ReupAI. Yêu cầu Windows 10/11 64-bit và khoảng 1,5 GB dung lượng trống.</p>
     </div>
   </main>;
 }

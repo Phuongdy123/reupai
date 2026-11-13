@@ -45,6 +45,9 @@ def apply_runtime_patches() -> list[str]:
     Each patch must export ``apply()``.  Errors leave the Engine running and
     are written to the local log without exposing configuration values.
     """
+    from services.windows_distribution import distribution_info
+    if distribution_info().get("managedUpdates"):
+        return []
     patch_dir = get_runtime_root() / "patches"
     manifest_path = patch_dir / "manifest.json"
     if not manifest_path.is_file():

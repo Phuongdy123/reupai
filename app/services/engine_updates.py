@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from services.update_public_key import UPDATE_PUBLIC_KEY
+from services.windows_distribution import distribution_info
 
 RELEASE_URL = 'https://www.reupai.cloud/api/engine/release'
 ASSET_PREFIX = 'https://github.com/Phuongdy123/reupai/releases/download/'
@@ -97,16 +98,29 @@ def download_installer(release, directory, progress, cancelled):
 
 
 class UpdateManager:
-    def __init__(self, version, directory, workload, install_dir=None, helper=None, fetcher=fetch_release, downloader=download_installer, launcher=None):
+    def __init__(self, version, directory, workload, install_dir=None, helper=None, fetcher=fetch_release, downloader=download_installer, launcher=None, distribution=None):
         self.version, self.directory, self.workload = version, Path(directory), workload
         self.install_dir, self.helper = install_dir, helper
         self.fetcher, self.downloader = fetcher, downloader
         self.launcher = launcher or self._launch
+        self.distribution = dict(distribution if distribution is not None else distribution_info())
         self.lock = threading.RLock()
         self.cancelled = threading.Event()
         self.busy = False
         self.active_requests = 0
-        self.state = {'state': 'idle', 'currentVersion': version, 'progress': 0}
+        self.state = {'state': 'idle', 'currentVersion': version, 'progress': 0,
+                      'distribution': self.distribution['channel'], 'updateUrl': self.distribution.get('updateUrl')}
+        if self.distribution.get('managedUpdates'):
+            self._managed_snapshot()
+
+    def _managed_snapshot(self):
+        if self.distribution['channel'] == 'msix':
+            self.set_state('store_managed', release=None, error=None,
+                           message='Microsoft Store quản lý cập nhật Local Engine. Mở Store → Thư viện để kiểm tra bản mới.')
+        else:
+            self.set_state('update_unavailable', release=None,
+                           error='Chưa xác định được kênh cài đặt Windows; chưa thể chạy bộ cài tự động.')
+        return self.snapshot()
 
     def snapshot(self):
         with self.lock:
@@ -128,6 +142,8 @@ class UpdateManager:
             self.active_requests = max(0, self.active_requests - 1)
 
     def check(self):
+        if self.distribution.get('managedUpdates'):
+            return self._managed_snapshot()
         with self.lock:
             if self.busy:
                 return self.snapshot()
@@ -145,6 +161,8 @@ class UpdateManager:
         return self.snapshot()
 
     def start(self):
+        if self.distribution.get('managedUpdates'):
+            return self._managed_snapshot()
         with self.lock:
             if self.busy:
                 if self.state['state'] == 'checking':
@@ -166,6 +184,11 @@ class UpdateManager:
         return self.snapshot()
 
     def _run(self):
+        if self.distribution.get('managedUpdates'):
+            self._managed_snapshot()
+            with self.lock:
+                self.busy = False
+            return
         try:
             release = self.fetcher()
             if self.cancelled.is_set():
@@ -204,6 +227,8 @@ class UpdateManager:
                 self.busy = False
 
     def _launch(self, installer, release):
+        if self.distribution.get('managedUpdates'):
+            raise RuntimeError('Bản MSIX phải cập nhật qua kênh phân phối Windows của gói.')
         if not getattr(sys, 'frozen', False) or os.name != 'nt':
             raise RuntimeError('Cần chạy bản cài Windows để cập nhật.')
         result = self.directory / 'result.json'

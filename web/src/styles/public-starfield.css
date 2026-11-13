@@ -1,0 +1,59 @@
+/* Decorative layer. Mount inside a parent with isolation:isolate. */
+.public-starfield {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  --star-far-offset: 0px;
+  --star-near-offset: 0px;
+  --star-streak-offset: 0px;
+}
+.public-starfield-layer {
+  position: absolute;
+  inset: -540px 0;
+  transform: translate3d(0,var(--star-far-offset),0);
+  will-change: transform;
+}
+.public-starfield-layer.is-near { transform: translate3d(0,var(--star-near-offset),0); }
+.public-starfield-layer.is-streaks {
+  inset: 0;
+  transform: translate3d(0,var(--star-streak-offset),0);
+}
+.theme-xports .premium-workspace { position: relative; isolation: isolate; background: transparent; }
+.theme-xports .premium-workspace .main { background: transparent; }
+.public-star {
+  position: absolute;
+  border-radius: 50%;
+  background: #f1f1f8;
+}
+.public-starfield-layer.is-near .public-star { box-shadow: 0 0 4px rgb(230 230 240 / 12%); }
+.public-shooting-star {
+  position: absolute;
+  top: 19%;
+  left: 78%;
+  width: 170px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,#fff 0%,#e3e4ff 42%,transparent 100%);
+  box-shadow: 0 0 9px rgb(225 228 255 / 55%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: public-star-shoot 9s 1s linear infinite;
+}
+.public-shooting-star.is-second { top: 52%; left: 58%; width: 125px; animation-duration: 13s; animation-delay: 4s; }
+@keyframes public-star-shoot {
+  0% { transform: translate3d(90px,-63px,0) rotate(-35deg); opacity: 0; }
+  2% { opacity: .86; }
+  8% { opacity: .48; }
+  12%,100% { transform: translate3d(-330px,231px,0) rotate(-35deg); opacity: 0; }
+}
+@media (max-width: 700px) {
+  .public-star:nth-child(even) { display: none; }
+  .public-shooting-star { width: 90px; }
+  .public-shooting-star.is-second { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .public-starfield-layer,.public-starfield-layer.is-near { transform: none; }
+  .public-shooting-star { display: none; animation: none; }
+}

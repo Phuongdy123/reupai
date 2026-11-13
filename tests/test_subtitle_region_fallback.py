@@ -12,6 +12,19 @@ from services import final_renderer, subtitle_detector
 
 
 class SubtitleRegionFallbackTests(unittest.TestCase):
+    def test_detected_subtitle_blur_spans_full_video_width(self):
+        lines = [
+            {"sample_type": "positive", "center_y": 570 + offset,
+             "height": 22, "x1": 80, "x2": 280}
+            for offset in (-2, 0, 2)
+        ]
+        metrics = {"score": 0.9, "pos_hits": 3, "neg_hits": 0,
+                   "pos_rate": 1, "neg_rate": 0, "temporal_coverage": 0.8}
+        region = subtitle_detector.build_region_from_cluster(lines, metrics, 360, 640)
+        self.assertEqual(region["blur"]["x"], 0)
+        self.assertEqual(region["blur"]["width"], 360)
+        self.assertLess(region["blur"]["height"], 60)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

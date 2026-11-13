@@ -79,12 +79,12 @@ MIN_TEMPORAL_COVERAGE = 0.22
 MIN_FINAL_CONFIDENCE = 0.48
 
 # Blur.
-BLUR_MIN_WIDTH_RATIO = 0.72
-BLUR_MAX_WIDTH_RATIO = 0.92
-BLUR_MIN_HEIGHT_RATIO = 0.075
-BLUR_MAX_HEIGHT_RATIO = 0.18
-BLUR_PAD_X_RATIO = 0.035
-BLUR_PAD_Y_RATIO = 0.026
+BLUR_MIN_WIDTH_RATIO = 0.35
+BLUR_MAX_WIDTH_RATIO = 0.94
+BLUR_MIN_HEIGHT_RATIO = 0.035
+BLUR_MAX_HEIGHT_RATIO = 0.16
+BLUR_PAD_X_RATIO = 0.025
+BLUR_PAD_Y_RATIO = 0.008
 
 # Lazy PaddleOCR.
 _DETECTOR = None
@@ -1788,26 +1788,6 @@ def build_region_from_cluster(
         dtype=np.float32,
     )
 
-    x1s = np.array(
-        [
-            item[
-                "x1"
-            ]
-            for item in chosen
-        ],
-        dtype=np.float32,
-    )
-
-    x2s = np.array(
-        [
-            item[
-                "x2"
-            ]
-            for item in chosen
-        ],
-        dtype=np.float32,
-    )
-
     center_y = int(
         round(
             float(
@@ -1831,68 +1811,17 @@ def build_region_from_cluster(
         ),
     )
 
-    # Robust text envelope.
-    left = float(
-        np.percentile(
-            x1s,
-            20,
-        )
-    )
+    # A full-width band covers long source subtitle lines at every timestamp.
+    # OCR still determines the vertical position and a compact band height.
+    blur_x = 0
+    blur_width = int(frame_width)
 
-    right = float(
-        np.percentile(
-            x2s,
-            80,
-        )
-    )
-
-    actual_width = max(
-        1.0,
-        right - left,
-    )
-
-    blur_width = int(
-        round(
-            max(
-                frame_width
-                * BLUR_MIN_WIDTH_RATIO,
-
-                actual_width
-                + frame_width
-                * BLUR_PAD_X_RATIO
-                * 2.0,
-            )
-        )
-    )
-
-    blur_width = min(
-        blur_width,
-        int(
-            round(
-                frame_width
-                * BLUR_MAX_WIDTH_RATIO
-            )
-        ),
-    )
-
-    blur_x = int(
-        round(
-            (
-                frame_width
-                - blur_width
-            )
-            / 2.0
-        )
-    )
-
-    blur_height = int(
-        round(
-            median_height
-            + frame_height
-            * BLUR_PAD_Y_RATIO
-            * 2.0
-        )
-    )
+    top_edges = centers_y - heights / 2.0
+    bottom_edges = centers_y + heights / 2.0
+    text_top = float(np.percentile(top_edges, 5))
+    text_bottom = float(np.percentile(bottom_edges, 95))
+    vertical_pad = max(frame_height * BLUR_PAD_Y_RATIO, median_height * 0.16)
+    blur_height = int(round(text_bottom - text_top + vertical_pad * 2.0))
 
     blur_height = max(
         blur_height,
@@ -1914,13 +1843,7 @@ def build_region_from_cluster(
         ),
     )
 
-    blur_y = int(
-        round(
-            center_y
-            - blur_height
-            / 2.0
-        )
-    )
+    blur_y = int(round((text_top + text_bottom - blur_height) / 2.0))
 
     blur_y = max(
         0,
@@ -2298,6 +2221,12 @@ def detect_subtitle_region(
                     duration,
             )
         )
+        # Fixed logos and titles near the top often score higher than real
+        # dialogue. Keep scanning instead of treating them as subtitles.
+        fast_ranked = [
+            candidate for candidate in fast_ranked
+            if candidate[2]["median_y"] >= height * 0.35
+        ]
 
         fast_elapsed = (
             time.perf_counter()
@@ -2412,6 +2341,7 @@ def detect_subtitle_region(
                         ]
                     )
                 )
+                region["detected"]["preview_time_seconds"] = round(best_item["time"], 2)
 
             print(
                 f"\nFAST PASS OK "
@@ -2575,6 +2505,10 @@ def detect_subtitle_region(
                 duration,
         )
     )
+    ranked = [
+        candidate for candidate in ranked
+        if candidate[2]["median_y"] >= height * 0.35
+    ]
 
     if not ranked:
 
@@ -2709,6 +2643,7 @@ def detect_subtitle_region(
                 ]
             )
         )
+        region["detected"]["preview_time_seconds"] = round(best_item["time"], 2)
 
     print(
         "\nDetected subtitle:"

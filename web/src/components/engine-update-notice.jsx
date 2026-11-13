@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useEngine } from './engine-provider';
 import { newerVersion } from '../lib/engine-version';
+import { managedUpdateChannel } from '../lib/engine-update-channel.mjs';
 
 const busyStates = new Set(['checking', 'downloading', 'waiting', 'installing']);
 export function EngineUpdateNotice() {
-  const { version, capabilities, status, client } = useEngine();
+  const { version, capabilities, distribution, status, client } = useEngine();
+  const managedChannel = managedUpdateChannel(distribution, capabilities);
   const [release, setRelease] = useState(null);
   const [update, setUpdate] = useState(null);
   const [requested, setRequested] = useState(false);
@@ -24,12 +26,13 @@ export function EngineUpdateNotice() {
     return () => { active = false; };
   }, [capabilities?.verified_updates, status, client, requested, release, version]);
   useEffect(() => {
+    if (managedChannel) return;
     let active = true;
     fetch('/api/engine/release').then(response => response.ok ? response.json() : null).then(value => {
       if (active) setRelease(value?.release || null);
     }).catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [managedChannel?.channel]);
   useEffect(() => {
     if (!capabilities?.verified_updates || status !== 'connected' || !polling) return;
     let active = true, timer;
@@ -42,6 +45,13 @@ export function EngineUpdateNotice() {
     return () => { active = false; clearTimeout(timer); };
   }, [capabilities?.verified_updates, status, client, polling]);
 
+  if (managedChannel) {
+    if (status !== 'connected') return null;
+    return <section className="engine-update-notice" role="status">
+      <div><strong>{managedChannel.channel === 'msix' ? 'Local Engine · Microsoft Store' : 'Cần kiểm tra kênh cập nhật'}</strong><p>{managedChannel.channel === 'msix' ? `Phiên bản ${version}. Mở Microsoft Store → Thư viện để kiểm tra cập nhật khi cần.` : 'Chưa xác định được kênh cài đặt. Hãy mở nơi bạn đã cài Local Engine để kiểm tra cập nhật.'}</p></div>
+      {managedChannel.url && <div className="engine-update-actions"><a href={managedChannel.url}>Mở Microsoft Store</a></div>}
+    </section>;
+  }
   const available = release && newerVersion(release.version, version);
   const completed = requested && release && version && !newerVersion(release.version, version);
   if (!available && !completed) return null;

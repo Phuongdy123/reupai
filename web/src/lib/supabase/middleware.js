@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
+import { GUEST_WORKSPACE_ROUTES } from "../workspace-routes.mjs";
 
-const publicRoutes = new Set(["/", "/sign-in", "/sign-up", "/plans", "/terms", "/privacy"]);
+const publicRoutes = new Set(["/", ...GUEST_WORKSPACE_ROUTES, "/sign-in", "/sign-up", "/plans", "/terms", "/privacy"]);
 
 function configured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
@@ -34,8 +35,10 @@ export async function updateSession(request) {
       },
     },
   });
-  const { data: { user } } = await supabase.auth.getUser();
   const isPublic = publicRoutes.has(pathname) || pathname.startsWith("/auth/");
+  let user = null;
+  try { const result = await supabase.auth.getUser(); user = result.data?.user || null; }
+  catch { /* Public pages still render as a guest if account services are unavailable. */ }
   if (!user) {
     if (isPublic || pathname === "/pending") return response;
     const url = request.nextUrl.clone();

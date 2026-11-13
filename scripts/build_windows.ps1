@@ -4,6 +4,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+function Get-Sha256Hex([string]$FilePath) {
+    $Sha = [Security.Cryptography.SHA256]::Create()
+    $Stream = [IO.File]::OpenRead($FilePath)
+    try {
+        return [BitConverter]::ToString($Sha.ComputeHash($Stream)).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $Stream.Dispose()
+        $Sha.Dispose()
+    }
+}
 $ProjectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $Python = Join-Path $ProjectRoot "venv\Scripts\python.exe"
 if (-not (Test-Path -LiteralPath $Python)) {
@@ -17,6 +28,10 @@ $EngineVersion = [regex]::Match($EngineSource, '(?m)^ENGINE_VERSION = "([0-9]+\.
 $InstallerVersion = [regex]::Match($InstallerSource, '(?m)^#define MyAppVersion "([0-9]+\.[0-9]+\.[0-9]+)"\r?$').Groups[1].Value
 if (-not $EngineVersion -or $EngineVersion -ne $InstallerVersion) {
     throw "Phiên bản Engine và installer không khớp: '$EngineVersion' / '$InstallerVersion'."
+}
+& $Python (Join-Path $ProjectRoot "scripts\check_internal_imports.py")
+if ($LASTEXITCODE -ne 0) {
+    throw "Import nội bộ của ứng dụng không hợp lệ; dừng trước khi đóng gói."
 }
 $VersionNumbers = @($EngineVersion.Split('.') | ForEach-Object { [int]$_ }) + 0
 $VersionTuple = '(' + ($VersionNumbers -join ', ') + ')'
@@ -49,7 +64,12 @@ try {
         "_internal\app\assets\lat_chuyen_logo.png",
         "_internal\app\assets\update-installer.ps1",
         "_internal\bin\ffmpeg.exe",
-        "_internal\bin\ffprobe.exe"
+        "_internal\bin\ffprobe.exe",
+        "_internal\sea_g2p\sea_g2p.bin",
+        "_internal\paddle\base\libpaddle.pyd",
+        "_internal\ctranslate2\ctranslate2.dll",
+        "_internal\ctranslate2\libiomp5md.dll",
+        "_internal\playwright\driver\node.exe"
     )
     foreach ($RelativePath in $RequiredBundleFiles) {
         $RequiredPath = Join-Path (Join-Path $ProjectRoot "dist\ReupAI") $RelativePath
@@ -57,17 +77,22 @@ try {
             throw "Bản đóng gói thiếu file bắt buộc: $RelativePath"
         }
     }
-    $Hash = Get-FileHash -Algorithm SHA256 -LiteralPath $Exe
-    $HashLine = "$($Hash.Hash.ToLower())  ReupAI.exe"
+    $DuplicatePaddleOpenMP = Join-Path $ProjectRoot "dist\ReupAI\_internal\paddle\libs\libiomp5md.dll"
+    if (Test-Path -LiteralPath $DuplicatePaddleOpenMP -PathType Leaf) {
+        throw "Bản đóng gói chứa libiomp5md.dll cũ của Paddle, có thể làm CTranslate2 crash khi nạp DLL."
+    }
+    $Hash = Get-Sha256Hex $Exe
+    $HashLine = "$Hash  ReupAI.exe"
     Set-Content -LiteralPath (Join-Path $ProjectRoot "dist\ReupAI\SHA256SUMS.txt") -Value $HashLine -Encoding ascii
     Write-Host "EXE: $Exe"
-    Write-Host "SHA256: $($Hash.Hash)"
+    Write-Host "SHA256: $Hash"
 
     if (-not $SkipInstaller) {
         $Iscc = Get-Command iscc -ErrorAction SilentlyContinue
         $IsccPath = if ($Iscc) { $Iscc.Source } else {
             $Candidates = @(
                 (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+                (Join-Path $env:USERPROFILE "AppData\Local\Programs\Inno Setup 6\ISCC.exe"),
                 (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe"),
                 (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe")
             )
@@ -80,12 +105,12 @@ try {
             if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) {
                 throw "Installer không được tạo: $Installer"
             }
-            $InstallerHash = Get-FileHash -Algorithm SHA256 -LiteralPath $Installer
-            Set-Content -LiteralPath "$Installer.sha256" -Value "$($InstallerHash.Hash.ToLower())  $(Split-Path $Installer -Leaf)" -Encoding ascii
+            $InstallerHash = Get-Sha256Hex $Installer
+            Set-Content -LiteralPath "$Installer.sha256" -Value "$InstallerHash  $(Split-Path $Installer -Leaf)" -Encoding ascii
             Write-Host "Installer: $Installer"
-            Write-Host "SHA256: $($InstallerHash.Hash)"
+            Write-Host "SHA256: $InstallerHash"
         } else {
-            Write-Warning "Chưa có Inno Setup; đã tạo bản portable trong dist\ReupAI."
+            throw "Không tìm thấy Inno Setup (ISCC.exe), nên chưa thể tạo installer. Nếu chỉ cần bản portable, chạy lại với -SkipInstaller."
         }
     }
 }

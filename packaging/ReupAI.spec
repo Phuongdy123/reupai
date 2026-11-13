@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import os
 import shutil
 from importlib.util import find_spec
 
@@ -8,12 +9,29 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 ROOT = Path(SPECPATH).resolve().parent
 APP = ROOT / "app"
+OPENMP_BOOTSTRAP_DIR = ROOT / "packaging" / "pyi_openmp_bootstrap"
+OPENMP_BOOTSTRAP = OPENMP_BOOTSTRAP_DIR / "sitecustomize.py"
+if not OPENMP_BOOTSTRAP.is_file():
+    raise SystemExit("Missing Windows OpenMP bootstrap for packaging.")
+
+# PyInstaller imports every collected package in one isolated process while
+# resolving binary dependencies.  Paddle loads an older libiomp5md.dll before
+# CTranslate2 otherwise, and that DLL lacks symbols required by CTranslate2.
+# sitecustomize runs before those isolated imports; the same file is used as a
+# frozen runtime hook so pipeline and OCR processes see one OpenMP runtime.
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    part for part in (str(OPENMP_BOOTSTRAP_DIR), os.environ.get("PYTHONPATH", "")) if part
+)
+PADDLE_OPENMP = (ROOT / "venv" / "Lib" / "site-packages" / "paddle" / "libs" / "libiomp5md.dll").resolve()
+
+
+def is_paddle_openmp(source):
+    return Path(source).resolve() == PADDLE_OPENMP
 
 datas = [
     (str(APP / "web" / "templates"), "web/templates"),
     (str(APP / "web" / "static"), "web/static"),
     (str(APP / "assets"), "app/assets"),
-    (str(APP / "models"), "models"),
 ]
 binaries = []
 hiddenimports = []
@@ -57,7 +75,7 @@ for package in (
 ):
     package_datas, package_binaries, package_hidden = collect_all(package)
     datas += package_datas
-    binaries += package_binaries
+    binaries += [entry for entry in package_binaries if not is_paddle_openmp(entry[0])]
     hiddenimports += package_hidden
 
 # VieNeu opens this Rust dictionary by path next to sea_g2p/g2p.py.
@@ -85,10 +103,13 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    runtime_hooks=[],
+    runtime_hooks=[str(OPENMP_BOOTSTRAP)],
     excludes=["tkinter", "pytest", "IPython"],
     noarchive=False,
 )
+# The binary dependency scanner may add Paddle's copy again even after it was
+# removed from collect_all().  Keep only CTranslate2's newer OpenMP DLL.
+a.binaries[:] = [entry for entry in a.binaries if not is_paddle_openmp(entry[1])]
 pyz = PYZ(a.pure)
 
 exe = EXE(

@@ -7,6 +7,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -160,6 +161,11 @@ from services.download_config import (
     max_parallel_downloads,
     max_parallel_pipelines,
     ytdlp_performance_args,
+)
+from services.download_space import (
+    DownloadStorageError,
+    ensure_download_space,
+    is_disk_full_error,
 )
 from services.engine_runtime import pipeline_command, python_module_command
 
@@ -487,12 +493,16 @@ class DownloadRequest(BaseModel):
 class ProcessRequest(BaseModel):
     url: str
     video_id: str
+    billing_token: Optional[str] = None
     channel: str = "2d_animation"
     mode: Literal[
         "subtitle",
         "voiceover",
     ] = "subtitle"
     preview_seconds: Optional[float] = None
+    source_subtitle_mode: Literal["auto", "none"] = "auto"
+    source_language: Literal["auto", "zh", "en", "ja", "vi"] = "auto"
+    subtitle_style: Literal["minimal", "bold", "cinema", "neon", "box"] = "minimal"
     original_volume: float = 0.15
     voice_volume: float = 1.0
     voice: Optional[str] = None
@@ -500,6 +510,7 @@ class ProcessRequest(BaseModel):
     subtitle_font_size: Optional[int] = None
     blur_region: Optional[dict[str, float]] = None
     blur_preset: Optional[str] = None
+    disable_main_blur: bool = False
     blur_intervals: list[dict[str, Any]] = []
     custom_blur_region: Optional[dict[str, float]] = None
     auto_brand_blur: bool = False
@@ -859,9 +870,9 @@ def media_file_ok(path: Path) -> bool:
 
 def finalize_staged_download(folder: Path) -> Path:
     candidates = [
-        path
-        for path in folder.glob("source.pending.*")
-        if path.is_file() and path.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"}
+        folder / f"source.pending.{extension}"
+        for extension in ("mp4", "mkv", "webm", "mov")
+        if (folder / f"source.pending.{extension}").is_file()
     ]
     for candidate in candidates:
         if not media_file_ok(candidate):
@@ -2256,6 +2267,8 @@ def _pipeline_worker_once(
                     mode,
                 )
             )
+            if result_file is None or not file_ok(result_file):
+                raise RuntimeError("Pipeline kết thúc nhưng chưa tạo được video thành phẩm.")
 
             sync_job_files(
                 video_id=
@@ -2503,6 +2516,7 @@ def pipeline_worker(
     mode: str,
     db_job_id: int,
     settings: Optional[dict[str, Any]] = None,
+    billing_token: Optional[str] = None,
 ):
     key = process_key(channel, video_id, mode)
     log_path = job_dir_for(channel, video_id) / f"web_{mode}.log"
@@ -2519,6 +2533,9 @@ def pipeline_worker(
                 db_job_id=db_job_id,
                 log_path=log_path,
             )
+            if billing_token:
+                from services.billing import finish
+                finish(billing_token, "cancelled")
             return
 
         if PIPELINE_SLOTS.acquire(timeout=0.5):
@@ -2546,6 +2563,12 @@ def pipeline_worker(
         )
     finally:
         PIPELINE_SLOTS.release()
+        if billing_token:
+            from services.billing import finish
+            with PROCESS_LOCK:
+                final_status = PROCESS_STATE.get(key, {}).get("status", "failed")
+            if not finish(billing_token, final_status if final_status in {"completed", "cancelled"} else "failed"):
+                print("[BILLING] Could not report final job status; server reservation will expire.")
 
 
 def cover_host_allowed(
@@ -2731,16 +2754,15 @@ def _scan_downloaded_library():
     )
 
     items = []
+    seen_video_ids = set()
 
-    if not DOWNLOAD_ROOT.exists():
-        return items
-
-    for folder in sorted(
+    download_folders = sorted(
         DOWNLOAD_ROOT.iterdir(),
-        key=lambda path:
-            path.stat().st_mtime,
+        key=lambda path: path.stat().st_mtime,
         reverse=True,
-    ):
+    ) if DOWNLOAD_ROOT.exists() else []
+
+    for folder in download_folders:
 
         if not folder.is_dir():
             continue
@@ -2815,6 +2837,55 @@ def _scan_downloaded_library():
                     source_file
                 ),
         })
+
+        seen_video_ids.add(video_id)
+
+    # Pipeline jobs keep their source beside the rendered output. Older builds
+    # only indexed DOWNLOAD_ROOT, so a completed video could disappear from
+    # "Video đã tải" after switching website accounts even though source.mp4
+    # was still present on this machine. Local artifacts belong to the Local
+    # Engine workspace; include those physical job sources and deduplicate them.
+    channels_dir = get_channels_dir()
+    if channels_dir.exists():
+        for channel_dir in channels_dir.iterdir():
+            jobs_dir = channel_dir / "jobs"
+            if not channel_dir.is_dir() or not jobs_dir.exists():
+                continue
+            for job_dir in jobs_dir.iterdir():
+                if not job_dir.is_dir():
+                    continue
+                video_id = job_dir.name
+                source_file = job_dir / "source.mp4"
+                if video_id in seen_video_ids or not file_ok(source_file):
+                    continue
+
+                meta = metadata.get(video_id, {})
+                job_meta = {}
+                job_file = job_dir / "job.json"
+                if job_file.is_file():
+                    try:
+                        loaded = json.loads(job_file.read_text(encoding="utf-8"))
+                        if isinstance(loaded, dict):
+                            job_meta = loaded
+                    except (OSError, ValueError, TypeError):
+                        job_meta = {}
+
+                size = source_file.stat().st_size
+                items.append({
+                    "video_id": video_id,
+                    "title": meta.get("title") or job_meta.get("title") or video_id,
+                    "cover_url": meta.get("cover_url") or job_meta.get("cover_url") or "",
+                    "source_url": meta.get("url") or job_meta.get("url") or "",
+                    "play_count": meta.get("play_count") or 0,
+                    "channel": channel_dir.name,
+                    "path": str(source_file),
+                    "size_bytes": size,
+                    "size_text": human_size(size),
+                    "updated_at": file_mtime_text(source_file),
+                })
+                seen_video_ids.add(video_id)
+
+    items.sort(key=lambda item: item["updated_at"], reverse=True)
 
     return items
 
@@ -3916,6 +3987,122 @@ def build_ytdlp_download_command(
     return command
 
 
+class SourceDownloadError(RuntimeError):
+    """A source-site failure with a safe, actionable message for the UI."""
+
+    def __init__(self, message: str, *, status_code: int = 502) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def describe_source_download_error(
+    platform: str,
+    *diagnostics: str,
+    exit_code: int | None = None,
+) -> SourceDownloadError:
+    """Classify upstream failures without exposing signed media URLs or cookies."""
+    detail = " ".join(str(item or "") for item in diagnostics).lower()
+    site = "Bilibili" if platform == "bilibili" else "Douyin"
+    prefix = f"Không tải được video từ {site}. "
+
+    if any(marker in detail for marker in (
+        "http error 429", "http 429", "status 429", "error 429",
+        "http error 412", "http 412", "status 412", "error 412",
+        "too many requests", "rate limit", "rate-limit", "请求过于频繁",
+        "请求频繁", "bị giới hạn yêu cầu",
+    )):
+        return SourceDownloadError(
+            prefix + "Nguồn đang giới hạn yêu cầu (429/412). "
+            "Hãy đợi vài phút rồi thử lại; nếu lặp lại, mở video trên trình duyệt để kiểm tra.",
+            status_code=429,
+        )
+
+    if any(marker in detail for marker in (
+        "không đủ dung lượng", "no space left on device", "disk is full",
+        "not enough space on the disk",
+    )):
+        return SourceDownloadError(
+            "Ổ lưu dữ liệu hoặc ổ tạm đã đầy khi tải video. "
+            "Hãy giải phóng dung lượng rồi thử lại.",
+            status_code=507,
+        )
+
+    if "khong tao duoc source co ca video va audio" in detail:
+        return SourceDownloadError(
+            prefix + "Nguồn không trả đủ luồng hình và tiếng để tạo video. "
+            "Hãy kiểm tra video gốc hoặc chọn video khác.",
+        )
+
+    if any(marker in detail for marker in (
+        "not available in your country", "not available in your region",
+        "geo-restricted", "geo restricted", "geographic restriction",
+        "region restriction", "地区限制", "地区不可用",
+    )):
+        return SourceDownloadError(
+            prefix + "Video có thể bị giới hạn khu vực. "
+            "Hãy mở link gốc trên cùng máy để kiểm tra quyền xem.",
+        )
+
+    if any(marker in detail for marker in (
+        "could not copy chrome cookie", "could not copy edge cookie",
+        "failed to decrypt", "cookie database", "cookies database",
+        "could not find chrome cookies", "could not find edge cookies",
+    )):
+        return SourceDownloadError(
+            prefix + "Không đọc được cookie trình duyệt. "
+            "Hãy đóng Chrome/Edge hoàn toàn, mở lại video gốc và thử tải lại.",
+        )
+
+    if any(marker in detail for marker in (
+        "không tìm thấy chrome hoặc edge", "khong tim thay chrome hoac edge",
+        "thiếu playwright", "thieu playwright", "browser executable",
+    )):
+        return SourceDownloadError(
+            prefix + "Local Engine không mở được trình duyệt tải nguồn. "
+            "Hãy kiểm tra Chrome/Edge và cài lại bộ cài Local Engine đầy đủ.",
+        )
+
+    if any(marker in detail for marker in (
+        "http error 401", "http 401", "status 401",
+        "http error 403", "http 403", "status 403",
+        "sign in", "log in", "login required", "requires login",
+        "authentication required", "private video", "video is private",
+        "premium", "会员", "登录", "验证码", "captcha",
+    )):
+        return SourceDownloadError(
+            prefix + "Nguồn từ chối quyền xem hoặc yêu cầu đăng nhập/xác minh. "
+            "Hãy mở link trong Chrome/Edge bằng tài khoản có quyền xem rồi thử lại.",
+        )
+
+    if any(marker in detail for marker in (
+        "http error 404", "http 404", "status 404",
+        "video is unavailable", "video unavailable", "video not found",
+        "video has been deleted", "does not exist", "稿件不存在",
+    )):
+        return SourceDownloadError(
+            prefix + "Video không còn khả dụng. Hãy mở link gốc để kiểm tra.",
+        )
+
+    if any(marker in detail for marker in (
+        "timed out", "timeout", "connection reset", "connection aborted",
+        "connection refused", "connection closed", "remote disconnected",
+        "remotedisconnected", "could not resolve", "name resolution",
+        "network is unreachable", "temporary failure in name resolution",
+        "ssl certificate", "http error 502", "http error 503", "http error 504",
+        "remote end closed", "incompleteread", "gửi thiếu dữ liệu",
+    )):
+        return SourceDownloadError(
+            prefix + "Kết nối tới nguồn bị gián đoạn. "
+            "Hãy kiểm tra mạng, mở thử link gốc và tải lại sau ít phút.",
+        )
+
+    suffix = f" (mã {exit_code})" if exit_code is not None else ""
+    return SourceDownloadError(
+        prefix + f"Các cách tải đều thất bại{suffix}. "
+        "Hãy mở link gốc để kiểm tra video còn xem được rồi thử lại.",
+    )
+
+
 def run_platform_download(
     url: str,
     output_template: str,
@@ -3935,10 +4122,15 @@ def run_platform_download(
             )
         )
 
-        douyin_download_video(
-            url,
-            output_path,
-        )
+        try:
+            douyin_download_video(
+                url,
+                output_path,
+            )
+        except Exception as error:
+            if is_disk_full_error(error):
+                raise
+            raise describe_source_download_error("douyin", str(error)) from error
 
         return
 
@@ -3955,9 +4147,10 @@ def run_platform_download(
             print("[DOWNLOAD] Bilibili browser stream ready:", output_path, flush=True)
             return
         except Exception as error:
+            if is_disk_full_error(error):
+                raise
             browser_error = error
-            output_path.unlink(missing_ok=True)
-            print("[DOWNLOAD] Bilibili browser failed:", error, flush=True)
+            print("[DOWNLOAD] Bilibili browser failed:", type(error).__name__, flush=True)
 
     # Try yt-dlp if the browser could not produce a stream.
     attempts = (
@@ -3967,8 +4160,10 @@ def run_platform_download(
     )
 
     last_code = 1
+    ytdlp_errors: list[str] = []
 
     for use_cookies in attempts:
+        ensure_download_space(Path(output_template).parent)
         command = build_ytdlp_download_command(
             url,
             output_template,
@@ -3990,6 +4185,10 @@ def run_platform_download(
             ),
             env=env,
             check=False,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
         last_code = (
@@ -3999,16 +4198,24 @@ def run_platform_download(
         if last_code == 0:
             return
 
+        ytdlp_errors.append((result.stderr or "")[-4000:])
+
+        # yt-dlp can return code 1 for many causes. If the destination is
+        # now low on space, report that actionable cause before retrying.
+        ensure_download_space(Path(output_template).parent)
+
         print(
             "[DOWNLOAD RETRY] "
             "yt-dlp exit code:",
             last_code,
         )
 
-    detail = f"yt-dlp thất bại ({platform}), exit code {last_code}."
-    if browser_error is not None:
-        detail = f"Không tải được Bilibili qua trình duyệt: {browser_error}; {detail}"
-    raise RuntimeError(detail)
+    raise describe_source_download_error(
+        platform,
+        str(browser_error or ""),
+        *ytdlp_errors,
+        exit_code=last_code,
+    )
 
 
 # =========================================================
@@ -4023,7 +4230,7 @@ def load_source_sync_cache(profile_url: str):
     try:
         row = conn.execute(
             """
-            SELECT platform, profile_url, videos_json, total, has_more, checked_at,
+            SELECT platform, profile_url, videos_json, total, total_is_exact, has_more, checked_at,
                    rate_limited_until, rate_limit_failures
             FROM source_sync_cache
             WHERE profile_key = ?
@@ -4047,6 +4254,7 @@ def load_source_sync_cache(profile_url: str):
         "profile_url": row["profile_url"],
         "videos": [video for video in videos if isinstance(video, dict)],
         "total": row["total"],
+        "total_is_exact": bool(row["total_is_exact"]),
         "has_more": bool(row["has_more"]),
         "checked_at": float(row["checked_at"] or 0),
         "rate_limited_until": float(row["rate_limited_until"] or 0),
@@ -4060,6 +4268,7 @@ def save_source_sync_cache(
     videos,
     *,
     total=None,
+    total_is_exact=False,
     has_more=True,
     checked_at=None,
     rate_limited_until=0,
@@ -4078,14 +4287,15 @@ def save_source_sync_cache(
             """
             INSERT INTO source_sync_cache (
                 profile_key, platform, profile_url, videos_json,
-                total, has_more, checked_at, rate_limited_until,
+                total, total_is_exact, has_more, checked_at, rate_limited_until,
                 rate_limit_failures
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(profile_key) DO UPDATE SET
                 platform = excluded.platform,
                 profile_url = excluded.profile_url,
                 videos_json = excluded.videos_json,
                 total = excluded.total,
+                total_is_exact = excluded.total_is_exact,
                 has_more = excluded.has_more,
                 checked_at = excluded.checked_at,
                 rate_limited_until = excluded.rate_limited_until,
@@ -4097,6 +4307,7 @@ def save_source_sync_cache(
                 profile_url,
                 payload,
                 total,
+                int(bool(total_is_exact and total is not None)),
                 int(bool(has_more)),
                 float(checked_at if checked_at is not None else time.time()),
                 float(rate_limited_until or 0),
@@ -4156,18 +4367,15 @@ def api_videos(
             video["channel_key"] = default_channel
             video.setdefault("platform", platform)
 
-        source_total = (
-            count_cached_videos(source["id"])
-            if source
-            else 0
+        total_is_exact = bool(
+            (sync_cache or {}).get("total_is_exact")
+            and (sync_cache or {}).get("total") is not None
         )
-        total = (
-            (sync_cache or {}).get("total")
-            if (sync_cache or {}).get("total") is not None
-            else source_total or None
-        )
+        total = (sync_cache or {}).get("total") if total_is_exact else None
         has_more = bool((sync_cache or {}).get("has_more", False))
-        if total is not None and len(cached_videos) < total:
+        if total_is_exact and total is not None and len(cached_videos) < total:
+            has_more = True
+        elif not total_is_exact and len(cached_videos) >= limit:
             has_more = True
 
         return sync_cache, cached_videos, total, has_more
@@ -4200,6 +4408,7 @@ def api_videos(
             "registered_source": bool(source),
             "channel": default_channel,
             "total": total,
+            "total_is_exact": total is not None,
             "has_more": has_more,
             "checked_remote": False,
             "new_count": 0,
@@ -4214,6 +4423,10 @@ def api_videos(
                 platform,
                 cached_videos,
                 total=total,
+                total_is_exact=bool(
+                    (sync_cache or {}).get("total_is_exact")
+                    and total is not None
+                ),
                 has_more=has_more,
                 checked_at=(sync_cache or {}).get("checked_at") or time.time(),
                 rate_limited_until=(sync_cache or {}).get(
@@ -4315,6 +4528,10 @@ def api_videos(
                 platform,
                 cached,
                 total=cached_total,
+                total_is_exact=bool(
+                    (sync_cache or {}).get("total_is_exact")
+                    and cached_total is not None
+                ),
                 has_more=cached_has_more if cached else True,
                 checked_at=time.time(),
                 rate_limited_until=rate_limited_until,
@@ -4324,6 +4541,10 @@ def api_videos(
                 {
                     "rate_limited_until": rate_limited_until,
                     "rate_limit_failures": failures,
+                    "total_is_exact": bool(
+                        (sync_cache or {}).get("total_is_exact")
+                        and cached_total is not None
+                    ),
                 },
                 cached,
                 cached_total,
@@ -4347,6 +4568,10 @@ def api_videos(
                 platform,
                 cached,
                 total=cached_total,
+                total_is_exact=bool(
+                    (sync_cache or {}).get("total_is_exact")
+                    and cached_total is not None
+                ),
                 has_more=cached_has_more,
                 checked_at=time.time(),
             )
@@ -4368,6 +4593,10 @@ def api_videos(
                 platform,
                 cached,
                 total=cached_total,
+                total_is_exact=bool(
+                    (sync_cache or {}).get("total_is_exact")
+                    and cached_total is not None
+                ),
                 has_more=cached_has_more,
                 checked_at=time.time(),
             )
@@ -4404,15 +4633,17 @@ def api_videos(
             video["channel_key"] = default_channel
             video.setdefault("platform", platform)
 
-        total = remote_total if remote_total is not None else cached_total
-        has_more = remote_has_more or (
-            total is not None and len(merged) < total
-        )
+        total_is_exact = remote_total is not None
+        total = remote_total if total_is_exact else None
+        has_more = bool(remote_has_more)
+        if total_is_exact and len(merged) < total:
+            has_more = True
         save_source_sync_cache(
             url,
             platform,
             merged,
             total=total,
+            total_is_exact=total_is_exact,
             has_more=has_more,
             checked_at=now,
         )
@@ -4433,6 +4664,7 @@ def api_videos(
             "registered_source": bool(source),
             "channel": default_channel,
             "total": total,
+            "total_is_exact": total_is_exact,
             "has_more": has_more,
             "checked_remote": True,
             "new_count": new_count,
@@ -4509,6 +4741,7 @@ def api_videos_page(
     if source:
 
         cached_total = count_cached_videos(source["id"])
+        sync_cache = load_source_sync_cache(url)
         cached = (
             load_cached_videos(
                 source[
@@ -4525,10 +4758,42 @@ def api_videos_page(
 
             page_items = cached
 
-            if (
-                len(page_items)
-                == page_size
-            ):
+            remote_total_is_exact = bool(
+                isinstance(sync_cache, dict)
+                and sync_cache.get("total_is_exact")
+                and sync_cache.get("total") is not None
+            )
+            remote_total = (
+                sync_cache.get("total") if remote_total_is_exact else None
+            )
+            try:
+                remote_total = int(remote_total) if remote_total is not None else None
+            except (TypeError, ValueError):
+                remote_total = None
+                remote_total_is_exact = False
+
+            cache_has_more = bool(
+                (sync_cache or {}).get("has_more", False)
+            ) or start + len(page_items) < cached_total
+            is_known_last_cache_page = (
+                remote_total_is_exact
+                and remote_total is not None
+                and start + len(page_items) >= remote_total
+            ) or (
+                not cache_has_more
+                and len(page_items) < page_size
+            )
+
+            if len(page_items) == page_size or is_known_last_cache_page:
+                # The local database may hold only the most recently synced
+                # videos, so its row count is not a channel total. Treat a
+                # total as authoritative only when the remote API supplied it.
+                total = remote_total if remote_total_is_exact else None
+                has_more = (
+                    start + len(page_items) < remote_total
+                    if remote_total_is_exact and remote_total is not None
+                    else cache_has_more
+                )
 
                 for video in page_items:
                     video[
@@ -4561,10 +4826,13 @@ def api_videos_page(
                         True,
 
                     "total":
-                        cached_total,
+                        total,
+
+                    "total_is_exact":
+                        total is not None,
 
                     "has_more":
-                        start + len(page_items) < cached_total,
+                        has_more,
                 }
 
     try:
@@ -4681,6 +4949,9 @@ def api_videos_page(
         "total":
             total,
 
+        "total_is_exact":
+            total is not None,
+
         "has_more":
             bool(
                 has_more
@@ -4729,10 +5000,18 @@ def api_download(
         / video_id
     )
 
-    folder.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    try:
+        folder.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+    except OSError as error:
+        if is_disk_full_error(error):
+            raise HTTPException(
+                status_code=507,
+                detail="Ổ lưu dữ liệu đã đầy. Hãy giải phóng dung lượng rồi tải lại.",
+            ) from error
+        raise
 
     def download_response(path: Path, downloaded: bool):
         if local_only:
@@ -4783,20 +5062,53 @@ def api_download(
                         for stale in folder.glob("source.pending.*"):
                             if stale.is_file():
                                 stale.unlink(missing_ok=True)
+                                stale.with_name(
+                                    f".{stale.name}.probe.json"
+                                ).unlink(missing_ok=True)
                         for suffix in (".mp4", ".mkv", ".webm", ".mov"):
                             invalid = folder / f"source{suffix}"
                             if invalid.exists() and not media_file_ok(invalid):
                                 invalid.unlink(missing_ok=True)
                                 invalid.with_name(f".{invalid.name}.probe.json").unlink(missing_ok=True)
-                        run_platform_download(
-                            body.url,
-                            output_template,
-                            platform,
-                        )
-                        finalize_staged_download(folder)
-                        downloaded_now = True
+                        ensure_download_space(folder)
+                        if platform == "bilibili":
+                            ensure_download_space(Path(tempfile.gettempdir()))
+                        try:
+                            run_platform_download(
+                                body.url,
+                                output_template,
+                                platform,
+                            )
+                            finalize_staged_download(folder)
+                            downloaded_now = True
+                        finally:
+                            # Keep cleanup under the per-video lock. A later
+                            # request must never lose its in-flight staging.
+                            for staged in folder.glob("source.pending.*"):
+                                if staged.is_file():
+                                    try:
+                                        staged.unlink(missing_ok=True)
+                                        staged.with_name(
+                                            f".{staged.name}.probe.json"
+                                        ).unlink(missing_ok=True)
+                                    except OSError:
+                                        pass
 
     except Exception as error:
+
+        if is_disk_full_error(error):
+            detail = (
+                str(error)
+                if isinstance(error, DownloadStorageError)
+                else (
+                    "Ổ đĩa đã đầy khi tải video. Hãy giải phóng dung lượng "
+                    "trên ổ lưu dữ liệu và ổ tạm của Windows rồi thử lại."
+                )
+            )
+            raise HTTPException(status_code=507, detail=detail) from error
+
+        if isinstance(error, SourceDownloadError):
+            raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
         raise HTTPException(
             status_code=500,
@@ -4931,7 +5243,7 @@ def api_process(
         )
     )
 
-    job_settings = body.model_dump(exclude_none=True)
+    job_settings = body.model_dump(exclude_none=True, exclude={"billing_token"})
     try:
         db_job = create_job(
             platform_video_id=video_id,
@@ -5031,6 +5343,8 @@ def api_process(
 
                 "settings":
                     job_settings,
+                "billing_token":
+                    body.billing_token,
             },
 
             daemon=True,
@@ -5086,7 +5400,11 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
         mode=mode,
     ) or {}
     region_data = read_json_file(job_dir_for(channel, video_id) / "subtitle_region.json") or {}
-    blur = region_data.get("blur") if isinstance(region_data, dict) else None
+    blur = (
+        region_data.get("blur")
+        if isinstance(region_data, dict) and region_data.get("blur_enabled") is not False
+        else None
+    )
     config = previous.get("config") if isinstance(previous, dict) else {}
     config = config if isinstance(config, dict) else {}
     return {
@@ -5154,6 +5472,7 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
     if "blur_region" in body.model_fields_set:
         previous_config["blur_region"] = body.blur_region
         previous_config["blur_preset"] = None
+        previous_config["disable_main_blur"] = body.blur_region is None
     if "blur_intervals" in body.model_fields_set:
         previous_config["blur_intervals"] = body.blur_intervals
         previous_config["custom_blur_region"] = None

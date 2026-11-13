@@ -53,6 +53,19 @@ export function SourcesPage() {
 
   useEffect(() => {
     if (status !== "connected" || !ready) return;
+    try {
+      const draft = JSON.parse(window.sessionStorage.getItem("reupai:guest-source-draft") || "null");
+      if (draft) {
+        const input = host.current?.querySelector("#sourceUrl");
+        const mode = host.current?.querySelector("#sourceInputMode");
+        if (input && typeof draft.url === "string" && draft.url.length < 4000 && Date.now() - draft.createdAt < 30 * 60 * 1000) {
+          input.value = draft.url;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          if (mode && ["video", "channel"].includes(draft.mode)) mode.value = draft.mode;
+        }
+        window.sessionStorage.removeItem("reupai:guest-source-draft");
+      }
+    } catch { window.sessionStorage.removeItem("reupai:guest-source-draft"); }
     let request;
     try { request = JSON.parse(window.sessionStorage.getItem(PENDING_SOURCE_KEY) || "null"); }
     catch { window.sessionStorage.removeItem(PENDING_SOURCE_KEY); return; }

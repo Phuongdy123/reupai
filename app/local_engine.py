@@ -14,6 +14,7 @@ import time
 import hashlib
 import json
 import threading
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, urlsplit, parse_qs, unquote
 from types import SimpleNamespace
@@ -31,7 +32,9 @@ os.environ.setdefault("REUP_LOCAL_ENGINE", "1")
 import uvicorn
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 
 from runtime_paths import (
     get_downloads_dir,
@@ -70,6 +73,9 @@ from web.server import (
     api_result,
     api_stream,
     preview_source_video,
+    local_source_for_process,
+    validate_channel,
+    validate_video_id,
     library_source,
     active_download_count,
 )
@@ -102,9 +108,13 @@ from services.library_api import (
 )
 
 
-ENGINE_VERSION = "0.2.44"
+from services.windows_distribution import distribution_info
+
+
+ENGINE_VERSION = "0.2.45"
 ENGINE_CAPABILITIES = {
-    "verified_updates": True,
+    "verified_updates": not distribution_info()["managedUpdates"],
+    "store_updates": distribution_info()["channel"] == "msix",
     "google_oauth_browser_fallback": True,
     "gemini_project_discovery": True,
     "gemini_project_creation": True,
@@ -113,6 +123,12 @@ ENGINE_CAPABILITIES = {
     "runtime_readiness": True,
     "gemini_google_oauth": True,
     "gemini_api_enablement": True,
+    "gemini_auto_repair": True,
+    "google_gemini_login": True,
+    "workspace_assistant": True,
+    "billing_ledger": True,
+    "source_language": True,
+    "subtitle_styles": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
 ensure_runtime_dirs()
@@ -146,6 +162,8 @@ def _allowed_origins() -> list[str]:
         "http://127.0.0.1:3001",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3010",
+        "http://127.0.0.1:3010",
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
@@ -211,10 +229,10 @@ def _issue_browser_authorization(origin: str) -> dict[str, object]:
     }
     _save_authorization_grants(grants)
 
-    # A fresh user-initiated connection replaces only sessions for this site.
-    for token, session in list(_browser_sessions.items()):
-        if session.get("client_origin") == origin:
-            _browser_sessions.pop(token, None)
+    # Keep every unexpired browser session for this origin alive.  A user may
+    # open ReupAI in several tabs (or sign in with another web account) while
+    # all pages control the same Local Engine on this machine.  Older builds
+    # revoked the first page as soon as a second page connected.
 
     return {
         "session_token": _mint_browser_session(origin),
@@ -244,6 +262,7 @@ def get_update_manager():
 
 
 app = FastAPI(title="ReupAI Local Engine", version=ENGINE_VERSION)
+
 @app.middleware("http")
 async def update_work_gate(request: Request, call_next):
     path = request.url.path
@@ -483,6 +502,7 @@ def health():
         "version": ENGINE_VERSION,
         "status": "ready",
         "capabilities": ENGINE_CAPABILITIES,
+        "distribution": get_update_manager().distribution,
     }
 
 
@@ -495,6 +515,7 @@ def status(_: bool = Depends(require_token)):
         "version": ENGINE_VERSION,
         "capabilities": ENGINE_CAPABILITIES,
         "active_jobs": len(list_active_jobs(limit=20)),
+        "distribution": get_update_manager().distribution,
         "active_downloads": active_download_count(),
         "storage": {
             "root": str(get_runtime_root()),
@@ -545,10 +566,40 @@ def diagnostics(_: bool = Depends(require_token)):
     return details
 
 
+@app.post("/api/diagnostics/whisper")
+def diagnostics_whisper(_: bool = Depends(require_token)):
+    """Probe the native speech stack in a child so a bad DLL cannot kill Engine."""
+    from services.transcriber import _ensure_native_runtime
+
+    try:
+        _ensure_native_runtime()
+    except Exception as error:
+        return {"ready": False, "message": str(error)[:600]}
+    return {"ready": True, "message": "Whisper và CTranslate2 đã nạp thành công."}
+
+
 @app.get("/api/gemini/oauth")
 def gemini_oauth_status(_: bool = Depends(require_token)):
     from services.gemini_oauth import status as oauth_status
     return oauth_status()
+
+
+@app.post("/api/assistant")
+def workspace_assistant(payload: dict, _: bool = Depends(require_token)):
+    from services.assistant_service import ask_assistant
+
+    try:
+        return ask_assistant(
+            message=payload.get("message") if isinstance(payload.get("message"), str) else "",
+            kind=payload.get("kind") if isinstance(payload.get("kind"), str) else "question",
+            mode=payload.get("mode") if isinstance(payload.get("mode"), str) else "subtitle",
+            image_data=payload.get("image_data") if isinstance(payload.get("image_data"), str) else None,
+            video_context=payload.get("video_context") if isinstance(payload.get("video_context"), dict) else None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.post("/api/gemini/oauth/start")
@@ -804,6 +855,48 @@ def source_preview(video_id: str, channel: str = "2d_animation", _: bool = Depen
     return preview_source_video(video_id=video_id, channel=channel)
 
 
+_subtitle_preview_lock = threading.Lock()
+
+
+@lru_cache(maxsize=16)
+def _detect_preview_subtitle_region(path: str, size: int, mtime_ns: int) -> dict:
+    from services.subtitle_detector import SubtitleRegionNotFound, detect_subtitle_region
+
+    with _subtitle_preview_lock:
+        try:
+            region, _ = detect_subtitle_region(path)
+        except SubtitleRegionNotFound as error:
+            raise HTTPException(
+                status_code=422,
+                detail="AI chưa xác định được phụ đề gốc. Hãy chọn vùng mờ thủ công trên video.",
+            ) from error
+    return {
+        "blur": region["blur"],
+        "video": region["video"],
+        "preview_time_seconds": region.get("detected", {}).get("preview_time_seconds", 0),
+        "confidence": region.get("detected", {}).get("confidence", 0),
+    }
+
+
+@app.get("/api/preview/subtitle-region/{video_id}")
+async def subtitle_region_preview(
+    video_id: str,
+    channel: str = "2d_animation",
+    _: bool = Depends(require_token),
+):
+    path = local_source_for_process(validate_channel(channel), validate_video_id(video_id))
+    if not path:
+        raise HTTPException(status_code=404, detail="Hãy tải video về máy trước khi xem thử vùng mờ.")
+    source = Path(path)
+    stat = source.stat()
+    return await run_in_threadpool(
+        _detect_preview_subtitle_region,
+        str(source),
+        stat.st_size,
+        stat.st_mtime_ns,
+    )
+
+
 @app.get("/library/source/{video_id}")
 def source_file(video_id: str, _: bool = Depends(require_token)):
     return library_source(video_id=video_id)
@@ -835,7 +928,20 @@ def local_request() -> Request:
 
 @app.post("/api/process")
 def process(body: ProcessRequest, _: bool = Depends(require_token)):
-    return api_process(body, local_request())
+    from services.billing import BillingUnavailable, billing_enabled, claim, finish
+
+    try:
+        enabled = billing_enabled()
+        if enabled:
+            claim(body.billing_token or "", body.video_id, body.mode)
+    except BillingUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    try:
+        return api_process(body, local_request())
+    except Exception:
+        if enabled:
+            finish(body.billing_token or "", "failed")
+        raise
 
 
 @app.get("/api/outputs/{video_id}/edit")

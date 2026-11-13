@@ -11,6 +11,9 @@ import { GeminiSetupRedirect } from "./gemini-setup-redirect";
 import { IconSprite } from "./icon-sprite";
 import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
+import { useGuestAccess } from "./guest-access";
+import { PublicStarfield } from "./public-starfield";
+import { PublicFooter } from "./public-footer";
 
 const groups = [
   ["WORKSPACE", [["/app", "home", "Trang chủ"], ["/sources", "video", "Nguồn video"]]],
@@ -35,7 +38,8 @@ const pages = {
 const labels = { checking: "Đang kiểm tra", connected: "Đã kết nối", disconnected: "Chưa kết nối", authorization_required: "Cần kết nối", authorizing: "Đang kết nối", permission_denied: "Cần cấp quyền", update_required: "Cần cập nhật", error: "Lỗi kết nối" };
 
 function StatusControl() {
-  const { status, error, check, connect, client } = useEngine();
+  const { status, error, check, connect, client, preview } = useEngine();
+  if (preview) return null;
   const busy = status === "checking" || status === "authorizing";
   const visual = status === "checking" && client.hasPersistentGrant ? "reconnecting" : status;
   return <div className="topbar-user engine-status-control">
@@ -71,7 +75,7 @@ function AccountSignOut({ menu = false }) {
       }
       window.sessionStorage.removeItem("reupai:assistant-chat-v1");
       window.sessionStorage.removeItem("reupai:assistant-pending-source");
-      window.location.replace("/sign-in");
+      window.location.replace("/app");
     } catch {
       setError("Không thể đăng xuất. Vui lòng thử lại.");
       setBusy(false);
@@ -88,6 +92,8 @@ function AccountSignOut({ menu = false }) {
 
 export function AppShell({ children }) {
   const pathname = usePathname();
+  const { isGuest, promptOpen, requestSignIn } = useGuestAccess();
+  const { preview } = useEngine();
   const [title, subtitle] = pages[pathname] || ["ReupAI", "Video workspace"];
   const [identity, setIdentity] = useState(null);
   const { account: billing } = useBilling();
@@ -101,6 +107,11 @@ export function AppShell({ children }) {
   const quickDialogRef = useRef(null);
   const quickTriggerRef = useRef(null);
   const accountMenuRef = useRef(null);
+  const loginPromptRef = useRef(promptOpen);
+  loginPromptRef.current = promptOpen;
+  useEffect(() => {
+    if (promptOpen) { setQuickOpen(false); setMobileNavOpen(false); setAccountOpen(false); }
+  }, [promptOpen]);
   useEffect(() => {
     try { setCollapsed(window.localStorage.getItem("reupai:sidebar-collapsed") === "true"); } catch {}
   }, []);
@@ -109,7 +120,7 @@ export function AppShell({ children }) {
     return !value;
   });
   useEffect(() => {
-    if (!mobileNavOpen && !quickOpen) return;
+    if (promptOpen || (!mobileNavOpen && !quickOpen)) return;
     const region = quickOpen ? quickDialogRef.current : sidebarRef.current;
     const previousFocus = quickOpen ? quickTriggerRef.current : navToggleRef.current;
     const oldOverflow = document.body.style.overflow;
@@ -127,11 +138,11 @@ export function AppShell({ children }) {
     return () => {
       document.body.style.overflow = oldOverflow;
       document.removeEventListener("keydown", trapFocus);
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (!loginPromptRef.current && previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [mobileNavOpen, quickOpen]);
+  }, [mobileNavOpen, quickOpen, promptOpen]);
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
+    if (isGuest || !isSupabaseConfigured()) return;
     let active = true;
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -145,7 +156,7 @@ export function AppShell({ children }) {
       });
     }).catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [isGuest]);
   useEffect(() => {
     const onKey = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setQuickOpen((open) => !open); }
@@ -163,16 +174,17 @@ export function AppShell({ children }) {
   }, []);
   useEffect(() => { setAccountOpen(false); setMobileNavOpen(false); }, [pathname]);
   const quickLinks = [["/app", "Trang chủ"], ["/sources", "Nguồn video"], ["/downloads", "Video đã tải"], ["/outputs", "Thành phẩm"], ["/history", "Lịch sử"], ["/profile", "Hồ sơ"], ["/plans", "Gói dịch vụ"], ["/settings", "Cài đặt"], ["/feedback", "Gửi phản hồi"]].filter(([, label]) => label.toLocaleLowerCase("vi-VN").includes(quickQuery.trim().toLocaleLowerCase("vi-VN")));
-  return <><IconSprite /><GeminiSetupRedirect /><a className="workspace-skip" href="#workspace-main">Bỏ qua điều hướng</a><div className={`app-shell premium-workspace${pathname === "/app" ? " is-dashboard" : ""}${collapsed ? " is-collapsed" : ""}${mobileNavOpen ? " is-nav-open" : ""}`}>
+  return <><IconSprite />{!preview && <GeminiSetupRedirect />}<a className="workspace-skip" href="#workspace-main">Bỏ qua điều hướng</a><div className={`app-shell premium-workspace${pathname === "/app" ? " is-dashboard" : ""}${collapsed ? " is-collapsed" : ""}${mobileNavOpen ? " is-nav-open" : ""}`}>
+    <PublicStarfield />
     {mobileNavOpen && <div className="sidebar-backdrop" aria-hidden="true" onClick={() => setMobileNavOpen(false)} />}
     <aside className="sidebar" id="workspace-sidebar" ref={sidebarRef} role={mobileNavOpen ? "dialog" : undefined} aria-modal={mobileNavOpen || undefined} aria-label="Điều hướng ReupAI">
       <button type="button" className="sidebar-mobile-close" onClick={() => setMobileNavOpen(false)} aria-label="Đóng điều hướng">×</button>
       <Link href="/app" className="brand" aria-label="ReupAI Dashboard"><span className="brand-mark"><img src="/images/reupai-logo.png" alt="" /></span><span className="brand-copy"><strong>ReupAI</strong><small>WORKSPACE</small></span></Link>
       <nav className="nav" aria-label="Điều hướng chính">{groups.map(([label, links]) => <div className="nav-group" key={label}><span className="nav-label">{label}</span>{links.map(([href, icon, text, id]) => <Link id={id} key={href} href={href} title={text} aria-label={text} onClick={() => setMobileNavOpen(false)} className={`nav-item ${pathname === href.split("?")[0] ? "active" : ""}`}><span className="nav-icon">{icon === "mail" ? <Icon name="mail" size={17} /> : <svg className="ui-icon" aria-hidden="true"><use href={`#ui-${icon}`} /></svg>}</span><span>{text}</span></Link>)}{label === "TÀI KHOẢN" && identity?.role === "admin" && <Link className="nav-item" href="/admin/users"><span className="nav-icon"><Icon name="grid" size={17} /></span><span>Quản trị tài khoản</span></Link>}{label === "TÀI KHOẢN" && identity?.role === "admin" && <Link className={`nav-item ${pathname === "/admin/feedback" ? "active" : ""}`} href="/admin/feedback"><span className="nav-icon"><Icon name="mail" size={17} /></span><span>Phản hồi khách hàng</span></Link>}</div>)}</nav>
       <button type="button" className="sidebar-collapse" onClick={toggleSidebar} aria-expanded={!collapsed} aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"} title={collapsed ? "Mở rộng" : "Thu gọn"}><Icon name="panel" size={18} /><span>Thu gọn thanh bên</span></button>
-      <div className="sidebar-user"><AccountAvatar identity={identity} className="avatar" /><div className="sidebar-user-info"><strong>{identity?.name || "Tài khoản"}</strong><small>{identity?.email || "REUPAI WORKSPACE"}</small></div><Link className="logout-icon" href="/profile" title="Hồ sơ tài khoản"><Icon name="user" size={17} /></Link></div>
+      <div className="sidebar-user"><AccountAvatar identity={identity} className="avatar" /><div className="sidebar-user-info"><strong>{identity?.name || (isGuest ? "Khách" : "Tài khoản")}</strong><small>{identity?.email || (isGuest ? "Khám phá ReupAI" : "REUPAI WORKSPACE")}</small></div><Link className="logout-icon" href="/profile" title="Hồ sơ tài khoản"><Icon name="user" size={17} /></Link></div>
     </aside>
-    <main className="main" id="workspace-main" tabIndex={-1}><header className="topbar"><div className="workspace-page-heading"><button type="button" className="sidebar-mobile-toggle" ref={navToggleRef} onClick={() => setMobileNavOpen(true)} aria-label="Mở điều hướng" aria-expanded={mobileNavOpen} aria-controls="workspace-sidebar"><Icon name="menu" size={20} /></button><div><span className="topbar-kicker">REUPAI <i /> VIDEO WORKSPACE</span><h1>{title}</h1><p>{subtitle}</p></div></div><div className="workspace-account-actions"><button type="button" className="quick-nav-trigger" ref={quickTriggerRef} onClick={() => setQuickOpen(true)}><Icon name="search" size={16} /><span>Tìm chức năng</span><kbd>Ctrl K</kbd></button><StatusControl />{billing?.plan && <Link href="/plans" className={`plan-status-badge plan-status-${billing.plan}`} title="Xem gói dịch vụ"><span aria-hidden="true">{billing.plan === "pro" ? "✦" : billing.plan === "admin" ? "♛" : "●"}</span>{billing.plan === "admin" ? "ADMIN" : billing.plan.toUpperCase()}</Link>}<div className="account-menu-wrap" ref={accountMenuRef}><button type="button" className="topbar-avatar" title="Quản lý tài khoản" aria-label="Mở menu tài khoản" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}><AccountAvatar identity={identity} /></button>{accountOpen && <div className="account-menu" role="menu"><div className="account-menu-header"><AccountAvatar identity={identity} /><div><strong>{identity?.name || "Tài khoản ReupAI"}</strong><small>{identity?.email || "Đang tải thông tin…"}</small></div></div>{billing?.plan && <Link href="/plans" className={`account-plan-current plan-status-${billing.plan}`}><span>{billing.plan === "pro" ? "✦" : billing.plan === "admin" ? "♛" : "●"}</span><span><small>GÓI ĐANG DÙNG</small><strong>{billing.plan === "admin" ? "ReupAI Admin" : billing.plan === "pro" ? "ReupAI Pro" : "ReupAI Free"}</strong></span><Icon name="chevron" size={15} /></Link>}<div className="account-menu-links"><Link href="/profile" role="menuitem"><Icon name="user" size={17} /><span>Quản lý tài khoản</span></Link><Link href="/plans" role="menuitem"><Icon name="spark" size={17} /><span>Gói dịch vụ</span></Link><Link href="/settings" role="menuitem"><Icon name="settings" size={17} /><span>Cài đặt</span></Link><Link href="/help" role="menuitem"><Icon name="check" size={17} /><span>Trợ giúp</span></Link><Link href="/feedback" role="menuitem"><Icon name="mail" size={17} /><span>Gửi phản hồi</span></Link>{identity?.role === "admin" && <Link href="/admin/feedback" role="menuitem"><Icon name="mail" size={17} /><span>Phản hồi khách hàng</span></Link>}</div><AccountSignOut menu /></div>}</div></div></header><EngineUpdateNotice /><section className="page-content">{children}<footer className="workspace-footer"><span>© ReupAI · AI Video Workspace</span><nav><Link href="/plans">Gói dịch vụ</Link><Link href="/help">Trợ giúp</Link><Link href="/feedback">Gửi phản hồi</Link><Link href="/privacy">Quyền riêng tư</Link><Link href="/terms">Điều khoản</Link></nav></footer></section></main>
+    <main className="main" id="workspace-main" tabIndex={-1}><header className="topbar"><div className="workspace-page-heading"><button type="button" className="sidebar-mobile-toggle" ref={navToggleRef} onClick={() => setMobileNavOpen(true)} aria-label="Mở điều hướng" aria-expanded={mobileNavOpen} aria-controls="workspace-sidebar"><Icon name="menu" size={20} /></button><div><span className="topbar-kicker">REUPAI <i /> VIDEO WORKSPACE</span><h1>{title}</h1><p>{subtitle}</p></div></div><div className="workspace-account-actions"><button type="button" className="quick-nav-trigger" ref={quickTriggerRef} onClick={() => setQuickOpen(true)}><Icon name="search" size={16} /><span>Tìm chức năng</span><kbd>Ctrl K</kbd></button><StatusControl />{billing?.plan && <Link href="/plans" className={`plan-status-badge plan-status-${billing.plan}`} title="Xem gói dịch vụ"><span aria-hidden="true">{billing.plan === "pro" ? "✦" : billing.plan === "admin" ? "♛" : "●"}</span>{billing.plan === "admin" ? "ADMIN" : billing.plan.toUpperCase()}</Link>}{isGuest ? <button className="workspace-guest-signin" type="button" onClick={() => requestSignIn()}><Icon name="user" size={16} />Đăng nhập</button> : <div className="account-menu-wrap" ref={accountMenuRef}><button type="button" className="topbar-avatar" title="Quản lý tài khoản" aria-label="Mở menu tài khoản" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}><AccountAvatar identity={identity} /></button>{accountOpen && <div className="account-menu" role="menu"><div className="account-menu-header"><AccountAvatar identity={identity} /><div><strong>{identity?.name || "Tài khoản ReupAI"}</strong><small>{identity?.email || "Đang tải thông tin…"}</small></div></div>{billing?.plan && <Link href="/plans" className={`account-plan-current plan-status-${billing.plan}`}><span>{billing.plan === "pro" ? "✦" : billing.plan === "admin" ? "♛" : "●"}</span><span><small>GÓI ĐANG DÙNG</small><strong>{billing.plan === "admin" ? "ReupAI Admin" : billing.plan === "pro" ? "ReupAI Pro" : "ReupAI Free"}</strong></span><Icon name="chevron" size={15} /></Link>}<div className="account-menu-links"><Link href="/profile" role="menuitem"><Icon name="user" size={17} /><span>Quản lý tài khoản</span></Link><Link href="/plans" role="menuitem"><Icon name="spark" size={17} /><span>Gói dịch vụ</span></Link><Link href="/settings" role="menuitem"><Icon name="settings" size={17} /><span>Cài đặt</span></Link><Link href="/help" role="menuitem"><Icon name="check" size={17} /><span>Trợ giúp</span></Link><Link href="/feedback" role="menuitem"><Icon name="mail" size={17} /><span>Gửi phản hồi</span></Link>{identity?.role === "admin" && <Link href="/admin/feedback" role="menuitem"><Icon name="mail" size={17} /><span>Phản hồi khách hàng</span></Link>}</div><AccountSignOut menu /></div>}</div>}</div></header>{!preview && <EngineUpdateNotice />}<section className="page-content">{children}<PublicFooter variant="workspace" /></section></main>
     {quickOpen && <div className="quick-nav-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setQuickOpen(false); }}><div className="quick-nav-dialog" ref={quickDialogRef} role="dialog" aria-modal="true" aria-label="Tìm chức năng"><input autoFocus placeholder="Tìm chức năng ReupAI…" value={quickQuery} onChange={(event) => setQuickQuery(event.target.value)} /><div>{quickLinks.length ? quickLinks.map(([href, label]) => <Link key={href} href={href} onClick={() => { setQuickOpen(false); setQuickQuery(""); }}>{label}<span>↗</span></Link>) : <p>Không tìm thấy chức năng.</p>}</div><small>Esc để đóng</small></div></div>}
   </div></>;
 }

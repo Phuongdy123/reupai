@@ -1,0 +1,18 @@
+.guest-workspace { min-height: 100svh; }
+.theme-xports .workspace-guest-signin { display: inline-flex; min-height: 35px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #dddde3; border-radius: 999px; padding: 0 15px; color: #151518; background: #e9e9ee; font: inherit; font-size: 11px; font-weight: 550; cursor: pointer; white-space: nowrap; }
+.theme-xports .workspace-guest-signin:hover { background: #fff; }
+.guest-auth-backdrop { position: fixed; z-index: 12000; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 22px; background: #000b; backdrop-filter: blur(5px); }
+.guest-auth-dialog { position: relative; width: min(390px,100%); border: 1px solid #3c3c43; border-radius: 22px; padding: 34px 30px 25px; color: #ededf2; background: radial-gradient(circle at 50% 0%,#ffffff06,transparent 70%),#131315; box-shadow: 0 30px 100px #0008; }
+.guest-auth-close { position: absolute; top: 12px; right: 12px; display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #313136; border-radius: 50%; color: #9898a3; background: #1a1a1d; font-size: 20px; line-height: 1; cursor: pointer; }
+.guest-auth-close:hover { color: #fff; border-color: #686871; }
+.guest-auth-mark { display: grid; width: 57px; height: 57px; place-items: center; margin-bottom: 24px; border: 1px solid #4a4a53; border-radius: 50%; color: #d8d8df; background: linear-gradient(135deg,#333338,#19191d); box-shadow: 0 0 0 7px #ffffff03,inset 0 1px #ffffff0a; }
+.guest-auth-eyebrow { margin: 0 0 10px; color: #797984; font-size: 8px; letter-spacing: .12em; }
+.guest-auth-dialog h2 { margin: 0; color: #f1f1f5; font-size: 25px; font-weight: 550; letter-spacing: -.045em; }
+.guest-auth-dialog #guest-auth-description { margin: 12px 0 24px; color: #9999a4; font-size: 12px; line-height: 1.7; }
+.guest-auth-primary,.guest-auth-secondary { display: flex; min-height: 41px; align-items: center; justify-content: center; gap: 12px; border: 1px solid #e8e8ed; border-radius: 999px; color: #17171b; background: #e8e8ed; text-decoration: none; font-size: 12px; font-weight: 550; }
+.guest-auth-primary:hover { color: #09090b; background: #fff; }
+.guest-auth-secondary { margin-top: 9px; border-color: #39393f; color: #c0c0ca; background: #1b1b1f; }
+.guest-auth-secondary:hover { border-color: #62626c; background: #25252b; }
+.guest-auth-explore { display: block; min-height: 35px; margin: 16px auto 0; border: 0; padding: 0 10px; color: #7f7f8b; background: transparent; font: inherit; font-size: 11px; cursor: pointer; }
+.guest-auth-explore:hover { color: #d5d5df; }
+@media (max-width: 520px) { .guest-auth-backdrop { padding: 16px; }.guest-auth-dialog { border-radius: 19px; padding: 30px 24px 22px; }.theme-xports .workspace-guest-signin { min-height: 36px; padding-inline: 12px; }.guest-auth-dialog h2 { font-size: 24px; } }

@@ -6,8 +6,8 @@
 @import "../src/styles/account.css";
 @import "../src/styles/mobile-responsive.css";
 @import "../src/styles/landing.css";
-@import "../src/styles/auth.css";
-@import "../src/styles/interaction-polish.css";
+
+
 @import "../src/styles/process-config-polish.css";
 @import "../src/styles/workspace-account.css";
 @import "../src/styles/workspace-assistant.css";
@@ -15,8 +15,19 @@
 @import "../src/styles/dashboard-polish.css";
 @import "../src/styles/profile.css";
 @import "../src/styles/account-navigation.css";
-@import "../src/styles/scroll-performance.css";
+
 @import "../src/styles/seo-guides.css";
 @import "../src/styles/public-footer.css";
 @import "../src/styles/workspace-shell-polish.css";
 @import "../src/styles/customer-feedback.css";
+@import "../src/styles/linear-monochrome-draft.css";
+@import "../src/styles/landing-orbits.css";
+@import "../src/styles/auth.css";
+@import "../src/styles/public-starfield.css";
+@import "../src/styles/guest-access.css";
+@import "../src/styles/dashboard-circles.css";
+@import "../src/styles/guest-browse.css";
+@import "../src/styles/monochrome-text.css";
+@import "../src/styles/scroll-performance.css";
+@import "../src/styles/interaction-polish.css";
+@import "../src/styles/click-burst.css";

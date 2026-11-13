@@ -6,6 +6,16 @@ import { isSupabaseConfigured } from '../lib/supabase/config';
 
 const BillingContext = createContext(null);
 
+const guestSnapshot = { account: null, error: null, refreshing: false };
+const guestStore = {
+  subscribe: () => () => {}, getSnapshot: () => guestSnapshot, getServerSnapshot: () => guestSnapshot,
+  load: async () => null,
+};
+
+export function BillingGuestProvider({ children }) {
+  return <BillingContext.Provider value={guestStore}>{children}</BillingContext.Provider>;
+}
+
 export function BillingProvider({ children }) {
   const [store] = useState(() => createBillingStore());
   useEffect(() => {

@@ -1,7 +1,14 @@
-import os
-from functools import lru_cache
+from __future__ import annotations
 
-from faster_whisper import WhisperModel
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import wave
+from functools import lru_cache
+from pathlib import Path
+from typing import Callable
 
 
 # =========================
@@ -22,6 +29,9 @@ def _positive_int(name: str, default: int) -> int:
 
 WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 3)
 _CUDA_DISABLED_FOR_SESSION = False
+_LONG_AUDIO_THRESHOLD_SECONDS = 60 * 60
+_CHUNK_SECONDS = 10 * 60
+_CHUNK_OVERLAP_SECONDS = 2
 
 
 def _cpu_threads() -> int:
@@ -32,8 +42,70 @@ def _cpu_threads() -> int:
     return min(8, max(4, (os.cpu_count() or 4) - 2))
 
 
-def _create_model() -> WhisperModel:
+@lru_cache(maxsize=1)
+def _ensure_native_runtime() -> None:
+    """Keep a broken native import from terminating the video job process."""
+    with tempfile.TemporaryDirectory(prefix="reupai-whisper-check-") as scratch:
+        report_path = Path(scratch) / "result.json"
+        if getattr(sys, "frozen", False):
+            command = [sys.executable, "--check-whisper", str(report_path)]
+        else:
+            command = [
+                sys.executable, "-c",
+                "import ctranslate2; from faster_whisper import WhisperModel",
+            ]
+        try:
+            completed = subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=90,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise RuntimeError(
+                "Không thể kiểm tra thư viện nhận diện giọng nói Whisper trên máy này. "
+                f"Chi tiết: {type(error).__name__}: {error}"
+            ) from error
+        if completed.returncode == 0:
+            return
+        detail = ""
+        if report_path.is_file():
+            try:
+                report = json.loads(report_path.read_text(encoding="utf-8"))
+                detail = str(report.get("error", ""))[:320]
+            except (OSError, ValueError):
+                pass
+        if not detail:
+            detail = (completed.stderr or "").strip()[-320:]
+        if not detail:
+            detail = f"tiến trình kiểm tra dừng với mã {completed.returncode}"
+        raise RuntimeError(
+            "Whisper/CTranslate2 không nạp được thư viện hệ thống. "
+            "Hãy cài lại bản ReupAI đầy đủ và gửi nhật ký nếu lỗi tiếp diễn. "
+            f"Chi tiết: {detail}"
+        )
+
+
+@lru_cache(maxsize=1)
+def _whisper_model_class():
+    _ensure_native_runtime()
+    try:
+        from faster_whisper import WhisperModel
+    except (ImportError, OSError) as error:
+        raise RuntimeError(
+            "Whisper/CTranslate2 không nạp được sau bước kiểm tra độc lập. "
+            f"Chi tiết: {type(error).__name__}: {error}"
+        ) from error
+    return WhisperModel
+
+
+def _create_model():
     """Prefer CUDA when its libraries are usable, then safely fall back to CPU."""
+    WhisperModel = _whisper_model_class()
     if _CUDA_DISABLED_FOR_SESSION:
         return _cpu_model()
     cpu_options = {
@@ -67,15 +139,15 @@ def _create_model() -> WhisperModel:
 
 
 @lru_cache(maxsize=1)
-def _model() -> WhisperModel:
+def _model():
     # Delay the model load until a transcription job actually needs it. This
     # keeps the local engine responsive and lets Gemini preflight fail fast.
     return _create_model()
 
 
 @lru_cache(maxsize=1)
-def _cpu_model() -> WhisperModel:
-    return WhisperModel(
+def _cpu_model():
+    return _whisper_model_class()(
         WHISPER_MODEL,
         device="cpu",
         compute_type="int8",
@@ -88,39 +160,127 @@ def _is_cuda_runtime_error(error: Exception) -> bool:
     value = str(error).lower()
     return any(token in value for token in (
         "cublas", "cudnn", "cudart", "cuda driver", "cuda error",
-        "cannot be loaded", "not found",
+        "libcuda", "nvidia driver", "no cuda",
     ))
 
 
-def _run_transcription(model: WhisperModel, audio_path: str):
+def _run_transcription(model, audio, language: str | None = None):
     """Materialize segments while the CUDA fallback guard is still active."""
-    segments, info = model.transcribe(
-        audio_path,
-        beam_size=WHISPER_BEAM_SIZE,
-    )
+    options = {"beam_size": WHISPER_BEAM_SIZE}
+    if language:
+        options["language"] = language
+    segments, info = model.transcribe(audio, **options)
     return list(segments), info
+
+
+def _transcribe_once(audio, language: str | None = None):
+    global _CUDA_DISABLED_FOR_SESSION
+    model = _model()
+    try:
+        return _run_transcription(model, audio, language)
+    except Exception as error:
+        # CUDA can fail only when the first audio window is decoded. Retry that
+        # window on CPU; already completed long-audio windows are retained.
+        if WHISPER_DEVICE not in {"auto", "cuda", "gpu"} or not _is_cuda_runtime_error(error):
+            raise
+        print(f"Whisper CUDA loi ({error}); chuyen sang CPU toi uu.")
+        _CUDA_DISABLED_FOR_SESSION = True
+        _model.cache_clear()
+        return _run_transcription(_cpu_model(), audio, language)
+
+
+def _chunkable_wav_duration(audio_path: str) -> float | None:
+    """Return a duration only for the PCM format produced by the pipeline."""
+    try:
+        with wave.open(audio_path, "rb") as source:
+            if (source.getnchannels(), source.getsampwidth(), source.getframerate(), source.getcomptype()) != (1, 2, 16000, "NONE"):
+                return None
+            return source.getnframes() / 16000
+    except (OSError, EOFError, wave.Error):
+        return None
+
+
+def _transcribe_long_wav(
+    audio_path: str,
+    duration: float,
+    on_progress: Callable[[float, float], None] | None,
+    source_language: str | None = None,
+) -> list[dict]:
+    """Bound decode memory by transcribing ten-minute audio windows."""
+    import numpy as np
+
+    chunk_frames = _CHUNK_SECONDS * 16000
+    overlap_frames = _CHUNK_OVERLAP_SECONDS * 16000
+    results: list[dict] = []
+    language: str | None = source_language
+    with wave.open(audio_path, "rb") as source:
+        total_frames = source.getnframes()
+        for core_start in range(0, total_frames, chunk_frames):
+            core_end = min(total_frames, core_start + chunk_frames)
+            read_start = max(0, core_start - overlap_frames)
+            read_end = min(total_frames, core_end + overlap_frames)
+            source.setpos(read_start)
+            raw = source.readframes(read_end - read_start)
+            if len(raw) != (read_end - read_start) * 2:
+                raise RuntimeError("Không đọc đủ dữ liệu âm thanh cho Whisper.")
+            pcm = np.frombuffer(raw, dtype="<i2")
+            processed = core_end / 16000
+            if not np.any(pcm):
+                print(f"Whisper: {processed:.0f}/{duration:.0f} giay; bo qua khoang im lang")
+                if on_progress:
+                    on_progress(processed, duration)
+                continue
+            audio = pcm.astype(np.float32) / 32768.0
+            segments, info = _transcribe_once(audio, language)
+            if not language and segments and (getattr(info, "language_probability", 0) or 0) >= 0.6:
+                language = info.language
+            read_offset = read_start / 16000
+            floor = core_start / 16000
+            ceiling = core_end / 16000
+            for segment in segments:
+                start = read_offset + segment.start
+                end = read_offset + segment.end
+                midpoint = (start + end) / 2
+                # Assign overlapping speech to exactly one core window.
+                if not floor <= midpoint < ceiling:
+                    continue
+                text = segment.text.strip()
+                if not text:
+                    continue
+                start = max(0.0, min(duration, start))
+                if results:
+                    start = max(start, results[-1]["end"])
+                end = min(duration, end)
+                if end <= start:
+                    continue
+                results.append({"start": start, "end": end, "text": text})
+            print(f"Whisper: {processed:.0f}/{duration:.0f} giay; {len(results)} doan loi thoai")
+            if on_progress:
+                on_progress(processed, duration)
+    return results
 
 
 # =========================
 # TRANSCRIBE AUDIO
 # =========================
 
-def transcribe(audio_path: str):
-    global _CUDA_DISABLED_FOR_SESSION
+def transcribe(
+    audio_path: str,
+    *,
+    on_progress: Callable[[float, float], None] | None = None,
+    language: str | None = None,
+):
     print("Dang nhan dien audio...")
 
-    try:
-        segments, info = _run_transcription(_model(), audio_path)
-    except Exception as error:
-        # On some PCs CTranslate2 creates a CUDA model successfully and only
-        # discovers a missing cublas DLL during the first transcription.
-        # Automatically retry once on CPU so the video job can continue.
-        if WHISPER_DEVICE not in {"auto", "cuda", "gpu"} or not _is_cuda_runtime_error(error):
-            raise
-        print(f"Whisper CUDA loi ({error}); chuyen sang CPU toi uu.")
-        _CUDA_DISABLED_FOR_SESSION = True
-        _model.cache_clear()
-        segments, info = _run_transcription(_cpu_model(), audio_path)
+    duration = _chunkable_wav_duration(audio_path)
+    if duration is not None and duration > _LONG_AUDIO_THRESHOLD_SECONDS:
+        return _transcribe_long_wav(audio_path, duration, on_progress, language)
+
+    segments, info = _transcribe_once(audio_path, language)
+    if on_progress:
+        total = duration or getattr(info, "duration", 0) or 0
+        if total > 0:
+            on_progress(total, total)
 
     print(f"Language detected: {info.language}")
     print(
