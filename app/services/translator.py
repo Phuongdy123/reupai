@@ -307,7 +307,7 @@ WAIT_TIMES = [
     10,
 ]
 
-# Local fallback: NLLB Trung -> Viet.
+# Local fallback uses a Chinese source model, so only enable it for explicit Chinese input.
 # Model chi duoc load khi tat ca Gemini deu that bai / het quota.
 LOCAL_FALLBACK_ENABLED = (
     os.getenv(
@@ -548,7 +548,15 @@ def build_prompt(
         else "Khong co. Day la doan dau."
     )
 
-    source_name = {"auto": "ngôn ngữ được tự động nhận diện", "zh": "tiếng Trung", "en": "tiếng Anh", "ja": "tiếng Nhật", "vi": "tiếng Việt"}.get(SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
+    source_name = {
+        "auto": "ngôn ngữ được tự động nhận diện",
+        "zh": "tiếng Trung", "en": "tiếng Anh", "ja": "tiếng Nhật",
+        "ko": "tiếng Hàn", "th": "tiếng Thái", "id": "tiếng Indonesia",
+        "es": "tiếng Tây Ban Nha", "pt": "tiếng Bồ Đào Nha", "fr": "tiếng Pháp",
+        "de": "tiếng Đức", "ru": "tiếng Nga", "it": "tiếng Ý", "hi": "tiếng Hindi",
+        "ar": "tiếng Ả Rập", "tr": "tiếng Thổ Nhĩ Kỳ", "ms": "tiếng Mã Lai",
+        "vi": "tiếng Việt",
+    }.get(SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
     return f"""
 Bạn là biên dịch viên dịch sang tiếng Việt.
 
@@ -1218,7 +1226,7 @@ def translate_batch(
                 )
                 break
 
-    if LOCAL_FALLBACK_ENABLED and SOURCE_LANGUAGE in {"auto", "zh"}:
+    if LOCAL_FALLBACK_ENABLED and SOURCE_LANGUAGE == "zh":
         print(
             "\nTat ca Gemini hien tai deu khong dung duoc."
         )
@@ -1658,7 +1666,7 @@ if __name__ == "__main__":
     )
 
     print(
-        "BAT DAU DICH TRUNG -> VIET"
+        "BAT DAU DICH LOI THOAI -> TIENG VIET"
     )
 
     print(

@@ -46,14 +46,13 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <button type="button" class="btn secondary process-pick-btn" data-pick-mode="custom">${uiIcon('blur', 16)} Vùng mờ tùy chỉnh</button>
                 <button type="button" class="btn secondary process-pick-btn" data-pick-mode="logo">${uiIcon('sparkles', 16)} Vị trí logo</button>
                 <button type="button" class="btn secondary" id="toggleProcessPicker" aria-pressed="false">${uiIcon('pointer', 16)} Bật kéo vùng</button>
-                <button type="button" class="btn secondary" id="undoProcessConfig">${uiIcon('undo', 16)} Hoàn tác</button>
                 <small id="processPickerHint">Chọn loại vùng trước, sau đó bấm “Bật kéo vùng” nếu muốn kéo trên video.</small>
                 <small id="processAutoBlurStatus" role="status"></small>
             </div>
 
             <div class="process-settings-layout">
             <section class="process-settings-card">
-                <div class="process-section-heading"><strong>Phụ đề &amp; nhận diện</strong><small>Ngôn ngữ, kiểu chữ và khung hình</small></div>
+                <div class="process-section-heading"><strong>Phụ đề tiếng Việt</strong><small>Nhận diện lời thoại từ audio gốc, không cần phụ đề có sẵn</small></div>
                 <div class="process-config-grid">
                 <label>Thời lượng xem trước
                     <select id="processPreviewSeconds">
@@ -72,14 +71,28 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <option value="tiktok">TikTok · 9:16</option>
                     </select>
                 </label>
-                <label>Ngôn ngữ video nguồn
+                <label>Ngôn ngữ lời thoại
                     <select id="processSourceLanguage">
                         <option value="auto">Tự động nhận diện (khuyên dùng)</option>
-                        <option value="vi">Tiếng Việt</option>
                         <option value="zh">Tiếng Trung</option>
                         <option value="en">Tiếng Anh</option>
                         <option value="ja">Tiếng Nhật</option>
+                        <option value="ko">Tiếng Hàn</option>
+                        <option value="th">Tiếng Thái</option>
+                        <option value="id">Tiếng Indonesia</option>
+                        <option value="es">Tiếng Tây Ban Nha</option>
+                        <option value="pt">Tiếng Bồ Đào Nha</option>
+                        <option value="fr">Tiếng Pháp</option>
+                        <option value="de">Tiếng Đức</option>
+                        <option value="ru">Tiếng Nga</option>
+                        <option value="it">Tiếng Ý</option>
+                        <option value="hi">Tiếng Hindi</option>
+                        <option value="ar">Tiếng Ả Rập</option>
+                        <option value="tr">Tiếng Thổ Nhĩ Kỳ</option>
+                        <option value="ms">Tiếng Mã Lai</option>
+                        <option value="vi">Tiếng Việt</option>
                     </select>
+                    <small>Whisper nghe audio gốc rồi tạo phụ đề tiếng Việt; chữ phụ đề in trên hình không ảnh hưởng.</small>
                 </label>
                 <label>Cỡ chữ phụ đề
                     <select id="processFontSize">

@@ -1607,7 +1607,7 @@ def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False, on_progre
 
 
 
-        print("\n[SKIP] Chinese SRT da ton tai:")
+        print("\n[SKIP] Phu de da ton tai:")
 
 
 
@@ -1781,7 +1781,7 @@ def translate_srt(
 
     if not file_ok(chinese_srt) or not chinese_srt.read_text(encoding="utf-8").strip():
         vietnamese_srt.write_text("", encoding="utf-8")
-        print("\n[SKIP] Chinese SRT rong, bo qua dich.")
+        print("\n[SKIP] Transcript rong, bo qua dich.")
         return
 
 
@@ -1794,7 +1794,7 @@ def translate_srt(
 
 
 
-    print("4. GEMINI AI: TRUNG -> VIET")
+    print("4. GEMINI AI: LOI THOAI -> TIENG VIET")
 
 
 
@@ -1886,7 +1886,7 @@ def translate_srt(
 
 
 
-        raise RuntimeError("Chinese SRT rong.")
+        raise RuntimeError("Transcript phụ đề rỗng.")
 
 
 
@@ -3724,7 +3724,7 @@ def pipeline(
 
             message=(
                 "Không có lời thoại, bỏ qua bước dịch."
-                if no_speech else "Dang dich Trung -> Viet bang Gemini AI."
+                if no_speech else "Đang dịch lời thoại sang tiếng Việt bằng Gemini AI."
             ),
 
 

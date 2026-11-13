@@ -49,6 +49,7 @@ export function ClickBurst() {
     if (!canvas || !context) return;
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const coarsePointer = window.matchMedia("(pointer: coarse)").matches;
     let width = 0;
     let height = 0;
     let pixelRatio = 1;
@@ -58,7 +59,7 @@ export function ClickBurst() {
     let rings = [];
 
     function resize() {
-      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1 : 1.5);
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.round(width * pixelRatio);
@@ -99,7 +100,7 @@ export function ClickBurst() {
         context.rotate(particle.rotation);
         context.globalAlpha = fade;
         context.shadowColor = particle.color;
-        context.shadowBlur = particle.type === "gem" ? 9 : 13;
+        context.shadowBlur = coarsePointer ? 0 : particle.type === "gem" ? 5 : 7;
         if (particle.type === "gem") drawGem(context, particle.size, particle.color);
         else {
           context.fillStyle = particle.color;
@@ -118,10 +119,10 @@ export function ClickBurst() {
 
       const x = event.clientX;
       const y = event.clientY;
-      const count = window.matchMedia("(pointer: coarse)").matches ? 8 : 12;
+      const count = coarsePointer ? 5 : 12;
       const colors = ["#f5f2ff", "#d9dfff", "#c5b8ff", "#b7dcff", "#fff0c2"];
       const now = performance.now();
-      rings.push({ x, y, born: now });
+      if (!coarsePointer) rings.push({ x, y, born: now });
 
       for (let index = 0; index < count; index += 1) {
         const angle = (Math.PI * 2 * index) / count + (Math.random() - 0.5) * 0.28;
@@ -132,8 +133,8 @@ export function ClickBurst() {
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           born: now,
-          life: 460 + Math.random() * 260,
-          size: 3 + Math.random() * 3.5,
+          life: coarsePointer ? 260 + Math.random() * 100 : 460 + Math.random() * 260,
+          size: coarsePointer ? 2.5 + Math.random() * 2 : 3 + Math.random() * 3.5,
           rotation: Math.random() * Math.PI,
           spin: (Math.random() - 0.5) * 0.009,
           color: colors[Math.floor(Math.random() * colors.length)],

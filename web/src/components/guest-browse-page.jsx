@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useGuestAccess } from "./guest-access";
 import { Icon } from "./icon";
 
@@ -26,6 +26,10 @@ export function GuestBrowsePage({ page = "sources" }) {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState("video");
   const [status, setStatus] = useState("all");
+  const [previewError, setPreviewError] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLabel, setPreviewLabel] = useState("Mẫu giao diện");
+  const previewQueryHandled = useRef(false);
   const isSource = page === "sources";
   const config = pages[page] || pages.downloads;
   const hasQuery = query.trim().length > 0;
@@ -50,6 +54,45 @@ export function GuestBrowsePage({ page = "sources" }) {
     requestSignIn({ next: "/sources", reason: follow ? "Đăng nhập để theo dõi nguồn và lưu cập nhật vào tài khoản của bạn." : "Đăng nhập để đồng bộ nguồn video và bắt đầu xử lý nội dung của bạn." });
   }
 
+  const openGuestProcessPreview = useCallback((candidateUrl = url) => {
+    setPreviewError("");
+    const requestedUrl = String(candidateUrl || "").trim();
+    let sourceLabel = "Mẫu giao diện";
+    if (requestedUrl) {
+      let source;
+      try { source = new URL(requestedUrl); }
+      catch { setPreviewError("Link chưa đúng định dạng. Bạn vẫn có thể mở xem trước mẫu khi để trống ô link."); return false; }
+      if (!/^https?:$/.test(source.protocol) || !/(^|\.)bilibili\.com$|(^|\.)douyin\.com$/.test(source.hostname)) {
+        setPreviewError("Bản xem trước hiện hỗ trợ link Bilibili hoặc Douyin. Để trống ô link để xem mẫu giao diện.");
+        return false;
+      }
+      const videoId = source.pathname.match(/\bBV[a-zA-Z0-9]+\b/)?.[0]
+        || source.pathname.match(/\/video\/(\d+)/)?.[1]
+        || source.pathname.match(/\/(\d{8,})\/?$/)?.[1];
+      sourceLabel = videoId || source.hostname;
+    }
+    setPreviewLabel(sourceLabel);
+    setPreviewOpen(true);
+    return true;
+  }, [url]);
+
+  useEffect(() => {
+    if (!isSource || previewQueryHandled.current) return;
+    const query = new URLSearchParams(window.location.search);
+    const previewUrl = query.get("preview");
+    if (!previewUrl) return;
+    previewQueryHandled.current = true;
+    setUrl(previewUrl);
+    const opened = openGuestProcessPreview(previewUrl);
+    if (opened) {
+      try { window.sessionStorage.setItem(SOURCE_DRAFT_KEY, JSON.stringify({ url: previewUrl, mode: "video", createdAt: Date.now() })); } catch {}
+      query.delete("preview");
+      const queryString = query.toString();
+      const cleanUrl = `${window.location.pathname}${queryString ? `?${queryString}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", cleanUrl);
+    }
+  }, [isSource, openGuestProcessPreview]);
+
   function requestLibrary(action = false) {
     requestSignIn({ next: action ? config.actionNext : `/${page}`, reason: action ? `Đăng nhập để ${config.action.toLocaleLowerCase("vi-VN")} và lưu công việc của bạn.` : "Đăng nhập để mở dữ liệu riêng trong thư viện của bạn." });
   }
@@ -64,9 +107,12 @@ export function GuestBrowsePage({ page = "sources" }) {
 
     {isSource && <form className="guest-source-form" onSubmit={requestSource}>
       <div className="guest-source-label"><span className="guest-source-mark"><Icon name="source" size={17} /></span><div><label htmlFor="guest-source-url">Thêm nguồn video</label><p>Một video hoặc cả kênh, theo cách của bạn.</p></div></div>
-      <div className="guest-source-controls"><div className="guest-source-input"><Icon name="external" size={16} /><input id="guest-source-url" type="text" inputMode="url" autoComplete="url" spellCheck={false} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="Dán link video hoặc kênh Bilibili / Douyin…" aria-label="Link nguồn video hoặc kênh" /></div><select value={mode} onChange={(event) => setMode(event.target.value)} aria-label="Loại nguồn"><option value="video">Một video</option><option value="channel">Cả kênh</option></select><button className="guest-source-sync" type="submit"><Icon name="refresh" size={14} />Đồng bộ nguồn</button><button className="guest-source-follow" type="button" onClick={(event) => requestSource(event, true)}><Icon name="plus" size={14} />Theo dõi</button></div>
-      <p className="guest-source-caption"><span />Bạn có thể khám phá giao diện trước. Đồng bộ nguồn cần đăng nhập.</p>
+      <div className="guest-source-controls"><div className="guest-source-input"><Icon name="external" size={16} /><input id="guest-source-url" type="text" inputMode="url" autoComplete="url" spellCheck={false} value={url} onChange={(event) => { setUrl(event.target.value); try { window.sessionStorage.setItem(SOURCE_DRAFT_KEY, JSON.stringify({ url: event.target.value, mode, createdAt: Date.now() })); } catch {} }} placeholder="Dán link video hoặc kênh Bilibili / Douyin…" aria-label="Link nguồn video hoặc kênh" /></div><select value={mode} onChange={(event) => { setMode(event.target.value); try { window.sessionStorage.setItem(SOURCE_DRAFT_KEY, JSON.stringify({ url, mode: event.target.value, createdAt: Date.now() })); } catch {} }} aria-label="Loại nguồn"><option value="video">Một video</option><option value="channel">Cả kênh</option></select><button className="guest-source-sync" type="submit"><Icon name="refresh" size={14} />Đồng bộ nguồn</button><button className="guest-source-follow" type="button" onClick={(event) => requestSource(event, true)}><Icon name="plus" size={14} />Theo dõi</button></div>
+      <div className="guest-source-preview-row"><button className="guest-source-preview" type="button" onClick={() => openGuestProcessPreview(document.getElementById("guest-source-url")?.value || url)}><Icon name="spark" size={14} />Xem trước bảng thiết lập</button><p className="guest-source-caption"><span />Không cần đăng nhập để xem giao diện. Đồng bộ và xử lý video cần đăng nhập.</p></div>
+      {previewError && <p className="guest-source-preview-error" role="alert">{previewError}</p>}
     </form>}
+
+    {isSource && previewOpen && <div className="guest-preview-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}><section className="guest-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="guest-preview-title"><header className="guest-preview-header"><div><p>CHỈ XEM TRƯỚC · KHÔNG CẦN ĐĂNG NHẬP</p><h2 id="guest-preview-title">Thiết lập Video</h2><span>Vietsub + Voice · Tùy chỉnh thông số trước khi xử lý</span></div><button type="button" aria-label="Đóng xem trước" onClick={() => setPreviewOpen(false)}>×</button></header><div className="guest-preview-notice">Mẫu giao diện · {previewLabel} · Các lựa chọn bên dưới chỉ để xem, không tải video hay chạy xử lý.</div><div className="guest-preview-showcase"><div className="guest-preview-player"><div className="guest-preview-orbit"><Icon name="play" size={24} /></div><strong>Video chưa được tải</strong><span>Bản xem trước giao diện không phát hoặc tải video.</span><button type="button" disabled>↓&nbsp; Tải video để xem trước</button></div><aside className="guest-preview-info"><h3>▣&nbsp; Thông tin video</h3><dl><div><dt>Tên video</dt><dd>{previewLabel}</dd></div><div><dt>Thời lượng</dt><dd>Chưa đồng bộ</dd></div><div><dt>Độ phân giải</dt><dd>Chưa đồng bộ</dd></div><div><dt>Tỷ lệ khung hình</dt><dd>Chưa đồng bộ</dd></div><div><dt>Trạng thái</dt><dd>Chỉ xem trước</dd></div></dl></aside></div><div className="guest-preview-tools"><strong>Công cụ nhanh</strong>{["Vùng mờ phụ đề", "AI dò vùng mờ", "Vùng mờ tùy chỉnh", "Vị trí logo"].map((label) => <button type="button" disabled key={label}>{label}</button>)}</div><div className="guest-preview-settings"><section><h3>Thiết lập video</h3><label>Thời lượng xem trước<select disabled><option>Toàn bộ video</option></select></label><label>Ngôn ngữ video nguồn<select disabled><option>Tự động nhận diện</option></select></label><label>Phong cách phụ đề<select disabled><option>Minimal Clean</option></select></label></section><section><h3>Thiết lập giọng đọc</h3><label>Giọng lồng tiếng<select disabled><option>Giọng mặc định</option></select></label><label>Âm lượng lồng tiếng<input type="range" disabled value="100" readOnly /></label><label>Tốc độ lồng tiếng<input type="range" disabled value="55" readOnly /></label></section></div><footer className="guest-preview-footer"><span>Đăng nhập và đồng bộ nguồn để dùng các tùy chọn này.</span><div><button type="button" onClick={() => setPreviewOpen(false)}>Đóng</button><button type="button" disabled>Chỉ xem trước</button></div></footer></section></div>}
 
     <section className="guest-browse-library" aria-label={isSource ? "Danh sách video nguồn" : config.title}>
       <div className="guest-browse-toolbar"><div className="guest-browse-filters" role="group" aria-label={isSource ? "Lọc nền tảng" : "Lọc thư viện"}>{filters.map((item) => <button type="button" key={item} aria-pressed={filter === item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item === "Bilibili" && <span className="guest-platform-dot" />}{item === "Douyin" && <span className="guest-platform-dot is-douyin" />}{item}</button>)}</div><div className="guest-browse-search"><Icon name="search" size={15} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={isSource ? "Tìm video trong nguồn…" : "Tìm trong thư viện…"} aria-label={isSource ? "Tìm video nguồn" : `Tìm trong ${config.title.toLocaleLowerCase("vi-VN")}`} /></div>{isSource ? <select className="guest-browse-status" value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Trạng thái video"><option value="all">Tất cả trạng thái</option><option value="new">Chưa tải</option><option value="downloaded">Đã tải</option></select> : config.actionNext === "/sources" ? <Link className="guest-library-add" href="/sources"><Icon name="plus" size={14} />{config.action}</Link> : <button type="button" className="guest-library-add" onClick={() => requestLibrary(true)}><Icon name="plus" size={14} />{config.action}</button>}</div>

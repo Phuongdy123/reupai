@@ -440,7 +440,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         .catch(() => { if (isCurrent()) preview.onerror(); });
 
     dialog.querySelector('#resetProcessConfig').onclick = () => {
-        if (typeof collectPresetConfig === 'function') dialog._undoConfig = collectPresetConfig();
         set('processPreviewSeconds', '');
         set('processFontSize', '');
         set('processSourceLanguage', 'auto');
@@ -526,9 +525,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     const applyPresetConfig = (preset, name = '') => {
         if (!preset) return;
-        if (typeof collectPresetConfig === 'function' && dialog.dataset.presetApplying !== '1') {
-            dialog._undoConfig = collectPresetConfig();
-        }
         dialog.dataset.presetApplying = '1';
         Object.entries(preset).forEach(([id, value]) => {
             if (id === 'auto_brand_blur') {
@@ -594,15 +590,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!await writePresets(presets)) return;
         refreshPresetOptions(presets);
         presetStatus.textContent = `Đã xóa: ${name}`;
-    };
-    dialog.querySelector('#undoProcessConfig').onclick = () => {
-        if (!dialog._undoConfig) {
-            presetStatus.textContent = 'Chưa có thay đổi để hoàn tác.';
-            return;
-        }
-        const restore = dialog._undoConfig;
-        dialog._undoConfig = collectPresetConfig();
-        applyPresetConfig(restore, 'Hoàn tác');
     };
     const saveSection = async (section, label) => {
         const name = presetSelect.value;

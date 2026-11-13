@@ -501,7 +501,10 @@ class ProcessRequest(BaseModel):
     ] = "subtitle"
     preview_seconds: Optional[float] = None
     source_subtitle_mode: Literal["auto", "none"] = "auto"
-    source_language: Literal["auto", "zh", "en", "ja", "vi"] = "auto"
+    source_language: Literal[
+        "auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de",
+        "ru", "it", "hi", "ar", "tr", "ms", "vi",
+    ] = "auto"
     subtitle_style: Literal["minimal", "bold", "cinema", "neon", "box"] = "minimal"
     original_volume: float = 0.15
     voice_volume: float = 1.0
