@@ -2225,6 +2225,14 @@ function processConfigDefaults() {
     return {
         // Logo chỉ được chèn khi người dùng chủ động chọn trong phần nâng cao.
         logo_mode: 'none',
+        transcript_source: 'audio',
+        ocr_language: 'auto',
+        ocr_fps: 2,
+        ocr_min_confidence: 0.45,
+        ocr_parallelism: 2,
+        ocr_use_gpu: false,
+        ocr_merge_similar: true,
+        ocr_similarity_threshold: 0.82,
     };
 }
 
@@ -2639,6 +2647,9 @@ async function performProcessVideo(
         const health = await window.reupEngineClient.json('/api/health');
         if (config.source_language && config.source_language !== 'auto' && !health.capabilities?.source_language) {
             throw new Error('Hãy cập nhật Local Engine để chọn ngôn ngữ lời thoại.');
+        }
+        if (config.transcript_source === 'video_subtitles' && !health.capabilities?.subtitle_ocr) {
+            throw new Error('Hãy cập nhật Local Engine để lấy phụ đề trên video thành tệp SRT bằng OCR.');
         }
         if (config.subtitle_style && config.subtitle_style !== 'minimal' && !health.capabilities?.subtitle_styles) {
             throw new Error('Hãy cập nhật Local Engine để dùng phong cách phụ đề mới.');

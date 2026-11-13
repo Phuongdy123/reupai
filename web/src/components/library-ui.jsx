@@ -56,7 +56,7 @@ export function dateText(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("vi-VN");
 }
 export function stageLabel(stage) {
-  return ({ queued: "Hàng đợi", starting: "Khởi động", download: "Tải video", downloading: "Tải video", audio: "Tách audio", extract_audio: "Tách audio", transcribe: "Whisper", transcription: "Whisper", whisper: "Whisper", translate: "Dịch phụ đề", translation: "Dịch phụ đề", tts: "Voice TTS", voice: "Voice TTS", detect_subtitle: "Nhận diện subtitle", subtitle_detect: "Nhận diện subtitle", render: "Render video", rendering: "Render video", completed: "Hoàn tất", failed: "Lỗi" })[stage] || stage || "—";
+  return ({ queued: "Hàng đợi", starting: "Khởi động", download: "Tải video", downloading: "Tải video", audio: "Tách audio", extract_audio: "Tách audio", transcribe: "Whisper", transcription: "Whisper", whisper: "Whisper", subtitle_ocr: "Đọc phụ đề trên hình", translate: "Dịch phụ đề", translation: "Dịch phụ đề", tts: "Voice TTS", voice: "Voice TTS", detect_subtitle: "Nhận diện subtitle", subtitle_detect: "Nhận diện subtitle", render: "Render video", rendering: "Render video", completed: "Hoàn tất", failed: "Lỗi" })[stage] || stage || "—";
 }
 export function videoBody(video) {
   const body = {};

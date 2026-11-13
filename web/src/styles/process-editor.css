@@ -1,0 +1,222 @@
+/* The video editor owns its layout here; legacy field IDs keep their behavior. */
+body.theme-xports #processConfigDialog {
+  --ui-accent: #e7e7e7;
+  --purple: #e7e7e7;
+  --purple-strong: #fff;
+  --muted: #969696;
+  width: min(1480px, calc(100vw - 32px));
+  height: calc(100dvh - 32px);
+  max-height: calc(100dvh - 32px);
+  max-width: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #373737;
+  border-radius: 20px;
+  background: #131313;
+  color: #eaeaea;
+  box-shadow: 0 24px 90px rgb(0 0 0 / 55%);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+body.theme-xports #processConfigDialog::backdrop { background: rgb(0 0 0 / 74%); backdrop-filter: none; }
+body.theme-xports #processConfigDialog .process-config-dialog { display: flex; flex-direction: column; width: 100%; height: 100%; max-height: none; padding: 0; overflow: hidden; }
+body.theme-xports #processConfigDialog .process-config-head { display: flex; flex: none; justify-content: flex-start; align-items: center; gap: 16px; margin: 0; padding: 15px 22px; border-bottom: 1px solid #2d2d2d; background: #181818; }
+body.theme-xports #processConfigDialog .process-config-heading h3 { margin: 0; color: #f2f2f2; font-size: 20px; font-weight: 600; letter-spacing: -.03em; }
+body.theme-xports #processConfigDialog .process-config-heading p { margin: 4px 0 0; color: #989898; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-config-back { min-width: 88px; min-height: 36px; padding-inline: 12px; border: 1px solid #3d3d3d; border-radius: 999px; background: #232323; color: #d9d9d9; box-shadow: none; font-size: 11px; }
+
+body.theme-xports #processConfigDialog .process-config-body { display: grid; flex: 1; grid-template-columns: minmax(0, 1.25fr) minmax(400px, 1fr); gap: 0; min-height: 0; padding: 0; overflow: hidden; }
+body.theme-xports #processConfigDialog :is(.process-editor-main, .process-inspector-content) { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; overflow-anchor: none; scrollbar-width: thin; scrollbar-color: #464646 transparent; }
+body.theme-xports #processConfigDialog .process-editor-main { padding: 20px 24px; background: #121212; }
+body.theme-xports #processConfigDialog .process-settings-sidebar { display: grid; grid-template-columns: minmax(0, 1fr) 62px; grid-template-areas: "content rail"; gap: 18px; min-width: 0; min-height: 0; padding: 20px 14px 20px 22px; overflow: hidden; border-left: 1px solid #2e2e2e; background: #191919; }
+body.theme-xports #processConfigDialog .process-inspector-content { grid-area: content; padding-right: 6px; }
+body.theme-xports #processConfigDialog .process-inspector-heading { display: flex; align-items: center; gap: 7px; margin: 0 0 20px; color: #999999; font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+body.theme-xports #processConfigDialog .process-inspector-dot { width: 5px; height: 5px; border-radius: 50%; background: #acacac; }
+
+/* Viewer, tool strip and source information share one surface. */
+body.theme-xports #processConfigDialog .process-config-showcase { display: block; margin: 0; padding: 0; overflow: hidden; border: 1px solid #333333; border-radius: 16px; background: #161616; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-config-preview { position: relative; isolation: isolate; display: flex; align-items: center; justify-content: center; flex-direction: column; min-width: 0; min-height: clamp(220px, 38dvh, 360px); margin: 0; padding: 18px; overflow: hidden; border: 0; border-radius: 0; background: #0b0b0b; }
+body.theme-xports #processConfigDialog[data-preview-state="ready"] .process-config-preview { min-height: clamp(220px, 38dvh, 360px); padding: 0; }
+body.theme-xports #processConfigDialog .process-preview-poster { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .24; filter: grayscale(.3); pointer-events: none; }
+body.theme-xports #processConfigDialog .process-preview-poster[hidden],
+body.theme-xports #processConfigDialog[data-preview-state="ready"] .process-preview-poster { display: none !important; }
+body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) .process-preview-stage { display: none; }
+body.theme-xports #processConfigDialog .process-preview-stage { position: relative; display: grid; place-items: center; width: 100%; max-width: 100%; margin: 0 auto; background: transparent; line-height: 0; }
+body.theme-xports #processConfigDialog .process-config-preview video,
+body.theme-xports #processConfigDialog .process-preview-stage[data-aspect] video { width: auto; height: auto; max-width: 100%; max-height: min(46dvh, 420px); aspect-ratio: auto; object-fit: contain; border-radius: 0; }
+body.theme-xports #processConfigDialog #processConfigPreviewEmpty { display: grid; justify-items: center; gap: 8px; max-width: 360px; padding: 8px; color: #a9a9a9; text-align: center; }
+body.theme-xports #processConfigDialog .process-empty-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 0 7px; border: 1px solid #3d3d3d; border-radius: 50%; background: #212121; color: #cccccc; }
+body.theme-xports #processConfigDialog .process-empty-icon::before,
+body.theme-xports #processConfigDialog .process-empty-icon::after { display: none; }
+body.theme-xports #processConfigDialog #processConfigPreviewEmpty strong { color: #e4e4e4; font-size: 14px; font-weight: 550; }
+body.theme-xports #processConfigDialog #processConfigPreviewEmpty p { margin: 0; color: #9e9e9e; font-size: 12px; line-height: 1.6; }
+body.theme-xports #processConfigDialog .process-download-source { min-height: 36px; margin: 10px 0 0; padding: 0 14px; border: 1px solid #4c4c4c; border-radius: 999px; background: #2a2a2a; color: #e6e6e6; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-preview-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0; padding: 10px 12px; border: 0; border-top: 1px solid #2d2d2d; border-radius: 0; background: #1b1b1b; }
+body.theme-xports #processConfigDialog .process-region-tabs { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; padding: 3px; border: 0; border-radius: 999px; background: #282828; }
+body.theme-xports #processConfigDialog .process-region-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-left: auto; }
+body.theme-xports #processConfigDialog .process-preview-tools .btn { flex: 0 0 auto; width: auto; min-width: 0; min-height: 34px; padding: 0 11px; border: 1px solid #404040; border-radius: 999px; background: #242424; color: #d1d1d1; font-size: 11px; white-space: nowrap; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-region-tabs .btn { min-height: 30px; border: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-region-tabs .btn.active { background: #4c4c4c; color: #fff; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-preview-tools .btn:disabled { opacity: .5; cursor: not-allowed; }
+body.theme-xports #processConfigDialog .process-tool-duration { margin-left: 2px; color: #aeaeae; font-size: 10px; }
+body.theme-xports #processConfigDialog .process-preview-tools > small { flex: 1 1 100%; padding: 0 3px; color: #a2a2a2; font-size: 11px; line-height: 1.5; }
+body.theme-xports #processConfigDialog #processAutoBlurStatus:empty,
+body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) #processPickerHint { display: none; }
+body.theme-xports #processConfigDialog .process-video-info { margin: 0; padding: 12px 15px; border: 0; border-top: 1px solid #2f2f2f; border-radius: 0; background: #191919; }
+body.theme-xports #processConfigDialog .process-video-info h4 { display: none; }
+body.theme-xports #processConfigDialog .process-video-info dl { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px 18px; margin: 0; }
+body.theme-xports #processConfigDialog .process-video-info dl > div { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 0; border: 0; }
+body.theme-xports #processConfigDialog .process-video-info dt { color: #979797; font-size: 10px; white-space: nowrap; }
+body.theme-xports #processConfigDialog .process-video-info dd { margin: 0; color: #d1d1d1; font-size: 11px; line-height: 1.5; }
+body.theme-xports #processConfigDialog .process-video-info .process-video-title-row { flex: 1 1 100%; }
+body.theme-xports #processConfigDialog .process-video-title-row dt,
+body.theme-xports #processConfigDialog .process-video-status-row dt { display: none; }
+body.theme-xports #processConfigDialog .process-video-title-row dd { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; color: #e4e4e4; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-video-info .process-video-status-row { margin-left: auto; }
+body.theme-xports #processConfigDialog .process-video-status-row dd { color: #a4a4a4; font-size: 10px; }
+
+/* Quiet disclosures use dividers, leaving the viewer as the main object. */
+body.theme-xports #processConfigDialog .process-disclosure { margin-top: 12px; overflow: hidden; border: 0; border-bottom: 1px solid #313131; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-disclosure > summary { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 10px 3px; border-radius: 9px; color: #e2e2e2; cursor: pointer; list-style: none; }
+body.theme-xports #processConfigDialog .process-disclosure > summary::-webkit-details-marker { display: none; }
+body.theme-xports #processConfigDialog .process-disclosure > summary strong { font-size: 12px; font-weight: 550; }
+body.theme-xports #processConfigDialog .process-disclosure > summary span { color: #9a9a9a; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-disclosure > summary::after { content: "+"; margin-left: auto; color: #a6a6a6; font-size: 18px; }
+body.theme-xports #processConfigDialog .process-disclosure[open] > summary::after { content: "−"; }
+body.theme-xports #processConfigDialog .process-disclosure :is(.process-ai-suggest, .process-advanced-shell) { margin: 0; padding: 14px 3px; border: 0; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-ai-suggest textarea { min-height: 80px; border-color: #414141; border-radius: 10px; background: #1e1e1e; color: #ededed; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-ai-result { border-color: #414141; border-radius: 10px; background: #1e1e1e; color: #d1d1d1; }
+body.theme-xports #processConfigDialog .process-ai-suggest .btn { border-color: #414141; border-radius: 999px; background: #2a2a2a; color: #e8e8e8; font-size: 11px; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-config-advanced { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-config-advanced + .process-config-advanced { border-top: 1px solid #323232; }
+body.theme-xports #processConfigDialog .process-config-advanced summary { min-height: 44px; padding: 8px 0; gap: 10px; }
+body.theme-xports #processConfigDialog .process-config-advanced summary::before { flex-basis: 28px; height: 28px; border-radius: 50%; background: #282828; color: #c4c4c4; font-size: 16px; }
+body.theme-xports #processConfigDialog .process-config-advanced summary strong { min-width: 110px; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-config-advanced summary small { color: #a5a5a5; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-config-advanced > :not(summary) { margin-left: 0; margin-right: 0; }
+body.theme-xports #processConfigDialog .process-config-advanced :is(p, label) { font-size: 11px; }
+body.theme-xports #processConfigDialog .process-config-advanced :is(input:not([type="checkbox"], [type="range"]), select) { min-height: 36px; padding-inline: 9px; border-color: #424242; border-radius: 9px; background: #202020; color: #eaeaea; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-section-save { min-height: 34px; border-color: #4b4b4b; border-radius: 999px; background: #2c2c2c; color: #e2e2e2; font-size: 11px; }
+
+/* Flat inspector panels and a restrained category dock. */
+body.theme-xports #processConfigDialog .process-inspector-rail { grid-area: rail; display: flex; flex-direction: column; align-self: stretch; gap: 8px; padding: 0 0 0 10px; border: 0; border-left: 1px solid #313131; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-inspector-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; width: 100%; min-width: 0; min-height: 72px; padding: 6px 0; border: 0; border-radius: 12px; background: transparent; color: #9a9a9a; font: inherit; font-size: 10px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+body.theme-xports #processConfigDialog .process-inspector-tab-icon { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: #2a2a2a; color: #b6b6b6; }
+body.theme-xports #processConfigDialog .process-inspector-tab-icon .ui-icon { width: 18px; height: 18px; }
+body.theme-xports #processConfigDialog .process-inspector-tab[aria-selected="true"] { color: #f4f4f4; }
+body.theme-xports #processConfigDialog .process-inspector-tab[aria-selected="true"] .process-inspector-tab-icon { background: #e9e9e9; color: #1d1d1d; }
+body.theme-xports #processConfigDialog [data-inspector-panel][hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+body.theme-xports #processConfigDialog .process-settings-card { min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-inspector-panel:focus-visible { outline: 2px solid #b6b6b6; outline-offset: 4px; }
+body.theme-xports #processConfigDialog .process-section-heading { min-width: 0; }
+body.theme-xports #processConfigDialog .process-settings-card > .process-section-heading { position: relative; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 36px; margin: 0 0 22px; padding: 0 0 0 46px; cursor: default; }
+body.theme-xports #processConfigDialog .process-settings-card > .process-section-heading::before,
+body.theme-xports #processConfigDialog .process-settings-card > .process-section-heading::after { display: none; }
+body.theme-xports #processConfigDialog .process-panel-icon { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2f2f2f; color: #cdcdcd; }
+body.theme-xports #processConfigDialog .process-section-heading strong { color: #ededed; font-size: 14px; font-weight: 550; }
+body.theme-xports #processConfigDialog .process-section-heading small { color: #9e9e9e; font-size: 11px; line-height: 1.5; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; align-items: end; }
+body.theme-xports #processConfigDialog .process-config-grid > label { min-width: 0; gap: 7px; color: #c7c7c7; font-size: 11px; font-weight: 500; }
+body.theme-xports #processConfigDialog .process-inspector-panel .process-config-grid > label:has(select):not(.process-source-language-field) { align-content: end; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid select { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid #444444; border-radius: 10px; background: #262626; color: #ececec; font: inherit; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-config-grid label > small { color: #a7a7a7; font-size: 11px; font-weight: 400; line-height: 1.5; }
+body.theme-xports #processConfigDialog .process-source-language-field { grid-column: 1 / -1; }
+body.theme-xports #processConfigDialog .process-subtitle-style-field { grid-column: auto; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) { grid-column: 1 / -1; grid-template-columns: minmax(105px, 1fr) minmax(70px, 1.2fr) 42px; align-items: center; gap: 12px; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid input[type="range"] { grid-column: auto; grid-row: auto; height: 20px; min-height: 0; margin: 0; padding: 0; accent-color: #d8d8d8; }
+body.theme-xports #processConfigDialog .process-settings-card .process-config-grid output { grid-column: auto; grid-row: auto; min-width: 0; color: #e3e3e3; font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+body.theme-xports #processConfigDialog #processVoiceField { grid-column: 1 / -1; order: -1; }
+body.theme-xports #processConfigDialog .process-check-option { grid-column: 1 / -1; grid-template-columns: 18px minmax(0, 1fr); min-height: 50px; padding: 11px 12px; gap: 4px 9px; border: 0; border-radius: 10px; background: #272727; color: #d1d1d1; }
+body.theme-xports #processConfigDialog .process-check-option input[type="checkbox"] { width: 18px; min-width: 18px; max-width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; border: 1px solid #696969; border-radius: 5px; background: #1e1e1e; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-check-option input[type="checkbox"]:checked { border-color: #dddddd; background: #dddddd; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-check-option input[type="checkbox"]:checked::after { color: #1f1f1f; font-size: 13px; line-height: 16px; }
+body.theme-xports #processConfigDialog .process-check-option small { grid-column: 2; color: #a7a7a7; font-size: 10px; }
+body.theme-xports #processConfigDialog .process-settings-sidebar .process-preset-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-preset-bar .process-section-heading { display: none; }
+body.theme-xports #processConfigDialog .process-preset-bar :is(label, input) { grid-column: 1 / -1; }
+body.theme-xports #processConfigDialog .process-preset-bar :is(input, select, .btn) { min-height: 38px; padding-inline: 10px; border: 1px solid #474747; border-radius: 10px; background: #292929; color: #e5e5e5; font-size: 12px; }
+body.theme-xports #processConfigDialog .process-preset-bar small { color: #a3a3a3; font-size: 11px; line-height: 1.5; }
+
+/* The review follows the selected settings instead of floating at the bottom. */
+body.theme-xports #processConfigDialog .process-output-review { margin: 24px 0 0; padding: 20px 0 0; border-top: 1px solid #393939; }
+body.theme-xports #processConfigDialog .process-output-summary { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+body.theme-xports #processConfigDialog .process-output-summary header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+body.theme-xports #processConfigDialog .process-output-summary h4 { margin: 0; color: #b4b4b4; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+body.theme-xports #processConfigDialog .process-output-mode { padding: 4px 8px; border: 0; border-radius: 999px; background: #353535; color: #dadada; font-size: 10px; white-space: nowrap; }
+body.theme-xports #processConfigDialog .process-output-summary dl { display: grid; gap: 12px; margin: 0; }
+body.theme-xports #processConfigDialog .process-output-summary dl > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 0; border: 0; }
+body.theme-xports #processConfigDialog [data-output-summary-row][hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-output-summary dt { display: flex; align-items: center; gap: 7px; color: #a1a1a1; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-output-summary dd { min-width: 0; margin: 0; color: #dadada; font-size: 12px; line-height: 1.5; text-align: right; overflow-wrap: anywhere; }
+body.theme-xports #processConfigDialog .process-output-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+body.theme-xports #processConfigDialog .process-output-tags > span { padding: 5px 8px; border: 0; border-radius: 7px; background: #303030; color: #c2c2c2; font-size: 10px; line-height: 1.4; }
+
+body.theme-xports #processConfigDialog .process-config-actions { position: static; display: flex; flex: none; flex-wrap: nowrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding: 12px 22px; border-top: 1px solid #383838; border-radius: 0; background: #1e1e1e; backdrop-filter: none; }
+body.theme-xports #processConfigDialog .process-config-actions .btn { flex: 0 0 auto; width: auto; min-width: 0; min-height: 40px; padding-inline: 16px; border: 1px solid #494949; border-radius: 999px; background: #2d2d2d; color: #dddddd; font-size: 12px; box-shadow: none; }
+body.theme-xports #processConfigDialog .process-config-actions-main { display: flex; flex: 0 0 auto; gap: 10px; margin-left: auto; }
+body.theme-xports #processConfigDialog #resetProcessConfig { border-color: transparent; background: transparent; color: #a7a7a7; }
+body.theme-xports #processConfigDialog #cancelProcessConfig { min-width: 86px; }
+body.theme-xports #processConfigDialog #runProcessConfig,
+body.theme-xports #processConfigDialog #runProcessConfig:hover:not(:disabled) { min-width: 172px; border-color: #e9e9e9 !important; background: #e9e9e9 !important; color: #202020 !important; box-shadow: none !important; filter: none; font-weight: 600; }
+body.theme-xports #processConfigDialog :is(button, summary, input, select, textarea, [role="tabpanel"]):focus-visible { outline: 2px solid #bdbdbd !important; outline-offset: 3px; }
+
+@media (max-width: 1100px) {
+  body.theme-xports #processConfigDialog .process-config-body { grid-template-columns: minmax(0, 1fr) 390px; }
+  body.theme-xports #processConfigDialog .process-editor-main { padding: 16px; }
+  body.theme-xports #processConfigDialog .process-settings-sidebar { gap: 12px; padding-left: 16px; }
+  body.theme-xports #processConfigDialog .process-region-actions { margin-left: 0; }
+  body.theme-xports #processConfigDialog .process-disclosure > summary span { display: none; }
+}
+@media (max-width: 900px) {
+  body.theme-xports #processConfigDialog .process-config-body { grid-template-columns: minmax(0, 1fr) 342px; }
+  body.theme-xports #processConfigDialog .process-settings-sidebar { grid-template-columns: minmax(0, 1fr) 50px; gap: 10px; padding: 16px 10px 16px 14px; }
+  body.theme-xports #processConfigDialog .process-inspector-rail { padding-left: 6px; }
+  body.theme-xports #processConfigDialog .process-inspector-tab { font-size: 9px; }
+  body.theme-xports #processConfigDialog .process-settings-card .process-config-grid { grid-template-columns: minmax(0, 1fr); }
+  body.theme-xports #processConfigDialog .process-settings-card .process-config-grid > label:has(input[type="range"]) { grid-template-columns: minmax(0, 1fr) 40px; }
+  body.theme-xports #processConfigDialog .process-settings-card .process-config-grid input[type="range"] { grid-column: 1 / -1; grid-row: 2; }
+  body.theme-xports #processConfigDialog .process-settings-card .process-config-grid output { grid-column: 2; grid-row: 1; }
+  body.theme-xports #processConfigDialog .process-config-advanced summary small { display: none; }
+}
+@media (max-width: 640px) {
+  body.theme-xports #processConfigDialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); max-height: calc(100dvh - 12px); border-radius: 18px; }
+  body.theme-xports #processConfigDialog .process-config-head { gap: 12px; padding: 13px 14px; }
+  body.theme-xports #processConfigDialog .process-config-heading h3 { font-size: 17px; }
+  body.theme-xports #processConfigDialog .process-config-heading p { font-size: 10px; }
+  body.theme-xports #processConfigDialog .process-config-back { min-width: 76px; padding-inline: 10px; }
+  body.theme-xports #processConfigDialog .process-config-body { grid-template-columns: minmax(0, 1fr); align-content: start; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #535353 transparent; }
+  body.theme-xports #processConfigDialog .process-editor-main { min-height: auto; padding: 14px; overflow: visible; }
+  body.theme-xports #processConfigDialog .process-settings-sidebar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rail" "content"; gap: 18px; min-height: auto; padding: 16px 14px 20px; overflow: visible; border-left: 0; border-top: 1px solid #393939; }
+  body.theme-xports #processConfigDialog .process-inspector-content { overflow: visible; padding-right: 0; }
+  body.theme-xports #processConfigDialog .process-inspector-rail { flex-direction: row; gap: 4px; padding: 4px; border: 0; border-radius: 999px; background: #2e2e2e; }
+  body.theme-xports #processConfigDialog .process-inspector-tab { flex: 1; min-height: 48px; gap: 5px; border-radius: 999px; font-size: 10px; }
+  body.theme-xports #processConfigDialog .process-inspector-tab-icon { width: 28px; height: 28px; }
+  body.theme-xports #processConfigDialog .process-config-preview,
+  body.theme-xports #processConfigDialog[data-preview-state="ready"] .process-config-preview { min-height: 210px; }
+  body.theme-xports #processConfigDialog .process-config-preview video { max-height: 34dvh; }
+  body.theme-xports #processConfigDialog .process-region-tabs,
+  body.theme-xports #processConfigDialog .process-region-actions { width: 100%; }
+  body.theme-xports #processConfigDialog .process-preview-tools .btn { flex: 1; min-height: 42px; padding-inline: 8px; font-size: 11px; }
+  body.theme-xports #processConfigDialog .process-region-tabs .btn { min-height: 36px; }
+  body.theme-xports #processConfigDialog .process-video-info { padding: 11px 12px; }
+  body.theme-xports #processConfigDialog .process-video-info dl { gap: 7px 12px; }
+  body.theme-xports #processConfigDialog .process-video-info .process-video-status-row { margin-left: 0; }
+  body.theme-xports #processConfigDialog .process-settings-card .process-config-grid select { min-height: 42px; }
+  body.theme-xports #processConfigDialog .process-output-review { margin-top: 22px; padding-top: 18px; }
+  body.theme-xports #processConfigDialog .process-config-actions { gap: 8px; padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }
+  body.theme-xports #processConfigDialog .process-config-actions .btn { min-height: 44px; padding-inline: 10px; font-size: 11px; }
+  body.theme-xports #processConfigDialog .process-config-actions-main { gap: 6px; }
+  body.theme-xports #processConfigDialog #cancelProcessConfig { min-width: 54px; }
+  body.theme-xports #processConfigDialog #runProcessConfig { min-width: 134px; }
+}
+
+body.theme-xports #processConfigDialog .process-ocr-options { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 13px; border: 1px solid #3b3b3b; border-radius: 14px; background: #191919; }
+body.theme-xports #processConfigDialog .process-ocr-options[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-ocr-options > label { display: grid; min-width: 0; align-content: end; gap: 7px; color: #c7c7c7; font-size: 11px; font-weight: 500; }
+body.theme-xports #processConfigDialog .process-ocr-options > label:has(input[type="range"]) { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px 10px; }
+body.theme-xports #processConfigDialog .process-ocr-options > label:has(input[type="range"]) input { grid-column: 1; grid-row: 2; width: 100%; margin: 0; accent-color: #d8d8d8; }
+body.theme-xports #processConfigDialog .process-ocr-options > label:has(input[type="range"]) output { grid-column: 2; grid-row: 2; color: #e3e3e3; font-size: 10px; white-space: nowrap; }
+body.theme-xports #processConfigDialog .process-ocr-options select { width: 100%; min-height: 36px; padding: 0 9px; border: 1px solid #444; border-radius: 9px; background: #262626; color: #ececec; font: inherit; font-size: 11px; }
+body.theme-xports #processConfigDialog .process-ocr-options .process-check-option { grid-column: 1 / -1; }
+body.theme-xports #processConfigDialog .process-ocr-options .process-ocr-note { grid-column: 1 / -1; margin: 0; color: #a6a6a6; font-size: 10px; line-height: 1.55; }
+body.theme-xports #processConfigDialog #processOcrSimilarityField[hidden] { display: none !important; }

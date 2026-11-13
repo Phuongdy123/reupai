@@ -3210,7 +3210,28 @@ def pipeline(
     source_language_path = job_dir / "source_language.txt"
     previous_source_language = source_language_path.read_text(encoding="utf-8").strip() if source_language_path.is_file() else "auto"
     language_force = source_language != previous_source_language
-    if language_force:
+    transcript_source = config.get("transcript_source", "audio")
+    transcription_signature_path = job_dir / "transcription_settings.sha256"
+    transcription_signature = stable_fingerprint({
+        "schema": 1,
+        "transcript_source": transcript_source,
+        "source_language": source_language,
+        "ocr_language": config.get("ocr_language", "auto"),
+        "ocr_fps": float(config.get("ocr_fps", 2.0) or 2.0),
+        "ocr_min_confidence": float(config.get("ocr_min_confidence", 0.45) or 0.45),
+        "ocr_parallelism": int(config.get("ocr_parallelism", 2) or 2),
+        "ocr_use_gpu": bool(config.get("ocr_use_gpu", False)),
+        "ocr_merge_similar": bool(config.get("ocr_merge_similar", True)),
+        "ocr_similarity_threshold": float(config.get("ocr_similarity_threshold", 0.82) or 0.82),
+    })
+    previous_transcription_signature = (
+        transcription_signature_path.read_text(encoding="utf-8").strip()
+        if transcription_signature_path.is_file() else ""
+    )
+    transcription_changed = transcription_signature != previous_transcription_signature
+    transcription_force = force or language_force or transcription_changed
+    translation_force = force or language_force or transcription_changed
+    if translation_force:
         translation_checkpoint.unlink(missing_ok=True)
 
 
@@ -3588,7 +3609,7 @@ def pipeline(
 
 
 
-            stage="extract_audio",
+            stage="subtitle_ocr" if transcript_source == "video_subtitles" else "extract_audio",
 
 
 
@@ -3600,7 +3621,11 @@ def pipeline(
 
 
 
-            message="Dang tach audio 16k.",
+            message=(
+                "Đang chuẩn bị đọc phụ đề trên hình."
+                if transcript_source == "video_subtitles"
+                else "Dang tach audio 16k."
+            ),
 
 
 
@@ -3616,7 +3641,8 @@ def pipeline(
 
 
 
-        extract_audio(source_video, audio_path, force=force)
+        if transcript_source == "audio":
+            extract_audio(source_video, audio_path, force=force)
 
 
 
@@ -3636,7 +3662,7 @@ def pipeline(
 
 
 
-            stage="whisper",
+            stage="subtitle_ocr" if transcript_source == "video_subtitles" else "whisper",
 
 
 
@@ -3648,7 +3674,11 @@ def pipeline(
 
 
 
-            message="Dang nhan dien loi thoai bang Whisper.",
+            message=(
+                "Đang lấy phụ đề trong hình bằng OCR."
+                if transcript_source == "video_subtitles"
+                else "Dang nhan dien loi thoai bang Whisper."
+            ),
 
 
 
@@ -3671,26 +3701,49 @@ def pipeline(
             percent = 30 + min(19, int(19 * processed_seconds / total_seconds))
             write_progress(
                 job_dir,
-                stage="whisper",
+                stage="subtitle_ocr" if transcript_source == "video_subtitles" else "whisper",
                 percent=percent,
                 status="running",
                 message=(
-                    "Đang nhận diện lời thoại: "
+                    ("Đang quét phụ đề trên hình: " if transcript_source == "video_subtitles" else "Đang nhận diện lời thoại: ")
+                    +
                     f"{processed_seconds / 60:.0f}/{total_seconds / 60:.0f} phút."
                 ),
                 mode=mode,
             )
-        try:
-            transcribe_audio(
-                audio_path, chinese_srt, force=force or language_force,
-                on_progress=on_transcription_progress,
-                source_language=config.get("source_language", "auto"),
-            )
-        except NoSpeechDetected as error:
-            no_speech = True
-            print(f"[SKIP] Khong tim thay loi thoai: {error}")
-            chinese_srt.write_text("", encoding="utf-8")
-            vietnamese_srt.write_text("", encoding="utf-8")
+        if transcript_source == "video_subtitles":
+            if not (not transcription_force and file_ok(chinese_srt) and chinese_srt.read_text(encoding="utf-8-sig").strip()):
+                from services.subtitle_ocr import extract_subtitle_srt
+
+                extract_subtitle_srt(
+                    source_video,
+                    chinese_srt,
+                    language=config.get("ocr_language", "auto"),
+                    fps=config.get("ocr_fps", 2.0),
+                    min_confidence=config.get("ocr_min_confidence", 0.45),
+                    parallelism=config.get("ocr_parallelism", 2),
+                    use_gpu=bool(config.get("ocr_use_gpu", False)),
+                    merge_similar=bool(config.get("ocr_merge_similar", True)),
+                    similarity_threshold=config.get("ocr_similarity_threshold", 0.82),
+                    on_progress=on_transcription_progress,
+                )
+            else:
+                print("[SKIP] Sử dụng lại SRT OCR đã tạo với cùng cấu hình.")
+            no_speech = False
+        else:
+            try:
+                transcribe_audio(
+                    audio_path, chinese_srt, force=transcription_force,
+                    on_progress=on_transcription_progress,
+                    source_language=config.get("source_language", "auto"),
+                )
+            except NoSpeechDetected as error:
+                no_speech = True
+                print(f"[SKIP] Khong tim thay loi thoai: {error}")
+                chinese_srt.write_text("", encoding="utf-8")
+                vietnamese_srt.write_text("", encoding="utf-8")
+
+        transcription_signature_path.write_text(transcription_signature, encoding="utf-8")
 
 
 
@@ -3724,7 +3777,11 @@ def pipeline(
 
             message=(
                 "Không có lời thoại, bỏ qua bước dịch."
-                if no_speech else "Đang dịch lời thoại sang tiếng Việt bằng Gemini AI."
+                if no_speech else (
+                    "Đang dịch phụ đề đã đọc từ hình sang tiếng Việt bằng Gemini AI."
+                    if transcript_source == "video_subtitles"
+                    else "Đang dịch lời thoại sang tiếng Việt bằng Gemini AI."
+                )
             ),
 
 
@@ -3766,7 +3823,7 @@ def pipeline(
 
 
 
-            force=force or language_force,
+            force=translation_force,
 
             source_language=config.get("source_language", "auto"),
 

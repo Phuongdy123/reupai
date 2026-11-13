@@ -28,7 +28,7 @@ from fastapi.responses import (
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from runtime_paths import (
     get_channels_dir,
     get_config_dir,
@@ -505,6 +505,14 @@ class ProcessRequest(BaseModel):
         "auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de",
         "ru", "it", "hi", "ar", "tr", "ms", "vi",
     ] = "auto"
+    transcript_source: Literal["audio", "video_subtitles"] = "audio"
+    ocr_language: Literal["auto", "zh", "en", "ja", "ko", "vi", "th"] = "auto"
+    ocr_fps: float = Field(default=2.0, ge=0.5, le=10.0)
+    ocr_min_confidence: float = Field(default=0.45, ge=0.05, le=0.99)
+    ocr_parallelism: int = Field(default=2, ge=1, le=8)
+    ocr_use_gpu: bool = False
+    ocr_merge_similar: bool = True
+    ocr_similarity_threshold: float = Field(default=0.82, ge=0.5, le=0.99)
     subtitle_style: Literal["minimal", "bold", "cinema", "neon", "box"] = "minimal"
     original_volume: float = 0.15
     voice_volume: float = 1.0
@@ -3013,6 +3021,13 @@ def _scan_outputs_library():
                     # the browser. The legacy FastAPI UI ignores this field.
                     "path":
                         str(path),
+
+                    # Keep the translated subtitle beside the rendered video
+                    # so users can download it independently as an SRT file.
+                    "subtitle_path":
+                        str(job_dir / "vietnamese.srt")
+                        if file_ok(job_dir / "vietnamese.srt")
+                        else "",
                 })
 
     items.sort(

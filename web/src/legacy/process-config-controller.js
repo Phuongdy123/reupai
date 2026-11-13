@@ -1,8 +1,16 @@
 // Loaded only when the user opens video processing settings.
+import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
+import { bindProcessOutputSummary } from './process-output-summary.js';
+
 export async function openProcessConfig(video, card, mode, dependencies) {
     const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
     const dialog = await ensureProcessConfigDialog();
     dialog._configAbort?.abort();
+    const resetScrollPositions = () => {
+        dialog.querySelectorAll('.process-config-body, .process-editor-main, .process-settings-sidebar, .process-inspector-content')
+            .forEach(region => { region.scrollTop = 0; });
+    };
+    resetScrollPositions();
     const lifetime = new AbortController();
     dialog._configAbort = lifetime;
     const signal = runtimeSignal ? AbortSignal.any([runtimeSignal, lifetime.signal]) : lifetime.signal;
@@ -20,6 +28,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     const sectionForTarget = target => {
         const id = target?.id || '';
+        if (id.startsWith('processOcr') || id === 'processTranscriptSource' || id === 'processSourceLanguage') return 'sub';
         if (id.startsWith('processBlur') || id === 'processBlurPreset' || id === 'processSourceNoSub') return 'sub';
         if (id.startsWith('processCustomBlur') || target?.classList?.contains('blur-start') || target?.classList?.contains('blur-end')) return 'custom';
         if (id.startsWith('processLogo') || id === 'processLogoFile') return 'logo';
@@ -42,6 +51,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         updatePresetDirtyStatus();
     };
     const configForm = dialog.querySelector('form');
+    const inspector = bindProcessInspectorTabs(dialog, { window, signal });
+    const outputSummary = bindProcessOutputSummary(dialog, { mode, signal });
     if (!dialog.dataset.presetDirtyBound) {
         configForm.addEventListener('input', event => dialog._presetMarkDirty?.(event.target), true);
         configForm.addEventListener('change', event => dialog._presetMarkDirty?.(event.target), true);
@@ -53,6 +64,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
 
     dialog.querySelector('#processConfigMode').textContent = mode === 'subtitle' ? 'Vietsub' : 'Voice + Vietsub';
     dialog.querySelector('#processConfigVideoTitle').textContent = video.title || video.video_id;
+    dialog.querySelector('#processConfigVideoTitle').title = video.title || video.video_id;
     dialog.querySelector('#processConfigDuration').textContent = formatDuration(video.duration_seconds || video.duration) || 'Chưa rõ';
     const sourceWidth = Number(video.video_width || video.width || 0);
     const sourceHeight = Number(video.video_height || video.height || 0);
@@ -63,6 +75,32 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processPreviewSeconds', defaults.preview_seconds || '');
     set('processFontSize', defaults.subtitle_font_size || '');
     set('processSourceLanguage', defaults.source_language || 'auto');
+    set('processTranscriptSource', defaults.transcript_source || 'audio');
+    set('processOcrLanguage', defaults.ocr_language || 'auto');
+    set('processOcrFps', defaults.ocr_fps ?? 2);
+    set('processOcrConfidence', defaults.ocr_min_confidence ?? 0.45);
+    set('processOcrParallelism', defaults.ocr_parallelism ?? 2);
+    set('processOcrSimilarity', defaults.ocr_similarity_threshold ?? 0.82);
+    dialog.querySelector('#processOcrUseGpu').checked = defaults.ocr_use_gpu === true;
+    dialog.querySelector('#processOcrMergeSimilar').checked = defaults.ocr_merge_similar !== false;
+    const transcriptSource = dialog.querySelector('#processTranscriptSource');
+    const ocrOptions = dialog.querySelector('#processOcrOptions');
+    const ocrMergeSimilar = dialog.querySelector('#processOcrMergeSimilar');
+    const ocrSimilarityField = dialog.querySelector('#processOcrSimilarityField');
+    const ocrNote = dialog.querySelector('#processOcrNote');
+    const syncOcrOptions = () => {
+        const enabled = transcriptSource?.value === 'video_subtitles';
+        if (ocrOptions) ocrOptions.hidden = !enabled;
+        if (ocrSimilarityField) ocrSimilarityField.hidden = !ocrMergeSimilar?.checked;
+        if (ocrNote) {
+            const fps = Number(dialog.querySelector('#processOcrFps')?.value || 2);
+            ocrNote.textContent = `Quét ${fps.toLocaleString('vi-VN')} khung hình/giây. Tăng tốc độ sẽ đọc sát hơn nhưng xử lý lâu hơn; lần đầu có thể cần tải model OCR.`;
+        }
+    };
+    transcriptSource.onchange = syncOcrOptions;
+    ocrMergeSimilar.onchange = syncOcrOptions;
+    dialog.querySelector('#processOcrFps').oninput = syncOcrOptions;
+    syncOcrOptions();
     set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
@@ -144,28 +182,45 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.dataset.presetApplying = '0';
 
     const downloadButton = dialog.querySelector('#processDownloadSource');
+    downloadButton.disabled = false;
+    downloadButton.innerHTML = `${uiIcon('download', 16)} Tải video để xem trước`;
     downloadButton.hidden = !!video.downloaded;
     downloadButton.onclick = async () => {
         downloadButton.disabled = true;
         downloadButton.textContent = 'Đang tải video...';
+        setPreviewState('downloading');
         try {
             await downloadVideo(video, card);
-            downloadButton.hidden = !!video.downloaded;
-            if (!video.downloaded) return;
             if (!isCurrent()) return;
+            if (!video.downloaded) { setPreviewState('empty'); return; }
+            setPreviewState('loading');
             const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
             if (!isCurrent()) return;
             preview.src = sourceUrl;
             preview.load();
         } catch (error) {
-            alert(error.message);
+            if (isCurrent()) {
+                setPreviewState('error');
+                empty.querySelector('p').textContent = error.message || 'Chưa tải được video. Hãy kiểm tra kết nối rồi thử lại.';
+            }
         } finally {
-            downloadButton.disabled = false;
-            downloadButton.innerHTML = `${uiIcon('download', 16)} Tải video để xem trước`;
+            if (isCurrent()) {
+                downloadButton.disabled = false;
+                downloadButton.innerHTML = `${uiIcon('download', 16)} Tải video để xem trước`;
+            }
         }
     };
 
     const preview = dialog.querySelector('#processConfigPreview');
+    const poster = dialog.querySelector('#processConfigPoster');
+    const sourceCover = card.querySelector?.('img');
+    poster.hidden = true;
+    poster.removeAttribute('src');
+    poster.onload = () => { if (isCurrent()) poster.hidden = false; };
+    poster.onerror = () => { poster.hidden = true; };
+    if (sourceCover?.complete && sourceCover.naturalWidth > 0 && sourceCover.currentSrc) {
+        poster.src = sourceCover.currentSrc;
+    }
     const empty = dialog.querySelector('#processConfigPreviewEmpty');
     const stage = dialog.querySelector('#processPreviewStage');
     const canvas = dialog.querySelector('#processPreviewCanvas');
@@ -173,6 +228,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const autoBlurButton = dialog.querySelector('#processAutoBlurPreview');
     autoBlurButton.disabled = false;
     const autoBlurStatus = dialog.querySelector('#processAutoBlurStatus');
+    autoBlurStatus.textContent = '';
     const pickButtons = [...dialog.querySelectorAll('.process-pick-btn')];
     const pickerToggle = dialog.querySelector('#toggleProcessPicker');
     let pickMode = 'sub';
@@ -181,6 +237,34 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     let selectedRect = null;
     let blurPreviewEnd = 0;
     let blurPreviewWasMuted = false;
+    const syncPickButtons = () => pickButtons.forEach(button => {
+        const selected = button.dataset.pickMode === pickMode;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+    });
+    const setPreviewState = state => {
+        const ready = state === 'ready';
+        dialog.dataset.previewState = state;
+        pickButtons.forEach(button => { button.disabled = !ready; });
+        pickerToggle.disabled = !ready;
+        autoBlurButton.disabled = !ready;
+        downloadButton.hidden = ready || state === 'loading';
+        empty.style.display = ready ? 'none' : '';
+        empty.querySelector('strong').textContent = state === 'loading' ? 'Đang mở video…' : state === 'downloading' ? 'Đang tải video…' : 'Xem trước video';
+        empty.querySelector('p').textContent = state === 'loading' || state === 'downloading'
+            ? 'Bạn có thể tiếp tục điều chỉnh thiết lập bên dưới.'
+            : 'Tải video để chọn vùng mờ và đặt logo chính xác.';
+        dialog.querySelector('#processPickerHint').textContent = ready
+            ? 'Chọn loại vùng rồi bật kéo chọn để chỉnh trực tiếp trên video.'
+            : 'Công cụ chỉnh vùng sẽ sẵn sàng sau khi tải video.';
+    };
+    syncPickButtons();
+    canvas.classList.remove('is-picking');
+    canvas.style.pointerEvents = 'none';
+    pickerToggle.setAttribute('aria-pressed', 'false');
+    pickerToggle.classList.remove('active');
+    pickerToggle.innerHTML = `${uiIcon('pointer', 16)} Kéo chọn vùng`;
+    setPreviewState(video.downloaded ? 'loading' : 'empty');
 
     const positionBlurOverlay = () => {
         if (!blurOverlay || !preview.videoWidth || !selectedRect) return;
@@ -258,6 +342,33 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         context.strokeRect(selectedRect.x, selectedRect.y, selectedRect.width, selectedRect.height);
     };
 
+    // CSS layout changes do not fire the video's intrinsic-size resize event.
+    // Keep selection coordinates aligned when the inspector or viewport resizes.
+    let resizeFrame = 0;
+    const scheduleSelectionResize = () => {
+        if (!isCurrent() || dialog.dataset.previewState !== 'ready' || resizeFrame) return;
+        resizeFrame = window.requestAnimationFrame(() => {
+            resizeFrame = 0;
+            if (isCurrent() && dialog.dataset.previewState === 'ready') drawSelection();
+        });
+    };
+    if (!signal.aborted) {
+        const resizeObserver = typeof window.ResizeObserver === 'function'
+            ? new window.ResizeObserver(scheduleSelectionResize)
+            : null;
+        if (resizeObserver) {
+            resizeObserver.observe(preview);
+            resizeObserver.observe(stage);
+        } else {
+            window.addEventListener('resize', scheduleSelectionResize, { signal });
+        }
+        signal.addEventListener('abort', () => {
+            resizeObserver?.disconnect();
+            if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+            resizeFrame = 0;
+        }, { once: true });
+    }
+
     const updateSelectionFields = rect => {
         if (!rect) return;
         if (pickMode === 'logo') {
@@ -293,14 +404,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 logoMode.value = 'default';
                 logoMode.dispatchEvent(new Event('change'));
             }
-            pickButtons.forEach(item => item.classList.toggle('active', item === button));
+            syncPickButtons();
             syncSelectionFromFields();
         };
     });
 
     const setPickingEnabled = enabled => {
         if (enabled) stopBlurPreview();
-        pickingEnabled = !!enabled;
+        pickingEnabled = !!enabled && dialog.dataset.previewState === 'ready';
         if (canvas) {
             canvas.classList.toggle('is-picking', pickingEnabled);
             canvas.style.pointerEvents = pickingEnabled ? 'auto' : 'none';
@@ -308,12 +419,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (pickerToggle) {
             pickerToggle.setAttribute('aria-pressed', pickingEnabled ? 'true' : 'false');
             pickerToggle.classList.toggle('active', pickingEnabled);
-            pickerToggle.innerHTML = `${uiIcon('pointer', 16)} ${pickingEnabled ? 'Tắt kéo vùng' : 'Bật kéo vùng'}`;
+            pickerToggle.innerHTML = `${uiIcon('pointer', 16)} ${pickingEnabled ? 'Xong chọn vùng' : 'Kéo chọn vùng'}`;
         }
         const hint = dialog.querySelector('#processPickerHint');
         if (hint) hint.textContent = pickingEnabled
-            ? 'Đang bật kéo vùng. Bấm lại để xem video và dùng thanh điều khiển bình thường.'
-            : 'Chọn loại vùng trước, sau đó bấm “Bật kéo vùng” nếu muốn kéo trên video.';
+            ? 'Kéo trên video để chọn vùng. Bấm “Xong chọn vùng” để tiếp tục xem.'
+            : dialog.dataset.previewState === 'ready'
+                ? 'Chọn loại vùng rồi bật kéo chọn để chỉnh trực tiếp trên video.'
+                : 'Công cụ chỉnh vùng sẽ sẵn sàng sau khi tải video.';
     };
     if (pickerToggle) pickerToggle.onclick = () => setPickingEnabled(!pickingEnabled);
 
@@ -358,14 +471,17 @@ export async function openProcessConfig(video, card, mode, dependencies) {
 
 
     preview.onerror = () => {
-        downloadButton.hidden = false;
+        if (!isCurrent()) return;
+        setPreviewState('error');
         preview.style.display = 'none';
         canvas.style.display = 'none';
         stage.dataset.aspect = '';
-        empty.style.display = 'block';
         dialog.querySelector('#processConfigStatus').textContent = 'Chưa có bản xem trước';
     };
     preview.onloadedmetadata = () => {
+        if (!isCurrent()) return;
+        if (!preview.videoWidth || !preview.videoHeight) { preview.onerror(); return; }
+        setPreviewState('ready');
         video.downloaded = true;
         downloadButton.hidden = true;
         const ratio = preview.videoWidth / Math.max(1, preview.videoHeight);
@@ -409,9 +525,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 height: Math.max(1, Math.round(Number(detected.height || 0) * scaleY)),
             };
             pickMode = 'sub';
-            pickButtons.forEach(item => item.classList.toggle('active', item.dataset.pickMode === 'sub'));
+            syncPickButtons();
             updateSelectionFields(selectedRect);
             dialog.querySelector('#processSourceNoSub').checked = false;
+            outputSummary.refresh();
             setPickingEnabled(false);
             const length = 8;
             const start = Math.max(0, Math.min(Math.max(0, preview.duration - length), Number(result.preview_time_seconds || 0) - 1));
@@ -435,14 +552,25 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
     };
     preview.crossOrigin = 'anonymous';
-    window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`)
-        .then(url => { if (isCurrent()) preview.src = url; })
-        .catch(() => { if (isCurrent()) preview.onerror(); });
+    if (video.downloaded) {
+        window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`)
+            .then(url => { if (isCurrent()) preview.src = url; })
+            .catch(() => { if (isCurrent()) preview.onerror(); });
+    }
 
     dialog.querySelector('#resetProcessConfig').onclick = () => {
         set('processPreviewSeconds', '');
         set('processFontSize', '');
         set('processSourceLanguage', 'auto');
+        set('processTranscriptSource', 'audio');
+        set('processOcrLanguage', 'auto');
+        set('processOcrFps', 2);
+        set('processOcrConfidence', 0.45);
+        set('processOcrParallelism', 2);
+        set('processOcrSimilarity', 0.82);
+        dialog.querySelector('#processOcrUseGpu').checked = false;
+        dialog.querySelector('#processOcrMergeSimilar').checked = true;
+        syncOcrOptions();
         set('processSubtitleStyle', 'minimal');
         set('processOriginalVolume', 0.15);
         set('processVoiceVolume', 1);
@@ -466,10 +594,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         dialog._logoFilename = null;
         updateLogoFields();
         pickMode = 'sub';
-        pickButtons.forEach(button => button.classList.toggle('active', button.dataset.pickMode === pickMode));
+        syncPickButtons();
         setPickingEnabled(false);
         selectedRect = null;
         drawSelection();
+        outputSummary.refresh();
     };
 
     // Preset v2: bản cấu hình độc lập cho từng job, áp dụng ngay khi chọn.
@@ -501,7 +630,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
-            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processSubtitleStyle', 'processOriginalVolume',
+            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranscriptSource',
+            'processOcrLanguage', 'processOcrFps', 'processOcrConfidence', 'processOcrParallelism', 'processOcrSimilarity', 'processSubtitleStyle', 'processOriginalVolume',
             'processVoiceVolume', 'processTtsSpeed', 'processVoice',
             'processAspectRatio', 'processMusicUrl', 'processMusicVolume',
             'processBlurPreset', 'processLogoMode', 'processLogoPath',
@@ -513,6 +643,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
+            ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
             source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
             active_pick_mode: pickMode,
             logo_data: dialog._logoData || null,
@@ -529,6 +661,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         Object.entries(preset).forEach(([id, value]) => {
             if (id === 'auto_brand_blur') {
                 dialog.querySelector('#processAutoBrandBlur').checked = !!value;
+            } else if (id === 'ocr_use_gpu') {
+                dialog.querySelector('#processOcrUseGpu').checked = !!value;
+            } else if (id === 'ocr_merge_similar') {
+                dialog.querySelector('#processOcrMergeSimilar').checked = !!value;
             } else if (id === 'source_subtitle_mode') {
                 dialog.querySelector('#processSourceNoSub').checked = value === 'none';
             } else if (id === 'logo_data') {
@@ -548,10 +684,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             pickButtons.forEach(button => button.classList.toggle('active', button.dataset.pickMode === pickMode));
         }
         logoMode.dispatchEvent(new Event('change'));
+        syncOcrOptions();
         syncSelectionFromFields();
         dialog._presetDirtySections.clear();
         dialog.dataset.presetApplying = '0';
         presetStatus.textContent = name ? `Đã áp dụng: ${name}` : 'Đã áp dụng cấu hình realtime.';
+        outputSummary.refresh();
     };
     const refreshPresetOptions = (presets, selected = '') => {
         presetSelect.innerHTML = '<option value="">Không dùng preset</option>';
@@ -781,6 +919,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         try {
         const selectedPreset = presetSelect.value;
         if (selectedPreset && dialog._presetDirtySections.size) {
+            inspector.select('presets');
             const sections = [...dialog._presetDirtySections].join(', ');
             presetStatus.textContent = `Chưa lưu: ${sections}. Hãy lưu lựa chọn trước khi xuất.`;
             alert(`Preset "${selectedPreset}" còn thay đổi chưa lưu (${sections}). Hãy bấm nút Lưu tương ứng hoặc Lưu và áp dụng trước khi xuất.`);
@@ -834,6 +973,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
             source_language: value('processSourceLanguage') || 'auto',
+            transcript_source: value('processTranscriptSource') || 'audio',
+            ocr_language: value('processOcrLanguage') || 'auto',
+            ocr_fps: Number(value('processOcrFps') || 2),
+            ocr_min_confidence: Number(value('processOcrConfidence') || 0.45),
+            ocr_parallelism: Number(value('processOcrParallelism') || 2),
+            ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
+            ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
+            ocr_similarity_threshold: Number(value('processOcrSimilarity') || 0.82),
             subtitle_style: value('processSubtitleStyle') || 'minimal',
             original_volume: Number(value('processOriginalVolume') || 0.15),
             voice_volume: Number(value('processVoiceVolume') || 1),
@@ -878,5 +1025,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             configForm.removeAttribute('aria-busy');
         }
     };
+    outputSummary.refresh();
     dialog.showModal();
+    resetScrollPositions();
 }

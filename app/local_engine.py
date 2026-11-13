@@ -111,7 +111,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.45"
+ENGINE_VERSION = "0.2.46"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -128,6 +128,7 @@ ENGINE_CAPABILITIES = {
     "workspace_assistant": True,
     "billing_ledger": True,
     "source_language": True,
+    "subtitle_ocr": True,
     "subtitle_styles": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
@@ -831,6 +832,17 @@ def _with_file_path(item: dict) -> dict:
     # Browser receives only the safe runtime-relative identifier used by the
     # authenticated file/ticket endpoints, never the machine's absolute path.
     result.pop("path", None)
+    subtitle_path = str(item.get("subtitle_path", "") or "")
+    if subtitle_path:
+        try:
+            result["srt_file_path"] = Path(subtitle_path).resolve().relative_to(
+                get_runtime_root().resolve()
+            ).as_posix()
+        except ValueError:
+            result["srt_file_path"] = ""
+    else:
+        result["srt_file_path"] = ""
+    result.pop("subtitle_path", None)
     return result
 
 
