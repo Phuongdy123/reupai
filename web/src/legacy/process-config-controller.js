@@ -630,13 +630,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             };
             const number = document.createElement('td'); number.className = 'process-ocr-row-number'; number.textContent = String(visibleIndex + 1);
             const timing = document.createElement('td'); timing.className = 'process-ocr-line-timing';
+            const timeFields = document.createElement('div'); timeFields.className = 'process-ocr-line-time-fields';
             const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startInput.setAttribute('aria-label', 'Thời gian bắt đầu, giây');
             const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endInput.setAttribute('aria-label', 'Thời gian kết thúc, giây');
             startInput.addEventListener('focus', seekToLine);
             row.addEventListener('click', event => {
                 if (!event.target.closest('input, textarea, button')) seekToLine();
             });
-            timing.append(startInput, endInput);
+            timeFields.append(startInput, endInput); timing.append(timeFields);
             const sourceCell = document.createElement('td');
             const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceInput.setAttribute('aria-label', 'Câu phụ đề gốc'); sourceInput.placeholder = 'Câu nhận diện…'; sourceCell.append(sourceInput);
             const actions = document.createElement('td'); actions.className = 'process-ocr-line-actions';
