@@ -525,7 +525,8 @@ def read_srt(file_path):
 
 def build_prompt(
     batch,
-    previous_context=""
+    previous_context="",
+    source_language=None,
 ):
     data = [
         {
@@ -556,7 +557,7 @@ def build_prompt(
         "de": "tiếng Đức", "ru": "tiếng Nga", "it": "tiếng Ý", "hi": "tiếng Hindi",
         "ar": "tiếng Ả Rập", "tr": "tiếng Thổ Nhĩ Kỳ", "ms": "tiếng Mã Lai",
         "vi": "tiếng Việt",
-    }.get(SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
+    }.get(source_language or SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
     return f"""
 Bạn là biên dịch viên dịch sang tiếng Việt.
 
@@ -1002,11 +1003,13 @@ def translate_batch_local(
 
 def translate_batch(
     batch,
-    previous_context=""
+    previous_context="",
+    source_language=None,
 ):
     prompt = build_prompt(
         batch,
-        previous_context
+        previous_context,
+        source_language=source_language,
     )
 
     last_error = None

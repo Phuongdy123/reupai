@@ -491,11 +491,44 @@ export async function openProcessConfig(video, card, mode, dependencies) {
 
     const ocrPickButton = dialog.querySelector('#processOcrPickRegion');
     const ocrScanButton = dialog.querySelector('#processOcrScan');
+    const ocrTranslateButton = dialog.querySelector('#processOcrTranslate');
     const ocrStatus = dialog.querySelector('#processOcrManualStatus');
+    const ocrActivity = dialog.querySelector('#processOcrActivity');
     const ocrLines = dialog.querySelector('#processOcrLines');
     const ocrDownload = dialog.querySelector('#processOcrDownloadSrt');
     const ocrLoadPreview = dialog.querySelector('#processOcrLoadPreview');
     let manualOcrRows = [];
+    const ocrErrorMessage = error => error?.status === 404 && /^not found$/i.test(String(error?.message || '').trim())
+        ? 'Local Engine đang dùng chưa hỗ trợ mục này. Hãy thoát hẳn Local Engine, cập nhật bản mới rồi mở lại.'
+        : error?.message || 'Không hoàn tất được thao tác OCR.';
+    const logOcrActivity = message => {
+        if (!ocrActivity) return;
+        const entry = document.createElement('div');
+        entry.className = 'process-ocr-activity-entry';
+        const time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+        entry.textContent = `${time} · ${message}`;
+        ocrActivity.append(entry);
+        ocrActivity.scrollTop = ocrActivity.scrollHeight;
+    };
+    const renderManualOcrRows = () => {
+        ocrLines.replaceChildren(...manualOcrRows.filter(Boolean).map((line, index) => {
+            const row = document.createElement('div'); row.className = 'process-ocr-line'; row.dataset.index = String(index); row.dataset.id = String(line.id);
+            const timing = document.createElement('div'); timing.className = 'process-ocr-line-timing';
+            const startLabel = document.createElement('label'); startLabel.textContent = 'In';
+            const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startLabel.append(startInput);
+            const endLabel = document.createElement('label'); endLabel.textContent = 'Đến';
+            const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endLabel.append(endInput);
+            timing.append(startLabel, endLabel);
+            const sourceLabel = document.createElement('label'); sourceLabel.textContent = 'Câu gốc';
+            const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceLabel.append(sourceInput);
+            const translatedLabel = document.createElement('label'); translatedLabel.textContent = 'Tiếng Việt';
+            const translatedInput = document.createElement('textarea'); translatedInput.className = 'ocr-line-translation'; translatedInput.rows = 2; translatedInput.placeholder = 'Bấm “Dịch sang tiếng Việt” hoặc nhập bản dịch'; translatedInput.value = String(line.translated_text || ''); translatedLabel.append(translatedInput);
+            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Xóa'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
+            remove.onclick = () => { row.remove(); manualOcrRows[index] = null; };
+            row.append(timing, sourceLabel, translatedLabel, remove);
+            return row;
+        }));
+    };
     if (ocrLoadPreview) ocrLoadPreview.onclick = () => downloadButton.click();
     if (ocrPickButton) ocrPickButton.onclick = () => {
         if (dialog.dataset.previewState !== 'ready') {
@@ -515,6 +548,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
         ocrScanButton.disabled = true;
         if (ocrStatus) ocrStatus.textContent = 'Đang quét OCR theo FPS đã chọn…';
+        if (ocrActivity) ocrActivity.replaceChildren();
+        logOcrActivity('Đang đọc phụ đề trên video trong vùng đã chọn.');
         try {
             const result = await requestJson(`/api/preview/subtitles/${encodeURIComponent(video.video_id)}`, {
                 method: 'POST', timeoutMs: 300000,
@@ -529,22 +564,58 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
                 }),
             });
-            manualOcrRows = Array.isArray(result.lines) ? result.lines : [];
-            ocrLines.replaceChildren(...manualOcrRows.map((line, index) => {
-                const row = document.createElement('div'); row.className = 'process-ocr-line'; row.dataset.index = String(index);
-                row.innerHTML = `<label>In<input class="ocr-line-start" type="number" min="0" step="0.01" value="${Number(line.start).toFixed(2)}"></label><label>Đến<input class="ocr-line-end" type="number" min="0" step="0.01" value="${Number(line.end).toFixed(2)}"></label><label>Câu phụ đề<input class="ocr-line-text" type="text"></label><button type="button" aria-label="Xóa câu">Xóa</button>`;
-                row.querySelector('.ocr-line-text').value = String(line.text || '');
-                row.querySelector('button').onclick = () => { row.remove(); manualOcrRows[index] = null; };
-                return row;
-            }));
+            manualOcrRows = (Array.isArray(result.lines) ? result.lines : []).map((line, index) => ({ ...line, id: index + 1, translated_text: '' }));
+            renderManualOcrRows();
             ocrDownload.hidden = !manualOcrRows.length;
-            if (ocrStatus) ocrStatus.textContent = `${manualOcrRows.length} câu nhận diện · ${result.device === 'gpu:0' ? 'GPU' : 'CPU'} · quét ${Number(result.scanned_duration).toFixed(0)} giây`;
-        } catch (error) { if (ocrStatus) ocrStatus.textContent = error.message || 'Không quét được OCR.'; }
+            if (ocrTranslateButton) ocrTranslateButton.hidden = !manualOcrRows.length;
+            const scannedSeconds = Number(result.scanned_duration).toFixed(0);
+            if (ocrStatus) ocrStatus.textContent = `${manualOcrRows.length} câu đã nhận diện · ${result.device === 'gpu:0' ? 'GPU' : 'CPU'} · ${scannedSeconds} giây`;
+            logOcrActivity(`Nhận diện xong ${manualOcrRows.length} câu trong ${scannedSeconds} giây bằng ${result.device === 'gpu:0' ? 'GPU' : 'CPU'}.`);
+            if (!manualOcrRows.length) logOcrActivity('Không tìm thấy chữ trong vùng đã chọn; hãy kéo lại vùng hoặc điều chỉnh OCR.');
+        } catch (error) { const message = ocrErrorMessage(error); if (ocrStatus) ocrStatus.textContent = message; logOcrActivity(message); }
         finally { ocrScanButton.disabled = false; }
+    };
+    if (ocrTranslateButton) ocrTranslateButton.onclick = async () => {
+        const rows = [...ocrLines.querySelectorAll('.process-ocr-line')];
+        const selectedRows = rows.filter(row => row.querySelector('.ocr-line-source')?.value.trim());
+        if (!selectedRows.length) { if (ocrStatus) ocrStatus.textContent = 'Chưa có câu phụ đề để dịch.'; return; }
+        ocrTranslateButton.disabled = true;
+        const batchSize = 10;
+        const batches = Math.ceil(selectedRows.length / batchSize);
+        let completed = 0;
+        logOcrActivity(`Bắt đầu dịch ${selectedRows.length} câu sang tiếng Việt bằng Gemini.`);
+        try {
+            for (let start = 0; start < selectedRows.length; start += batchSize) {
+                const batchRows = selectedRows.slice(start, start + batchSize);
+                const batchNumber = Math.floor(start / batchSize) + 1;
+                if (ocrStatus) ocrStatus.textContent = `Đang dịch nhóm ${batchNumber}/${batches} · ${completed}/${selectedRows.length} câu…`;
+                logOcrActivity(`Đang dịch nhóm ${batchNumber}/${batches} (${batchRows.length} câu).`);
+                const result = await requestJson('/api/preview/subtitle-translation', {
+                    method: 'POST', timeoutMs: 120000,
+                    body: JSON.stringify({
+                        source_language: dialog.querySelector('#processOcrLanguage')?.value || 'auto',
+                        lines: batchRows.map(row => ({ id: Number(row.dataset.id), text: row.querySelector('.ocr-line-source').value.trim() })),
+                    }),
+                });
+                const translationMap = new Map((result.translations || []).map(line => [Number(line.id), String(line.text || '')]));
+                batchRows.forEach(row => {
+                    const translated = translationMap.get(Number(row.dataset.id));
+                    if (translated) row.querySelector('.ocr-line-translation').value = translated;
+                });
+                completed += batchRows.length;
+                logOcrActivity(`Đã dịch xong ${completed}/${selectedRows.length} câu.`);
+            }
+            if (ocrStatus) ocrStatus.textContent = `Dịch xong ${completed} câu · Bạn có thể sửa nội dung và thời gian rồi xuất SRT.`;
+            ocrDownload.hidden = false;
+        } catch (error) {
+            const message = ocrErrorMessage(error);
+            if (ocrStatus) ocrStatus.textContent = message;
+            logOcrActivity(`Dịch chưa hoàn tất: ${message}`);
+        } finally { ocrTranslateButton.disabled = false; }
     };
     if (ocrDownload) ocrDownload.onclick = () => {
         const stamp = value => { let ms = Math.max(0, Math.round(Number(value) * 1000)); const h = Math.floor(ms / 3600000); ms %= 3600000; const m = Math.floor(ms / 60000); ms %= 60000; const s = Math.floor(ms / 1000); ms %= 1000; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`; };
-        const rows = [...ocrLines.querySelectorAll('.process-ocr-line')].map(row => ({ start: Number(row.querySelector('.ocr-line-start').value), end: Number(row.querySelector('.ocr-line-end').value), text: row.querySelector('.ocr-line-text').value.trim() })).filter(row => row.text && row.end > row.start);
+        const rows = [...ocrLines.querySelectorAll('.process-ocr-line')].map(row => ({ start: Number(row.querySelector('.ocr-line-start').value), end: Number(row.querySelector('.ocr-line-end').value), text: row.querySelector('.ocr-line-translation').value.trim() || row.querySelector('.ocr-line-source').value.trim() })).filter(row => row.text && row.end > row.start);
         const content = rows.map((row, i) => `${i + 1}\n${stamp(row.start)} --> ${stamp(row.end)}\n${row.text}`).join('\n\n') + '\n';
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([`\uFEFF${content}`], { type: 'application/x-subrip;charset=utf-8' })); a.download = `${video.video_id}-ocr.srt`; a.click(); URL.revokeObjectURL(a.href);
     };

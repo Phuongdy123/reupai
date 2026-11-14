@@ -113,7 +113,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.47"
+ENGINE_VERSION = "0.2.48"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -131,6 +131,7 @@ ENGINE_CAPABILITIES = {
     "billing_ledger": True,
     "source_language": True,
     "subtitle_ocr": True,
+    "manual_subtitle_translation": True,
     "subtitle_srt_export": True,
     "youtube_publishing": True,
     "subtitle_styles": True,
@@ -1010,6 +1011,16 @@ class SubtitleOcrPreviewRequest(BaseModel):
     use_gpu: bool = False
 
 
+class ManualSubtitleTranslationLine(BaseModel):
+    id: int
+    text: str = Field(min_length=1, max_length=1000)
+
+
+class ManualSubtitleTranslationRequest(BaseModel):
+    lines: list[ManualSubtitleTranslationLine] = Field(min_length=1, max_length=20)
+    source_language: str = "auto"
+
+
 @app.post("/api/preview/subtitles/{video_id}")
 async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest, _: str = Depends(require_token)):
     path = local_source_for_process(validate_channel(body.channel), validate_video_id(video_id))
@@ -1026,6 +1037,27 @@ async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest,
         )
     except RuntimeError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/preview/subtitle-translation")
+async def translate_manual_subtitle_lines(body: ManualSubtitleTranslationRequest, _: str = Depends(require_token)):
+    """Translate one small editable OCR batch, keeping the local Gemini session private."""
+    if body.source_language not in {"auto", "zh", "en", "ja", "ko", "th", "vi", "id", "es", "pt", "fr", "de", "ru", "it", "hi", "ar", "tr", "ms"}:
+        raise HTTPException(status_code=422, detail="Ngôn ngữ nguồn chưa được hỗ trợ.")
+    try:
+        from services.translator import translate_batch
+        batch = [{"id": line.id, "text": line.text.strip()} for line in body.lines]
+        if any(not line["text"] for line in batch):
+            raise HTTPException(status_code=422, detail="Có câu phụ đề đang để trống.")
+        translations = await run_in_threadpool(
+            translate_batch, batch, "", source_language=body.source_language,
+        )
+        translated_by_id = {int(item["id"]): str(item["text"]).strip() for item in translations}
+        return {"translations": [{"id": line.id, "text": translated_by_id[line.id]} for line in body.lines]}
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(status_code=422, detail=str(error) or "Không dịch được phụ đề.") from error
 
 
 @app.get("/library/source/{video_id}")

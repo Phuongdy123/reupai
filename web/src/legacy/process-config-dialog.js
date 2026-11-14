@@ -338,10 +338,12 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <button type="button" class="process-secondary-button" id="processOcrLoadPreview">${uiIcon('download', 15)} Tải video để bắt đầu</button>
                     <button type="button" class="process-secondary-button" id="processOcrPickRegion">Chọn vùng phụ đề</button>
                     <button type="button" class="process-secondary-button" id="processOcrScan">Quét phụ đề</button>
+                    <button type="button" class="process-secondary-button" id="processOcrTranslate" hidden>Dịch sang tiếng Việt</button>
                     <span id="processOcrManualStatus" role="status">Cần tải video và chọn vùng phụ đề.</span>
+                    <div class="process-ocr-activity" id="processOcrActivity" role="log" aria-live="polite" aria-label="Nhật ký OCR và dịch"></div>
                     <div class="process-ocr-lines" id="processOcrLines" aria-live="polite"></div>
                     <button type="button" class="process-secondary-button" id="processOcrDownloadSrt" hidden>Tải SRT đã chỉnh</button>
-                    <small class="process-manual-srt-note">Thiết lập ngôn ngữ và độ chính xác OCR có trong mục OCR → SRT. Quét thủ công tối đa 5 phút mỗi lần.</small>
+                    <small class="process-manual-srt-note">Chọn ngôn ngữ và độ chính xác ở mục OCR → SRT. Sau khi nhận diện, bấm Dịch sang tiếng Việt; bạn có thể sửa cả câu gốc lẫn câu dịch trước khi xuất SRT. Mỗi lần quét tối đa 5 phút.</small>
                 </div>
             </section>
             <section class="process-settings-card process-inspector-panel process-audio-settings-panel" id="processInspectorAudio" data-inspector-panel="audio" role="tabpanel" aria-labelledby="processInspectorTabAudio" tabindex="0" hidden>
