@@ -66,6 +66,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.dataset.videoId = video.video_id;
     dialog.dataset.cardId = card.dataset.videoId || '';
     let manualOcrRows = [];
+    const deletedTranscriptIds = new Set();
     let transcriptSignature = '';
     const reviewDialog = document.getElementById('processTranscriptReviewDialog');
     const reviewPreview = reviewDialog?.querySelector('#processTranscriptReviewPreview');
@@ -528,6 +529,17 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         reviewDialog?.querySelector('#processTranscriptStepReview'),
         reviewDialog?.querySelector('#processTranscriptStepExport'),
     ];
+    const reviewProgressFill = reviewDialog?.querySelector('#processTranscriptProgressFill');
+    const setReviewProgress = (index, percent) => {
+        const stage = reviewStages[index];
+        const label = stage?.querySelector('small');
+        const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+        if (label) label.textContent = `${value}%`;
+        if (index === 0 && reviewProgressFill) {
+            reviewProgressFill.style.width = `${value}%`;
+            reviewDialog?.querySelector('.process-transcript-progress')?.setAttribute('aria-valuenow', String(value));
+        }
+    };
     const setReviewStage = currentIndex => reviewStages.forEach((stage, index) => {
         if (!stage) return;
         stage.classList.toggle('is-complete', index < currentIndex);
@@ -535,6 +547,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         stage.classList.toggle('is-error', currentIndex < 0 && index === 0);
         if (index === currentIndex) stage.setAttribute('aria-current', 'step');
         else stage.removeAttribute('aria-current');
+        if (index < currentIndex) setReviewProgress(index, 100);
     });
     if (reviewPreview) {
         reviewPreview.addEventListener('loadeddata', () => { if (reviewPreviewLoading) reviewPreviewLoading.hidden = true; });
@@ -556,7 +569,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     });
     const syncReviewPreview = async () => {
         let source = preview.currentSrc || preview.src;
-        if (!source && video.downloaded) {
+        if (!source) {
             try {
                 source = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
             } catch { /* Recognition can proceed even if this optional preview is unavailable. */ }
@@ -628,12 +641,40 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceInput.setAttribute('aria-label', 'Câu phụ đề gốc'); sourceInput.placeholder = 'Câu nhận diện…'; sourceCell.append(sourceInput);
             const actions = document.createElement('td'); actions.className = 'process-ocr-line-actions';
             const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = 'Xóa câu phụ đề'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
-            remove.onclick = () => { manualOcrRows[index] = null; renderManualOcrRows(); };
+            remove.onclick = () => { deletedTranscriptIds.add(String(line.id)); manualOcrRows[index] = null; renderManualOcrRows(); };
             actions.append(remove); row.append(number, timing, sourceCell, actions);
             return row;
         }));
         const tableWrap = reviewDialog?.querySelector('.process-ocr-table-wrap');
-        if (tableWrap) tableWrap.scrollTop = 0;
+        if (tableWrap && !renderManualOcrRows.followTail) tableWrap.scrollTop = 0;
+        if (tableWrap) renderManualOcrRows.followTail = false;
+    };
+    const mergeLiveTranscriptLines = incoming => {
+        if (!Array.isArray(incoming) || !incoming.length) return;
+        const tableWrap = reviewDialog?.querySelector('.process-ocr-table-wrap');
+        const followTail = !tableWrap || tableWrap.scrollHeight - tableWrap.scrollTop - tableWrap.clientHeight < 90;
+        const previousLines = new Map(manualOcrRows.filter(Boolean).map(line => [String(line.id), line]));
+        for (const row of ocrLines?.querySelectorAll('.process-ocr-line') || []) {
+            const line = previousLines.get(String(row.dataset.id));
+            if (!line) continue;
+            line.start = Number(row.querySelector('.ocr-line-start')?.value ?? line.start);
+            line.end = Number(row.querySelector('.ocr-line-end')?.value ?? line.end);
+            line.text = row.querySelector('.ocr-line-source')?.value ?? line.text;
+        }
+        const merged = [...manualOcrRows];
+        let added = false;
+        incoming.forEach((line, index) => {
+            const id = Number(line.id ?? index + 1);
+            if (deletedTranscriptIds.has(String(id))) return;
+            const previous = previousLines.get(String(id));
+            if (!previous) added = true;
+            merged[id - 1] = { ...line, ...previous, id };
+        });
+        if (!added) return;
+        manualOcrRows = merged;
+        renderManualOcrRows.followTail = followTail;
+        renderManualOcrRows();
+        if (followTail && tableWrap) tableWrap.scrollTop = tableWrap.scrollHeight;
     };
     if (reviewDialog) {
         reviewDialog.querySelector('#processTranscriptReviewClose').onclick = () => reviewDialog.close();
@@ -654,6 +695,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 reviewStatus.textContent = 'Cần giữ lại ít nhất một câu có thời gian hợp lệ để tiếp tục.';
                 return;
             }
+            setReviewProgress(1, 100); setReviewProgress(2, 0);
             transcriptConfirmed = true;
             reviewDialog.close();
             configForm.requestSubmit();
@@ -1122,8 +1164,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 return;
             }
             if (!manualOcrRows.length) {
+                deletedTranscriptIds.clear();
                 const originalButtonLabel = submitButton.textContent;
                 submitButton.textContent = 'Đang nhận diện…';
+                setReviewProgress(0, 0); setReviewProgress(1, 0); setReviewProgress(2, 0);
                 if (reviewStatus) reviewStatus.textContent = scanVideoSubtitles
                     ? 'Đang đọc chữ phụ đề trong vùng đã chọn…'
                     : 'Đang nhận diện lời thoại từ âm thanh. Video dài có thể mất vài phút…';
@@ -1141,11 +1185,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                         : `${elapsedSeconds} giây`;
                     reviewStatus.textContent = scanVideoSubtitles
                         ? `Local Engine đang quét phụ đề bằng OCR · ${elapsed}. Thời gian tùy độ dài video và FPS.`
-                        : `Local Engine đang nhận diện lời thoại bằng Whisper · ${elapsed}. Lần đầu chạy có thể lâu hơn.`;
+                        : `Local Engine đang nhận diện lời thoại bằng Whisper · ${elapsed}. Các câu sẽ hiện dần khi được quét.`;
                 }, 5000);
                 try {
-                    const result = scanVideoSubtitles
-                        ? await requestJson(`/api/preview/subtitles/${encodeURIComponent(video.video_id)}`, {
+                    let result;
+                    if (scanVideoSubtitles) {
+                        result = await requestJson(`/api/preview/subtitles/${encodeURIComponent(video.video_id)}`, {
                             method: 'POST', timeoutMs: 30 * 60 * 1000,
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -1158,16 +1203,51 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                                 parallelism: Number(dialog.querySelector('#processOcrParallelism')?.value || 2),
                                 use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
                             }),
-                        })
-                        : await requestJson(`/api/preview/transcript/${encodeURIComponent(video.video_id)}`, {
+                        });
+                        setReviewProgress(0, 100);
+                    } else {
+                        result = await requestJson(`/api/preview/transcript/${encodeURIComponent(video.video_id)}`, {
                             method: 'POST', timeoutMs: 30 * 60 * 1000,
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ channel: video.channel || '2d_animation', source_language: dialog.querySelector('#processSourceLanguage')?.value || 'auto' }),
                         });
-                    manualOcrRows = (Array.isArray(result.lines) ? result.lines : []).map((line, index) => ({ ...line, id: index + 1 }));
+                        if (result.task_id) {
+                            const taskPath = `/api/preview/transcript/${encodeURIComponent(video.video_id)}/${encodeURIComponent(result.task_id)}`;
+                            let task = result;
+                            while (task.status === 'processing') {
+                                mergeLiveTranscriptLines(task.lines);
+                                const percent = Number(task.progress) || 0;
+                                setReviewProgress(0, percent);
+                                const processed = Number(task.processed_seconds) || 0;
+                                const total = Number(task.total_seconds) || Number(video.duration_seconds || video.duration) || 0;
+                                const formatClock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+                                const positionText = total > 0 ? `Đã quét ${formatClock(processed)} / ${formatClock(total)}` : 'Đang đọc audio';
+                                const lineCount = Number(task.line_count ?? task.lines?.length) || 0;
+                                const elapsedSeconds = Math.floor((Date.now() - recognitionStartedAt) / 1000);
+                                const elapsed = elapsedSeconds >= 60 ? `${Math.floor(elapsedSeconds / 60)} phút ${elapsedSeconds % 60} giây` : `${elapsedSeconds} giây`;
+                                if (reviewStatus) reviewStatus.textContent = `${task.message || 'Đang nhận diện lời thoại'} · ${percent}% · ${lineCount} câu · ${positionText} · ${elapsed}`;
+                                const positionLabel = reviewDialog?.querySelector('#processTranscriptScanPosition');
+                                if (positionLabel) positionLabel.textContent = `${positionText} · ${percent}%`;
+                                if (reviewPreview?.readyState >= 1 && processed > 1 && Math.abs(reviewPreview.currentTime - processed) > 3) {
+                                    try { reviewPreview.currentTime = Math.max(0, processed - 0.2); } catch {}
+                                }
+                                task = await requestJson(taskPath, { method: 'GET', timeoutMs: 15000 });
+                            }
+                            mergeLiveTranscriptLines(task.lines);
+                            if (task.status === 'error') throw new Error(task.error || 'Không nhận diện được lời thoại.');
+                            result = task;
+                        } else {
+                            // Older Local Engine versions return all recognized lines in one response.
+                            setReviewProgress(0, 100);
+                        }
+                    }
+                    if (Array.isArray(result.lines) && !manualOcrRows.length) {
+                        manualOcrRows = result.lines.map((line, index) => ({ ...line, id: Number(line.id ?? index + 1) }));
+                    }
                     transcriptSignature = currentTranscriptSignature();
                     renderManualOcrRows();
                     if (!manualOcrRows.length) throw new Error('Không tìm thấy câu thoại/phụ đề để duyệt. Kiểm tra âm thanh hoặc thử OCR.');
+                    setReviewProgress(0, 100); setReviewProgress(1, 0);
                     if (reviewStatus) reviewStatus.textContent = `${manualOcrRows.length} câu đã nhận diện bằng ${scanVideoSubtitles ? 'OCR' : 'Whisper'}. Chỉnh sửa nếu cần, rồi xác nhận để dịch và xuất.`;
                     setReviewStage(1);
                     if (ocrStatus) ocrStatus.textContent = `Đã nhận diện ${manualOcrRows.length} câu. Bạn có thể sửa ở bước kiểm tra phụ đề.`;

@@ -428,14 +428,15 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <button type="button" class="btn secondary" id="processTranscriptReviewClose" aria-label="Quay lại thiết lập">Quay lại</button>
                 </header>
                 <nav class="process-transcript-stepper" aria-label="Các bước xử lý">
-                    <span class="is-current" id="processTranscriptStepRecognize" aria-current="step"><b>1</b> Nhận diện</span><i aria-hidden="true"></i>
-                    <span id="processTranscriptStepReview"><b>2</b> Duyệt lời thoại</span><i aria-hidden="true"></i>
-                    <span id="processTranscriptStepExport"><b>3</b> Dịch &amp; xuất</span>
+                    <span class="is-current" id="processTranscriptStepRecognize" aria-current="step"><b>1</b> Nhận diện <small>0%</small></span><i aria-hidden="true"></i>
+                    <span id="processTranscriptStepReview"><b>2</b> Duyệt lời thoại <small>0%</small></span><i aria-hidden="true"></i>
+                    <span id="processTranscriptStepExport"><b>3</b> Dịch &amp; xuất <small>0%</small></span>
                 </nav>
+                <div class="process-transcript-progress" role="progressbar" aria-label="Tiến độ nhận diện lời thoại" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="processTranscriptProgressFill"></span></div>
                 <div class="process-transcript-review-status" id="processTranscriptReviewStatus" role="status">Đang nhận diện lời thoại…</div>
                 <main class="process-transcript-review-workspace">
                     <section class="process-transcript-preview-panel" aria-label="Xem trước video">
-                        <div class="process-transcript-panel-heading"><span>VIDEO NGUỒN</span><small>Chọn một câu để đến đúng thời điểm</small></div>
+                        <div class="process-transcript-panel-heading"><span>VIDEO NGUỒN</span><small id="processTranscriptScanPosition">Đang chuẩn bị quét</small></div>
                         <div class="process-transcript-preview-player">
                             <video id="processTranscriptReviewPreview" controls muted playsinline preload="metadata"></video>
                             <div class="process-transcript-preview-loading" id="processTranscriptPreviewLoading" role="status">Đang mở video xem trước…</div>
