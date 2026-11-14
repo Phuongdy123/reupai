@@ -428,15 +428,18 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <button type="button" class="btn secondary" id="processTranscriptReviewClose" aria-label="Quay lại thiết lập">Quay lại</button>
                 </header>
                 <nav class="process-transcript-stepper" aria-label="Các bước xử lý">
-                    <span class="is-complete"><b>1</b> Nhận diện</span><i aria-hidden="true"></i>
-                    <span class="is-current" aria-current="step"><b>2</b> Duyệt lời thoại</span><i aria-hidden="true"></i>
-                    <span><b>3</b> Dịch &amp; xuất</span>
+                    <span class="is-current" id="processTranscriptStepRecognize" aria-current="step"><b>1</b> Nhận diện</span><i aria-hidden="true"></i>
+                    <span id="processTranscriptStepReview"><b>2</b> Duyệt lời thoại</span><i aria-hidden="true"></i>
+                    <span id="processTranscriptStepExport"><b>3</b> Dịch &amp; xuất</span>
                 </nav>
                 <div class="process-transcript-review-status" id="processTranscriptReviewStatus" role="status">Đang nhận diện lời thoại…</div>
                 <main class="process-transcript-review-workspace">
                     <section class="process-transcript-preview-panel" aria-label="Xem trước video">
                         <div class="process-transcript-panel-heading"><span>VIDEO NGUỒN</span><small>Chọn một câu để đến đúng thời điểm</small></div>
-                        <video id="processTranscriptReviewPreview" controls muted playsinline preload="metadata"></video>
+                        <div class="process-transcript-preview-player">
+                            <video id="processTranscriptReviewPreview" controls muted playsinline preload="metadata"></video>
+                            <div class="process-transcript-preview-loading" id="processTranscriptPreviewLoading" role="status">Đang mở video xem trước…</div>
+                        </div>
                     </section>
                     <section class="process-ocr-result-section" aria-label="Lời thoại đã nhận diện">
                         <div class="process-transcript-panel-heading"><span>LỜI THOẠI ĐÃ NHẬN DIỆN</span><small>Chỉnh câu gốc và thời gian ngay tại đây</small></div>
