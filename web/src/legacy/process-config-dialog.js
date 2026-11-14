@@ -334,16 +334,30 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             <section class="process-settings-card process-inspector-panel process-manual-srt-panel" id="processInspectorManualSrt" data-inspector-panel="manual-srt" role="tabpanel" aria-labelledby="processInspectorTabManualSrt" tabindex="0" hidden>
                 <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>Chỉnh phụ đề thủ công</strong><small>Quét chữ trên hình, sửa từng câu và xuất SRT</small></div>
                 <div class="process-ocr-manual-tools">
-                    <p>Chọn vùng phụ đề trên video rồi quét. Bạn có thể sửa nội dung và thời gian từng câu trước khi tải file SRT.</p>
-                    <button type="button" class="process-secondary-button" id="processOcrLoadPreview">${uiIcon('download', 15)} Tải video để bắt đầu</button>
-                    <button type="button" class="process-secondary-button" id="processOcrPickRegion">Chọn vùng phụ đề</button>
-                    <button type="button" class="process-secondary-button" id="processOcrScan">Quét phụ đề</button>
-                    <button type="button" class="process-secondary-button" id="processOcrTranslate" hidden>Dịch sang tiếng Việt</button>
-                    <span id="processOcrManualStatus" role="status">Cần tải video và chọn vùng phụ đề.</span>
-                    <div class="process-ocr-activity" id="processOcrActivity" role="log" aria-live="polite" aria-label="Nhật ký OCR và dịch"></div>
-                    <div class="process-ocr-lines" id="processOcrLines" aria-live="polite"></div>
-                    <button type="button" class="process-secondary-button" id="processOcrDownloadSrt" hidden>Tải SRT đã chỉnh</button>
-                    <small class="process-manual-srt-note">Chọn ngôn ngữ và độ chính xác ở mục OCR → SRT. Sau khi nhận diện, bấm Dịch sang tiếng Việt; bạn có thể sửa cả câu gốc lẫn câu dịch trước khi xuất SRT. Mỗi lần quét tối đa 5 phút.</small>
+                    <div class="process-ocr-workspace-toolbar">
+                        <div class="process-ocr-workspace-actions">
+                            <button type="button" class="process-secondary-button" id="processOcrLoadPreview">${uiIcon('download', 15)} Tải video</button>
+                            <button type="button" class="process-secondary-button" id="processOcrPickRegion">Chọn vùng quét</button>
+                            <button type="button" class="process-secondary-button" id="processOcrScan">Quét phụ đề</button>
+                            <button type="button" class="process-secondary-button" id="processOcrTranslate" hidden>Dịch sang tiếng Việt</button>
+                        </div>
+                        <button type="button" class="process-secondary-button process-ocr-export" id="processOcrDownloadSrt" hidden>${uiIcon('download', 15)} Xuất SRT</button>
+                    </div>
+                    <div class="process-ocr-statusbar"><span class="process-ocr-status-dot" aria-hidden="true"></span><span id="processOcrManualStatus" role="status">Tải video, chọn vùng phụ đề rồi quét.</span></div>
+                    <section class="process-ocr-result-section" aria-label="Bảng phụ đề đã nhận diện">
+                        <div class="process-ocr-section-title"><strong>Câu phụ đề</strong><small>Chỉnh thời gian và nội dung trước khi xuất</small></div>
+                        <div class="process-ocr-table-wrap">
+                            <table class="process-ocr-table">
+                                <thead><tr><th>#</th><th>Thời gian</th><th>Câu gốc</th><th>Tiếng Việt</th><th></th></tr></thead>
+                                <tbody class="process-ocr-lines" id="processOcrLines" aria-live="polite"><tr class="process-ocr-empty"><td colspan="5">Chưa có câu phụ đề. Chọn vùng trên video rồi bấm “Quét phụ đề”.</td></tr></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section class="process-ocr-log-section" aria-label="Nhật ký nhận diện và dịch">
+                        <div class="process-ocr-section-title"><strong>Nhật ký hoạt động</strong><small>Tiến độ quét OCR và dịch</small></div>
+                        <div class="process-ocr-activity" id="processOcrActivity" role="log" aria-live="polite" aria-label="Nhật ký OCR và dịch"><div class="process-ocr-activity-entry">Sẵn sàng nhận diện phụ đề.</div></div>
+                    </section>
+                    <small class="process-manual-srt-note">Thiết lập ngôn ngữ, FPS, độ chính xác và GPU trong mục OCR → SRT. Bản dịch có thể sửa riêng từng dòng; SRT xuất ra dùng câu tiếng Việt nếu đã dịch.</small>
                 </div>
             </section>
             <section class="process-settings-card process-inspector-panel process-audio-settings-panel" id="processInspectorAudio" data-inspector-panel="audio" role="tabpanel" aria-labelledby="processInspectorTabAudio" tabindex="0" hidden>

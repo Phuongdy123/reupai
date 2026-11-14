@@ -511,21 +511,27 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         ocrActivity.scrollTop = ocrActivity.scrollHeight;
     };
     const renderManualOcrRows = () => {
-        ocrLines.replaceChildren(...manualOcrRows.filter(Boolean).map((line, index) => {
-            const row = document.createElement('div'); row.className = 'process-ocr-line'; row.dataset.index = String(index); row.dataset.id = String(line.id);
-            const timing = document.createElement('div'); timing.className = 'process-ocr-line-timing';
-            const startLabel = document.createElement('label'); startLabel.textContent = 'In';
-            const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startLabel.append(startInput);
-            const endLabel = document.createElement('label'); endLabel.textContent = 'Đến';
-            const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endLabel.append(endInput);
-            timing.append(startLabel, endLabel);
-            const sourceLabel = document.createElement('label'); sourceLabel.textContent = 'Câu gốc';
-            const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceLabel.append(sourceInput);
-            const translatedLabel = document.createElement('label'); translatedLabel.textContent = 'Tiếng Việt';
-            const translatedInput = document.createElement('textarea'); translatedInput.className = 'ocr-line-translation'; translatedInput.rows = 2; translatedInput.placeholder = 'Bấm “Dịch sang tiếng Việt” hoặc nhập bản dịch'; translatedInput.value = String(line.translated_text || ''); translatedLabel.append(translatedInput);
-            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Xóa'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
-            remove.onclick = () => { row.remove(); manualOcrRows[index] = null; };
-            row.append(timing, sourceLabel, translatedLabel, remove);
+        const lines = manualOcrRows.map((line, index) => line ? { line, index } : null).filter(Boolean);
+        if (!lines.length) {
+            const empty = document.createElement('tr'); empty.className = 'process-ocr-empty';
+            const cell = document.createElement('td'); cell.colSpan = 5; cell.textContent = 'Chưa có câu phụ đề. Chọn vùng trên video rồi bấm “Quét phụ đề”.';
+            empty.append(cell); ocrLines.replaceChildren(empty); return;
+        }
+        ocrLines.replaceChildren(...lines.map(({ line, index }, visibleIndex) => {
+            const row = document.createElement('tr'); row.className = 'process-ocr-line'; row.dataset.index = String(index); row.dataset.id = String(line.id);
+            const number = document.createElement('td'); number.className = 'process-ocr-row-number'; number.textContent = String(visibleIndex + 1);
+            const timing = document.createElement('td'); timing.className = 'process-ocr-line-timing';
+            const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startInput.setAttribute('aria-label', 'Thời gian bắt đầu, giây');
+            const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endInput.setAttribute('aria-label', 'Thời gian kết thúc, giây');
+            timing.append(startInput, endInput);
+            const sourceCell = document.createElement('td');
+            const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceInput.setAttribute('aria-label', 'Câu phụ đề gốc'); sourceCell.append(sourceInput);
+            const translatedCell = document.createElement('td');
+            const translatedInput = document.createElement('textarea'); translatedInput.className = 'ocr-line-translation'; translatedInput.rows = 2; translatedInput.placeholder = 'Dịch hoặc nhập câu tiếng Việt'; translatedInput.value = String(line.translated_text || ''); translatedInput.setAttribute('aria-label', 'Câu phụ đề tiếng Việt'); translatedCell.append(translatedInput);
+            const actions = document.createElement('td'); actions.className = 'process-ocr-line-actions';
+            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = 'Xóa câu phụ đề'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
+            remove.onclick = () => { manualOcrRows[index] = null; renderManualOcrRows(); };
+            actions.append(remove); row.append(number, timing, sourceCell, translatedCell, actions);
             return row;
         }));
     };
