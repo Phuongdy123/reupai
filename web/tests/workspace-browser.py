@@ -29,7 +29,7 @@ const NativeFileReader=window.FileReader;
 window.FileReader=class extends NativeFileReader { readAsDataURL(file) {setTimeout(()=>super.readAsDataURL(file),100);} };
 window.openConfig=()=>openProcessConfig(video,card,'voiceover',{
   document,window,localStorage,uiIcon:()=>'',formatDuration:()=>'',formatVideoRatio:()=>'',
-  processConfigDefaults:()=>({}),downloadVideo:async()=>{},processVideo:()=>{window.processCount++;},
+  processConfigDefaults:()=>({}),downloadVideo:async()=>{},processVideo:(_video,_card,mode,config)=>{window.processCount++;window.lastProcess={mode,config};},
   ensureProcessConfigDialog:async()=>createProcessConfigDialog({document,uiIcon:()=>''})
 });
 window.fixtureReady=true;
@@ -176,6 +176,26 @@ async def main():
             await page.locator('#cancelProcessConfig').click()
             await expect(page.locator('#processConfigDialog')).not_to_be_visible()
             checks.append('watermark removal is opt-in for each new video configuration')
+            await page.evaluate('openConfig()')
+            await expect(page.locator('#processInspectorOcr')).not_to_be_visible()
+            await page.locator('#processInspectorTabOcr').click()
+            await expect(page.locator('#processInspectorOcr')).to_be_visible()
+            await expect(page.locator('#processOcrOptions')).not_to_be_visible()
+            await page.locator('#processTranscriptSource').select_option('video_subtitles')
+            await expect(page.locator('#processOcrOptions')).to_be_visible()
+            await page.locator('#processOutputFormat').select_option('srt')
+            await page.screenshot(path=str(OUT/'ocr-srt-desktop.png'))
+            await page.locator('#runProcessConfig').click()
+            assert await page.evaluate('lastProcess.mode') == 'subtitle'
+            assert await page.evaluate('lastProcess.config.output_format') == 'srt'
+            assert await page.evaluate('lastProcess.config.transcript_source') == 'video_subtitles'
+            await page.evaluate('openConfig()')
+            await expect(page.locator('#processInspectorOcr')).not_to_be_visible()
+            await expect(page.locator('#processTranscriptSource')).to_have_value('audio')
+            await expect(page.locator('#processOutputFormat')).to_have_value('video')
+            await page.locator('#cancelProcessConfig').click()
+            await page.evaluate('window.processCount=0')
+            checks.append('OCR is opt-in in the right inspector; standalone SRT uses subtitle mode and settings reset for the next video')
             await page.evaluate('openConfig()')
             await page.locator('.process-ai-disclosure summary').click()
             await page.locator('#processAiPrompt').fill('Test fixture')

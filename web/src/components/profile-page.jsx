@@ -6,6 +6,7 @@ import { createClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/supabase/config";
 import { BillingNotice, useBilling } from "./billing-provider";
 import { planName, quotaText } from "../lib/plan-display";
+import { YoutubeConnection } from "./youtube-connection";
 
 export function ProfilePage() {
   const [user, setUser] = useState(null);
@@ -39,5 +40,5 @@ export function ProfilePage() {
     } catch (error) { setMessage(error.message); }
     finally { setSaving(false); }
   }
-  return <div className="profile-page"><div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || user?.email || "R").slice(0, 1).toUpperCase()}</div><div><small>TÀI KHOẢN REUPAI</small><h2>{profile?.display_name || "Hồ sơ của bạn"}</h2><span>{user?.email || "Đang tải…"}</span></div></div><div className="profile-grid"><section className="panel"><h3>Thông tin cá nhân</h3><form onSubmit={save}><label>Tên hiển thị<input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label><label>Email<input value={user?.email || ""} disabled /></label><button className="profile-save" disabled={saving || !user}>{saving ? "Đang lưu…" : "Lưu thay đổi"}</button></form>{message && <p role="status">{message}</p>}</section><section className="panel"><h3>Gói của bạn</h3><strong>{billing ? planName(billing) : billingError ? "Chưa đọc được gói" : "Đang tải gói…"}</strong><BillingNotice error={billingError} refresh={refreshBilling} /><p>{quotaText(billing)}</p><Link href="/plans">Xem gói dịch vụ →</Link></section></div></div>;
+  return <div className="profile-page"><div className="profile-hero"><div className="profile-avatar">{(profile?.display_name || user?.email || "R").slice(0, 1).toUpperCase()}</div><div><small>TÀI KHOẢN REUPAI</small><h2>{profile?.display_name || "Hồ sơ của bạn"}</h2><span>{user?.email || "Đang tải…"}</span></div></div><div className="profile-grid"><section className="panel"><h3>Thông tin cá nhân</h3><form onSubmit={save}><label>Tên hiển thị<input value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required /></label><label>Email<input value={user?.email || ""} disabled /></label><button className="profile-save" disabled={saving || !user}>{saving ? "Đang lưu…" : "Lưu thay đổi"}</button></form>{message && <p role="status">{message}</p>}</section><section className="panel"><h3>Gói của bạn</h3><strong>{billing ? planName(billing) : billingError ? "Chưa đọc được gói" : "Đang tải gói…"}</strong><BillingNotice error={billingError} refresh={refreshBilling} /><p>{quotaText(billing)}</p><Link href="/plans">Xem gói dịch vụ →</Link></section></div><YoutubeConnection /></div>;
 }

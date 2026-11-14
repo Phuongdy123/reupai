@@ -182,6 +182,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <nav class="process-inspector-rail" role="tablist" aria-label="Nhóm thiết lập video" aria-orientation="vertical">
                     <button type="button" class="process-inspector-tab active" id="processInspectorTabVideo" role="tab" data-inspector-tab="video" aria-controls="processInspectorVideo" aria-selected="true" tabindex="0"><span class="process-inspector-tab-icon">${uiIcon('video', 18)}</span><span>Video</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabSubtitles" role="tab" data-inspector-tab="subtitles" aria-controls="processInspectorSubtitles" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>Phụ đề</span></button>
+                    <button type="button" class="process-inspector-tab" id="processInspectorTabOcr" role="tab" data-inspector-tab="ocr" aria-controls="processInspectorOcr" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>OCR → SRT</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabAudio" role="tab" data-inspector-tab="audio" aria-controls="processInspectorAudio" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('voice', 18)}</span><span>Âm thanh</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabPresets" role="tab" data-inspector-tab="presets" aria-controls="processInspectorPresets" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('save', 18)}</span><span>Cấu hình</span></button>
                 </nav>
@@ -219,10 +220,66 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             <section class="process-settings-card process-inspector-panel process-subtitles-settings-panel" id="processInspectorSubtitles" data-inspector-panel="subtitles" role="tabpanel" aria-labelledby="processInspectorTabSubtitles" tabindex="0" hidden>
                 <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>Phụ đề tiếng Việt</strong><small>Ngôn ngữ và kiểu chữ</small></div>
                 <div class="process-config-grid">
+                <label class="process-source-language-field">Ngôn ngữ nguồn để dịch
+                    <select id="processSourceLanguage">
+                        <option value="auto">Tự động nhận diện (khuyên dùng)</option>
+                        <option value="zh">Tiếng Trung</option>
+                        <option value="en">Tiếng Anh</option>
+                        <option value="ja">Tiếng Nhật</option>
+                        <option value="ko">Tiếng Hàn</option>
+                        <option value="th">Tiếng Thái</option>
+                        <option value="id">Tiếng Indonesia</option>
+                        <option value="es">Tiếng Tây Ban Nha</option>
+                        <option value="pt">Tiếng Bồ Đào Nha</option>
+                        <option value="fr">Tiếng Pháp</option>
+                        <option value="de">Tiếng Đức</option>
+                        <option value="ru">Tiếng Nga</option>
+                        <option value="it">Tiếng Ý</option>
+                        <option value="hi">Tiếng Hindi</option>
+                        <option value="ar">Tiếng Ả Rập</option>
+                        <option value="tr">Tiếng Thổ Nhĩ Kỳ</option>
+                        <option value="ms">Tiếng Mã Lai</option>
+                        <option value="vi">Tiếng Việt</option>
+                    </select>
+                    <small>Để tự động nếu bạn chưa biết ngôn ngữ của video.</small>
+                </label>
+                <label>Cỡ chữ phụ đề
+                    <select id="processFontSize" title="Tự động: cỡ chữ được điều chỉnh theo vùng phụ đề">
+                        <option value="">Tự động</option>
+                        <option value="24">24 px</option>
+                        <option value="28">28 px</option>
+                        <option value="32">32 px</option>
+                        <option value="36">36 px</option>
+                    </select>
+                </label>
+                <label class="process-subtitle-style-field">Phong cách phụ đề
+                    <select id="processSubtitleStyle">
+                        <option value="minimal">Minimal Clean</option>
+                        <option value="bold">Creator Bold</option>
+                        <option value="cinema">Cinema</option>
+                        <option value="neon">Neon Pop</option>
+                        <option value="box">Simple Box</option>
+                    </select>
+                </label>
+
+                </div>
+            </section>
+            <section class="process-settings-card process-inspector-panel process-ocr-settings-panel" id="processInspectorOcr" data-inspector-panel="ocr" role="tabpanel" aria-labelledby="processInspectorTabOcr" tabindex="0" hidden>
+                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>OCR → SRT</strong><small>Đọc chữ, dịch và xuất phụ đề</small></div>
+                <p class="process-recognition-hint">Mặc định AI tự nhận diện. Chỉ điều chỉnh các mục dưới đây khi bạn muốn chọn cách lấy phụ đề.</p>
+                <div class="process-config-grid process-recognition-controls">
+                <label class="process-source-language-field">Kết quả cần xuất
+                    <select id="processOutputFormat">
+                        <option value="video">Video kèm file SRT riêng</option>
+                        <option value="srt">Chỉ file SRT · Không render video</option>
+                    </select>
+                    <small>File SRT tiếng Việt được tải riêng trong Thành phẩm.</small>
+                </label>
+
                 <label class="process-source-language-field">Lấy phụ đề từ
                     <select id="processTranscriptSource">
-                        <option value="audio">Lời thoại trong âm thanh · Whisper</option>
-                        <option value="video_subtitles">Chữ phụ đề trên hình · OCR → SRT</option>
+                        <option value="audio">Lời thoại trong âm thanh (mặc định)</option>
+                        <option value="video_subtitles">Chữ phụ đề trên hình</option>
                     </select>
                     <small>OCR đọc phụ đề có sẵn trong khung hình, dịch và lưu thêm tệp SRT.</small>
                 </label>
@@ -271,48 +328,6 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     </label>
                     <p class="process-ocr-note" id="processOcrNote">Quét 2 khung hình/giây là mức cân bằng. Tăng tốc độ sẽ đọc sát hơn nhưng xử lý lâu hơn; lần đầu có thể cần tải model OCR.</p>
                 </div>
-                <label class="process-source-language-field">Ngôn ngữ nguồn để dịch
-                    <select id="processSourceLanguage">
-                        <option value="auto">Tự động nhận diện (khuyên dùng)</option>
-                        <option value="zh">Tiếng Trung</option>
-                        <option value="en">Tiếng Anh</option>
-                        <option value="ja">Tiếng Nhật</option>
-                        <option value="ko">Tiếng Hàn</option>
-                        <option value="th">Tiếng Thái</option>
-                        <option value="id">Tiếng Indonesia</option>
-                        <option value="es">Tiếng Tây Ban Nha</option>
-                        <option value="pt">Tiếng Bồ Đào Nha</option>
-                        <option value="fr">Tiếng Pháp</option>
-                        <option value="de">Tiếng Đức</option>
-                        <option value="ru">Tiếng Nga</option>
-                        <option value="it">Tiếng Ý</option>
-                        <option value="hi">Tiếng Hindi</option>
-                        <option value="ar">Tiếng Ả Rập</option>
-                        <option value="tr">Tiếng Thổ Nhĩ Kỳ</option>
-                        <option value="ms">Tiếng Mã Lai</option>
-                        <option value="vi">Tiếng Việt</option>
-                    </select>
-                    <small>Dùng để nhận diện lời thoại hoặc làm ngôn ngữ đầu vào cho bản dịch OCR.</small>
-                </label>
-                <label>Cỡ chữ phụ đề
-                    <select id="processFontSize" title="Tự động: cỡ chữ được điều chỉnh theo vùng phụ đề">
-                        <option value="">Tự động</option>
-                        <option value="24">24 px</option>
-                        <option value="28">28 px</option>
-                        <option value="32">32 px</option>
-                        <option value="36">36 px</option>
-                    </select>
-                </label>
-                <label class="process-subtitle-style-field">Phong cách phụ đề
-                    <select id="processSubtitleStyle">
-                        <option value="minimal">Minimal Clean</option>
-                        <option value="bold">Creator Bold</option>
-                        <option value="cinema">Cinema</option>
-                        <option value="neon">Neon Pop</option>
-                        <option value="box">Simple Box</option>
-                    </select>
-                </label>
-
                 </div>
             </section>
             <section class="process-settings-card process-inspector-panel process-audio-settings-panel" id="processInspectorAudio" data-inspector-panel="audio" role="tabpanel" aria-labelledby="processInspectorTabAudio" tabindex="0" hidden>

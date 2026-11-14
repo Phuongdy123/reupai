@@ -74,6 +74,7 @@ from web.server import (
     api_stream,
     preview_source_video,
     local_source_for_process,
+    find_result_file,
     validate_channel,
     validate_video_id,
     library_source,
@@ -111,7 +112,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.46"
+ENGINE_VERSION = "0.2.47"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -129,6 +130,8 @@ ENGINE_CAPABILITIES = {
     "billing_ledger": True,
     "source_language": True,
     "subtitle_ocr": True,
+    "subtitle_srt_export": True,
+    "youtube_publishing": True,
     "subtitle_styles": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
@@ -286,7 +289,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Range"],
+    allow_headers=["Authorization", "Content-Type", "Range", "X-ReupAI-Account"],
     expose_headers=["Content-Disposition", "Content-Range", "Accept-Ranges", "Content-Length"],
     # HTTPS frontends (Vercel/custom domain) trigger the browser's Private
     # Network Access preflight when they call the loopback engine. This stays
@@ -583,6 +586,93 @@ def diagnostics_whisper(_: bool = Depends(require_token)):
 def gemini_oauth_status(_: bool = Depends(require_token)):
     from services.gemini_oauth import status as oauth_status
     return oauth_status()
+
+
+def youtube_owner(x_reupai_account: Annotated[str | None, Header()] = None, _: bool = Depends(require_token)):
+    from services.social_identity import account_for_token
+    try:
+        return account_for_token(x_reupai_account or "")
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+def _youtube_call(function, *args, **kwargs):
+    try:
+        return function(*args, **kwargs)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        # Do not send Google credentials, response bodies or local paths to the browser.
+        raise HTTPException(status_code=503, detail="YouTube chưa hoàn tất yêu cầu. Kiểm tra kết nối và thử lại.") from error
+
+
+@app.get("/api/youtube/connection")
+def youtube_connection(owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import connection_status
+    return _youtube_call(connection_status, owner)
+
+
+@app.post("/api/youtube/connect")
+def youtube_connect(owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import start_connection
+    return _youtube_call(start_connection, owner)
+
+
+@app.delete("/api/youtube/connection")
+def youtube_disconnect(owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import disconnect
+    _youtube_call(disconnect, owner)
+    return {"ok": True}
+
+
+def _youtube_video(payload, owner):
+    if payload.get("account_id") != owner:
+        raise HTTPException(status_code=403, detail="Tài khoản đã thay đổi. Hãy mở lại cửa sổ đăng YouTube.")
+    video_id = validate_video_id(str(payload.get("video_id", "")))
+    channel = validate_channel(str(payload.get("channel", "2d_animation")))
+    mode = payload.get("mode", "subtitle")
+    if mode not in {"subtitle", "voiceover"}:
+        raise HTTPException(status_code=400, detail="Chỉ đăng video thành phẩm, không đăng file SRT.")
+    video = find_result_file(channel, video_id, mode)
+    if not video:
+        raise HTTPException(status_code=404, detail="Không tìm thấy video thành phẩm. Làm mới thư viện rồi thử lại.")
+    return video
+
+
+@app.post("/api/youtube/thumbnails")
+def youtube_thumbnails(payload: dict, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import thumbnail_choices
+    return {"images": _youtube_call(thumbnail_choices, _youtube_video(payload, owner))}
+
+
+@app.post("/api/youtube/suggest")
+def youtube_suggest(payload: dict, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import suggest_metadata
+    images = payload.get("images", [])
+    if not isinstance(images, list) or len(images) > 3:
+        raise HTTPException(status_code=400, detail="Chỉ chọn tối đa 3 ảnh để gợi ý nội dung.")
+    return _youtube_call(suggest_metadata, _youtube_video(payload, owner), str(payload.get("title", "")),
+                         str(payload.get("instructions", "")), images)
+
+
+@app.post("/api/youtube/uploads")
+def youtube_upload(payload: dict, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import start_upload
+    return _youtube_call(start_upload, owner, _youtube_video(payload, owner), payload)
+
+
+@app.get("/api/youtube/uploads/{job_id}")
+def youtube_upload_status(job_id: str, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import upload_status
+    return _youtube_call(upload_status, owner, job_id)
 
 
 @app.post("/api/assistant")
@@ -915,8 +1005,8 @@ def source_file(video_id: str, _: bool = Depends(require_token)):
 
 
 @app.get("/api/result/{video_id}")
-def result_file(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
-    return api_result(video_id=video_id, channel=channel, mode=mode)
+def result_file(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", output_format: str = "video", _: bool = Depends(require_token)):
+    return api_result(video_id=video_id, channel=channel, mode=mode, output_format=output_format)
 
 
 @app.get("/api/stream/{video_id}")
@@ -1048,7 +1138,8 @@ def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
         response = library_source(video_id=path.rsplit("/", 1)[-1])
     elif path.startswith(("/api/stream/", "/api/result/")):
         handler = api_stream if path.startswith("/api/stream/") else api_result
-        response = handler(video_id=path.rsplit("/", 1)[-1], channel=query.get("channel", ["2d_animation"])[0], mode=query.get("mode", ["subtitle"])[0])
+        options = {"output_format": query.get("output_format", ["video"])[0]} if handler is api_result else {}
+        response = handler(video_id=path.rsplit("/", 1)[-1], channel=query.get("channel", ["2d_animation"])[0], mode=query.get("mode", ["subtitle"])[0], **options)
     else:
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
     response.headers["Cache-Control"] = "private, no-store"

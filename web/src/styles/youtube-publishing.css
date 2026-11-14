@@ -1,0 +1,49 @@
+.youtube-connection { margin-top: 20px; }
+.youtube-channel-row { display: flex; align-items: center; gap: 14px; margin: 20px 0; }
+.youtube-channel-row p { margin: 4px 0 0; color: #a8a8ac; }
+.youtube-channel-row > .status { margin-left: auto; }
+.youtube-channel-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; background: #242426; }
+.youtube-connection > small { display: block; margin-top: 16px; color: #9a9a9f; line-height: 1.6; }
+.youtube-error { padding: 12px 14px; border-radius: 12px; border: 1px solid #64646b; color: #ececf0; background: #262628; font-size: 12px; line-height: 1.6; }
+.youtube-publish-dialog { width: min(800px, calc(100vw - 32px)); max-height: calc(100dvh - 36px); padding: 0; overflow: hidden; border: 1px solid #39393c; border-radius: 24px; background: #111113; color: #efeff2; box-shadow: 0 28px 90px #0008; }
+.youtube-publish-dialog::backdrop { background: #000b; }
+.youtube-publish-dialog form { display: flex; flex-direction: column; max-height: calc(100dvh - 36px); margin: 0; }
+.youtube-publish-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 22px 26px 18px; border-bottom: 1px solid #2b2b2e; }
+.youtube-publish-dialog header small { color: #98989f; font-size: 10px; letter-spacing: .12em; }
+.youtube-publish-dialog h2 { margin: 8px 0; font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
+.youtube-publish-dialog header p { margin: 0; font-size: 12px; color: #b4b4bb; }
+.youtube-publish-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px 26px 24px; }
+.youtube-publish-fields { display: grid; gap: 18px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.youtube-publish-fields > label, .youtube-publish-grid > label, .youtube-ai-draft > label { display: grid; gap: 8px; min-width: 0; color: #d4d4da; font-size: 12px; }
+.youtube-publish-fields :is(input:not([type=checkbox]):not([type=file]),textarea,select) { width: 100%; min-width: 0; padding: 11px 13px; border: 1px solid #3b3b40; border-radius: 12px; background: #1c1c1f; color: #f0f0f4; font: inherit; font-size: 13px; }
+.youtube-publish-fields textarea { resize: vertical; min-height: 130px; }
+.youtube-publish-fields small { color: #97979f; font-size: 11px; line-height: 1.6; }
+.youtube-publish-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.youtube-ai-draft { display: grid; gap: 10px; padding: 16px; border-radius: 16px; border: 1px solid #303034; background: #18181b; }
+.youtube-ai-draft .btn { justify-self: start; }
+.youtube-thumbnails { display: grid; gap: 12px; }
+.youtube-file-label { position: relative; overflow: hidden; }
+.youtube-file-label input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.youtube-thumbnail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.youtube-thumbnail-grid button { padding: 3px; border: 2px solid transparent; border-radius: 12px; background: #242427; cursor: pointer; }
+.youtube-thumbnail-grid button.selected { border-color: #eeeeef; }
+.youtube-thumbnail-grid img, .youtube-chosen-thumbnail img { display: block; width: 100%; aspect-ratio: 16/9; object-fit: contain; border-radius: 8px; background: #080809; }
+.youtube-chosen-thumbnail { display: grid; grid-template-columns: 180px 1fr; align-items: center; gap: 14px; }
+.youtube-chosen-thumbnail .btn { justify-self: start; }
+.youtube-publish-fields .youtube-publish-confirm { display: flex; align-items: flex-start; gap: 10px; line-height: 1.6; }
+.youtube-publish-confirm input { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 1px; accent-color: #e4e4e8; }
+.youtube-publish-dialog footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 26px; border-top: 1px solid #2b2b2e; }
+.youtube-publish-dialog .btn { min-height: 40px; border-radius: 999px; }
+.youtube-publish-dialog :focus-visible { outline: 2px solid #bcbcc6; outline-offset: 3px; }
+.youtube-upload-status { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px; border: 1px solid #414148; border-radius: 14px; font-size: 12px; }
+.youtube-upload-status progress { width: 100%; height: 8px; accent-color: #dfdfe6; }
+.youtube-upload-status p { margin: 0; line-height: 1.6; }
+@media (max-width: 640px) {
+  .youtube-publish-dialog { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); border-radius: 18px; }
+  .youtube-publish-dialog form { max-height: calc(100dvh - 16px); }
+  .youtube-publish-dialog header, .youtube-publish-body, .youtube-publish-dialog footer { padding-left: 16px; padding-right: 16px; }
+  .youtube-publish-grid { grid-template-columns: 1fr; }
+  .youtube-channel-row { flex-wrap: wrap; }
+  .youtube-thumbnail-grid { gap: 5px; }
+  .youtube-publish-dialog .btn { min-height: 44px; }
+}

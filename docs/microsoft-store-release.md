@@ -21,6 +21,12 @@ Reserve the real product name in Partner Center and copy the following values fr
 | `-DisplayName` | The reserved Store display name |
 | `-StoreProductId` | Optional 12-character product ID used in the Store link |
 
+The reserved name for the current ReupAI product (`9P52XN9ZS4RC`) is **ReupAI**.
+Use `-DisplayName 'ReupAI'` for this product. `ReupAI Local Engine` is the desktop
+description and is not a reserved Store name; using it in the manifest causes
+Partner Center package validation to fail. The script defaults to `ReupAI` for
+Store builds and keeps its separate development name for preview builds.
+
 For ReupAI distributed as part of a business, trade, or profession, use the appropriate Company publisher account. Microsoft's current onboarding flow has no registration fee, but publisher/business verification is still required. The account owner completes identity documents and agreements directly with Microsoft.
 
 ## Build commands

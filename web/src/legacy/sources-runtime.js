@@ -2654,6 +2654,9 @@ async function performProcessVideo(
         if (config.subtitle_style && config.subtitle_style !== 'minimal' && !health.capabilities?.subtitle_styles) {
             throw new Error('Hãy cập nhật Local Engine để dùng phong cách phụ đề mới.');
         }
+        if (config.output_format === 'srt' && !health.capabilities?.subtitle_srt_export) {
+            throw new Error('Cần Local Engine hỗ trợ xuất riêng SRT. Hãy cập nhật Engine trước khi sử dụng.');
+        }
         let billingToken = null;
         if (!health.capabilities?.billing_ledger) {
             throw new Error('Local Engine cần được cập nhật để dùng gói Free / Pro. Hãy cài bản ReupAI mới nhất.');
@@ -3063,19 +3066,22 @@ async function pollProcess(
 
             if (
                 mode
-                === 'subtitle'
+                === 'subtitle' && data.output_format !== 'srt'
             ) {
 
                 video.has_subtitle_result =
                     true;
 
-            } else {
+            } else if (mode === 'voiceover') {
 
                 video.has_voice_result =
                     true;
             }
 
-            dynamicResults.innerHTML = `
+            const srtOnly = data.output_format === 'srt';
+            dynamicResults.innerHTML = srtOnly ? `
+                <a class="secondary download-finished" href="/api/result/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(channel)}&mode=${encodeURIComponent(mode)}&output_format=srt">${uiIcon('download', 16)} Tải SRT tiếng Việt</a>
+            ` : `
                 <button
                     class="secondary play-finished"
                 >
@@ -3094,11 +3100,8 @@ async function pollProcess(
                 </a>
             `;
 
-            dynamicResults
-            .querySelector(
-                '.play-finished'
-            )
-            .onclick = () => {
+            const playFinished = dynamicResults.querySelector('.play-finished');
+            if (playFinished) playFinished.onclick = () => {
 
                 openPlayer(
                     video,

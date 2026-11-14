@@ -6,8 +6,11 @@ import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, Loading, Notice, Pager, PreviewDialog, VideoCover, dateText, outputPath, sourceHref, sourcePath } from "./library-ui";
 import { OutputEditor } from "./output-editor";
+import { useYoutubeConnection } from "./youtube-connection";
+import { YoutubePublishDialog } from "./youtube-publish-dialog";
 
 const PAGE_SIZE = 12;
+const isSubtitleFile = (item) => item.asset_type === "subtitle" || item.mode === "srt";
 export function FilesPage({ kind }) {
   const { status, client, connect, check } = useEngine();
   const [items, setItems] = useState([]);
@@ -21,6 +24,8 @@ export function FilesPage({ kind }) {
   const [busy, setBusy] = useState(null);
   const [editor, setEditor] = useState(null);
   const isOutputs = kind === "outputs";
+  const youtube = useYoutubeConnection(isOutputs);
+  const [publishing, setPublishing] = useState(null);
   const title = isOutputs ? "Thành phẩm" : "Video đã tải";
   const load = useCallback(async (refresh = false) => {
     if (status !== "connected") return;
@@ -37,7 +42,7 @@ export function FilesPage({ kind }) {
     const value = normalized(item);
     if (!value.file_path) { setError("Không tìm thấy đường dẫn file video. Làm mới thư viện rồi thử lại."); return; }
     setBusy(`${item.video_id}-${item.mode || "source"}`); setError(null);
-    try { await client.downloadFile(value.file_path, `${item.video_id}-${item.mode || "source"}.mp4`); setNotice("Đã gửi file tới trình duyệt để tải về."); }
+    try { await client.downloadFile(value.file_path, `${item.video_id}-${item.mode || "source"}.${isSubtitleFile(item) ? "srt" : "mp4"}`); setNotice("Đã gửi file tới trình duyệt để tải về."); }
     catch (requestError) { setError(requestError.message || "Không thể tải file local."); }
     finally { setBusy(null); }
   };
@@ -54,14 +59,16 @@ export function FilesPage({ kind }) {
   return <>
     <ErrorMessage error={error} retry={load} /><Notice>{notice}</Notice>
     <section className="panel"><div className="panel-head"><div><h2>{isOutputs ? "Thành phẩm" : "Thư viện video đã tải"}</h2><p>{items.length} {isOutputs ? "file final hiện có." : "video nguồn đang có trên máy."}</p></div><div className="library-actions"><button className="btn secondary" onClick={() => load(true)} disabled={loading}><Icon name="refresh" size={16} />Làm mới</button>{!isOutputs && <Link className="btn primary" href="/sources">Lấy thêm video</Link>}</div></div>
-      <div className="control-bar" style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}><input aria-label={`Tìm ${title.toLowerCase()}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc ID video..." style={{ flex: "1 1 220px" }} />{isOutputs && <select aria-label="Lọc chế độ" value={mode} onChange={(event) => setMode(event.target.value)}><option value="">Tất cả thành phẩm</option><option value="subtitle">Vietsub</option><option value="voiceover">Vietsub + Voice</option></select>}</div>
+      {isOutputs && youtube.supported && !youtube.connection?.connected && <p className="muted">Muốn đăng thành phẩm lên YouTube? <Link href="/profile#channels">Kết nối kênh trong Tài khoản</Link>.</p>}
+      <div className="control-bar" style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}><input aria-label={`Tìm ${title.toLowerCase()}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc ID video..." style={{ flex: "1 1 220px" }} />{isOutputs && <select aria-label="Lọc chế độ" value={mode} onChange={(event) => setMode(event.target.value)}><option value="">Tất cả thành phẩm</option><option value="subtitle">Vietsub</option><option value="voiceover">Vietsub + Voice</option><option value="srt">Chỉ SRT</option></select>}</div>
       {loading && <Loading label="Đang đọc thư viện trên máy" />}
       {!loading && !items.length && <div className="empty-state">{isOutputs ? <>Chưa tìm thấy thành phẩm. Chạy Vietsub hoặc Voice từ <Link className="text-link" href="/sources">Nguồn video</Link> để tạo video hoàn tất.</> : <>Chưa có video tải về. Vào <Link className="text-link" href="/sources">Nguồn video</Link> để tải video đầu tiên.</>}</div>}
       {!loading && items.length > 0 && !filtered.length && <div className="empty-state">Không có video phù hợp bộ lọc. <button className="text-link" onClick={() => { setQuery(""); setMode(""); }}>Xóa bộ lọc</button></div>}
-      {!loading && filtered.length > 0 && <div className={`library-grid${isOutputs ? " outputs-grid" : ""}`}>{filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className={`library-card${isOutputs ? " output-library-card" : ""}`} key={`${item.video_id}-${item.mode || "source"}`}><VideoCover client={client} video={item} previewPath={normalized(item).file_path}>{isOutputs && <span className="mode-badge">{item.mode_label || (item.mode === "voiceover" ? "Vietsub + Voice" : "Vietsub")}</span>}</VideoCover><div className="library-body"><h3>{item.title || item.video_id}</h3><div className="library-meta"><span>{item.video_id}</span>{item.channel && <span>{item.channel}</span>}{item.size_text && <span>{item.size_text}</span>}{item.updated_at && <span>{dateText(item.updated_at)}</span>}</div><div className="library-actions"><button className="btn primary" onClick={() => openPreview(item)}><Icon name="play" size={16} />Xem</button><button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}`} onClick={() => download(item)}><Icon name="download" size={16} />{busy === `${item.video_id}-${item.mode || "source"}` ? "Đang tải…" : "Tải"}</button>{isOutputs && item.srt_file_path && <button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}-srt`} onClick={() => downloadSrt(item)}><Icon name="captions" size={16} />{busy === `${item.video_id}-${item.mode || "source"}-srt` ? "Đang tải SRT…" : "Tải SRT"}</button>}{isOutputs && <button className="btn secondary output-edit-result" onClick={() => setEditor(item)}><Icon name="settings" size={15} />Chỉnh sửa kết quả</button>}{!isOutputs && <Link className="btn secondary" href={sourceHref(item)}><Icon name="spark" size={16} />Xử lý AI</Link>}</div></div></article>)}</div>}
+      {!loading && filtered.length > 0 && <div className={`library-grid${isOutputs ? " outputs-grid" : ""}`}>{filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className={`library-card${isOutputs ? " output-library-card" : ""}`} key={`${item.video_id}-${item.mode || "source"}`}><VideoCover client={client} video={item} previewPath={isSubtitleFile(item) ? undefined : normalized(item).file_path}>{isOutputs && <span className="mode-badge">{item.mode_label || (item.mode === "voiceover" ? "Vietsub + Voice" : "Vietsub")}</span>}</VideoCover><div className="library-body"><h3>{item.title || item.video_id}</h3><div className="library-meta"><span>{item.video_id}</span>{item.channel && <span>{item.channel}</span>}{item.size_text && <span>{item.size_text}</span>}{item.updated_at && <span>{dateText(item.updated_at)}</span>}</div><div className="library-actions">{!isSubtitleFile(item) && <button className="btn primary" onClick={() => openPreview(item)}><Icon name="play" size={16} />Xem</button>}<button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}`} onClick={() => download(item)}><Icon name="download" size={16} />{busy === `${item.video_id}-${item.mode || "source"}` ? "Đang tải…" : isSubtitleFile(item) ? "Tải SRT" : "Tải"}</button>{isOutputs && !isSubtitleFile(item) && item.srt_file_path && <button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}-srt`} onClick={() => downloadSrt(item)}><Icon name="captions" size={16} />{busy === `${item.video_id}-${item.mode || "source"}-srt` ? "Đang tải SRT…" : "Tải SRT"}</button>}{isOutputs && !isSubtitleFile(item) && youtube.connection?.connected && <button className="btn secondary" onClick={() => setPublishing(item)}><Icon name="upload" size={15} />Đăng nhanh</button>}{isOutputs && !isSubtitleFile(item) && <button className="btn secondary output-edit-result" onClick={() => setEditor(item)}><Icon name="settings" size={15} />Chỉnh sửa kết quả</button>}{!isOutputs && <Link className="btn secondary" href={sourceHref(item)}><Icon name="spark" size={16} />Xử lý AI</Link>}</div></div></article>)}</div>}
       {!loading && <Pager page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />}
     </section>
     {preview && <PreviewDialog client={client} item={preview} onClose={() => setPreview(null)} onError={setError} />}
     {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setNotice("Đã vào hàng đợi xuất lại. Theo dõi tiến độ ở Dashboard hoặc Lịch sử."); setEditor(null); }} />}
+    {publishing && youtube.connection?.connected && <YoutubePublishDialog client={client} item={publishing} connection={youtube.connection} onClose={() => setPublishing(null)} />}
   </>;
 }

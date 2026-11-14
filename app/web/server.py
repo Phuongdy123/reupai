@@ -506,6 +506,7 @@ class ProcessRequest(BaseModel):
         "ru", "it", "hi", "ar", "tr", "ms", "vi",
     ] = "auto"
     transcript_source: Literal["audio", "video_subtitles"] = "audio"
+    output_format: Literal["video", "srt"] = "video"
     ocr_language: Literal["auto", "zh", "en", "ja", "ko", "vi", "th"] = "auto"
     ocr_fps: float = Field(default=2.0, ge=0.5, le=10.0)
     ocr_min_confidence: float = Field(default=0.45, ge=0.05, le=0.99)
@@ -2278,8 +2279,10 @@ def _pipeline_worker_once(
                     mode,
                 )
             )
+            if (settings or {}).get("output_format") == "srt":
+                result_file = job_dir_for(channel, video_id) / "final_sub.srt"
             if result_file is None or not file_ok(result_file):
-                raise RuntimeError("Pipeline kết thúc nhưng chưa tạo được video thành phẩm.")
+                raise RuntimeError("Pipeline kết thúc nhưng chưa tạo được thành phẩm.")
 
             sync_job_files(
                 video_id=
@@ -2947,6 +2950,7 @@ def _scan_outputs_library():
             )
 
             candidates = [
+                ("srt", "SRT tiếng Việt", job_dir / "final_sub.srt"),
                 (
                     "subtitle",
                     "Vietsub",
@@ -2979,6 +2983,7 @@ def _scan_outputs_library():
                 )
 
                 items.append({
+                    "asset_type": "subtitle" if mode == "srt" else "video",
                     "video_id":
                         video_id,
 
@@ -5852,7 +5857,14 @@ def api_process_status(
         )
     )
 
+    artifact_info = read_json_file(job_dir / "job.json") or {}
+    output_format = "srt" if artifact_info.get("output_format") == "srt" and mode == "subtitle" else "video"
+    if output_format == "srt":
+        subtitle_result = job_dir / "final_sub.srt"
+        result_file = subtitle_result if file_ok(subtitle_result) else None
+
     return {
+        "output_format": output_format,
         "video_id":
             video_id,
 
@@ -5901,6 +5913,7 @@ def api_result(
         "2d_animation",
     mode: str =
         "subtitle",
+    output_format: str = "video",
 ):
 
     video_id = (
@@ -5938,6 +5951,13 @@ def api_result(
         )
     )
 
+    if output_format not in {"video", "srt"}:
+        raise HTTPException(status_code=400, detail="Định dạng kết quả không hợp lệ.")
+    if output_format == "srt":
+        result_file = job_dir_for(channel, video_id) / "final_sub.srt"
+        if not file_ok(result_file):
+            result_file = None
+
     if not result_file:
 
         raise HTTPException(
@@ -5957,12 +5977,15 @@ def api_result(
         )
     )
 
+    if output_format == "srt":
+        filename = f"{video_id}_vi.srt"
+
     return FileResponse(
         path=str(
             result_file
         ),
         media_type=
-            "video/mp4",
+            "application/x-subrip" if output_format == "srt" else "video/mp4",
         filename=
             filename,
         headers={

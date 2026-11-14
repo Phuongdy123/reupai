@@ -1387,6 +1387,8 @@ def check_processing_storage(
     force_audio: bool = False,
     force_voice: bool = False,
     include_voice: bool = True,
+    include_audio: bool = True,
+    include_render: bool = True,
     preview_seconds: float | None = None,
 ) -> None:
     """Estimate extra workspace needed before a long video consumes hours of work.
@@ -1415,10 +1417,10 @@ def check_processing_storage(
     # 16 kHz mono source WAV: 32,000 bytes/s.  Voice timeline retains the
     # existing 44.1 kHz stereo PCM format: 176,400 bytes/s.
     source_audio_bytes = (
-        0 if file_ok(audio_path) and not force_audio
+        0 if not include_audio or (file_ok(audio_path) and not force_audio)
         else int(duration_seconds * 32_000)
     )
-    voice_needed = include_voice and mode == "voiceover" and (
+    voice_needed = include_render and include_voice and mode == "voiceover" and (
         force_voice or voice_path is None or not file_ok(voice_path)
     )
     voice_bytes = int(duration_seconds * 176_400) if voice_needed else 0
@@ -1438,7 +1440,7 @@ def check_processing_storage(
     render_bytes = max(
         int(source_size * render_duration / duration_seconds * 2),
         int(render_duration * 1_500_000),
-    )
+    ) if include_render else 0
     reserve_bytes = 512 * 1024**2
     required = source_audio_bytes + voice_bytes + clip_bytes + render_bytes + reserve_bytes
     free = shutil.disk_usage(job_dir).free
@@ -3588,6 +3590,8 @@ def pipeline(
         check_processing_storage(
             source_video, job_dir, audio_path, mode,
             voice_path=voice_path, force_audio=force, include_voice=False,
+            include_audio=transcript_source == "audio",
+            include_render=config.get("output_format") != "srt",
             preview_seconds=preview_seconds,
         )
 
@@ -3829,6 +3833,18 @@ def pipeline(
 
             )
             source_language_path.write_text(source_language, encoding="utf-8")
+
+        if config.get("output_format") == "srt":
+            from services.subtitle_export import export_subtitle_file
+            subtitle_output = export_subtitle_file(vietnamese_srt, job_dir)
+            save_job_info(job_dir, {
+                **base_job, "status": "completed", "output_format": "srt",
+                "source_video": rel(source_video), "chinese_srt": rel(chinese_srt),
+                "vietnamese_srt": rel(vietnamese_srt), "final_srt": rel(subtitle_output),
+            })
+            write_progress(job_dir, stage="completed", percent=100, status="completed",
+                           message="Đã xuất file SRT tiếng Việt. Không render video.", mode=mode)
+            return subtitle_output
 
 
 

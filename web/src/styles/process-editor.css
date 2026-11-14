@@ -220,3 +220,12 @@ body.theme-xports #processConfigDialog .process-ocr-options select { width: 100%
 body.theme-xports #processConfigDialog .process-ocr-options .process-check-option { grid-column: 1 / -1; }
 body.theme-xports #processConfigDialog .process-ocr-options .process-ocr-note { grid-column: 1 / -1; margin: 0; color: #a6a6a6; font-size: 10px; line-height: 1.55; }
 body.theme-xports #processConfigDialog #processOcrSimilarityField[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-recognition-hint { grid-column: 1 / -1; margin: 0; color: #a7a7a7; font-size: 11px; line-height: 1.6; }
+body.theme-xports #processConfigDialog .process-recognition-advanced { grid-column: 1 / -1; margin-top: 0; }
+body.theme-xports #processConfigDialog .process-recognition-advanced > summary { min-height: 42px; }
+body.theme-xports #processConfigDialog .process-recognition-advanced > summary strong { font-size: 11px; }
+body.theme-xports #processConfigDialog .process-recognition-controls { display: grid; gap: 12px; padding: 8px 0 14px; }
+body.theme-xports #processConfigDialog .process-recognition-controls > label { display: grid; gap: 7px; color: #c7c7c7; font-size: 11px; }
+@media (max-width: 640px) {
+  body.theme-xports #processConfigDialog .process-ocr-options { grid-template-columns: minmax(0, 1fr); }
+}

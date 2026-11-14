@@ -52,6 +52,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     const configForm = dialog.querySelector('form');
     const inspector = bindProcessInspectorTabs(dialog, { window, signal });
+    // Manual OCR settings are opt-in for every new video, even after editing
+    // the previous video's OCR panel.
+    inspector.select('video');
     const outputSummary = bindProcessOutputSummary(dialog, { mode, signal });
     if (!dialog.dataset.presetDirtyBound) {
         configForm.addEventListener('input', event => dialog._presetMarkDirty?.(event.target), true);
@@ -76,6 +79,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processFontSize', defaults.subtitle_font_size || '');
     set('processSourceLanguage', defaults.source_language || 'auto');
     set('processTranscriptSource', defaults.transcript_source || 'audio');
+    set('processOutputFormat', defaults.output_format || 'video');
     set('processOcrLanguage', defaults.ocr_language || 'auto');
     set('processOcrFps', defaults.ocr_fps ?? 2);
     set('processOcrConfidence', defaults.ocr_min_confidence ?? 0.45);
@@ -101,6 +105,13 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     ocrMergeSimilar.onchange = syncOcrOptions;
     dialog.querySelector('#processOcrFps').oninput = syncOcrOptions;
     syncOcrOptions();
+    const outputFormat = dialog.querySelector('#processOutputFormat');
+    const syncOutputLabel = () => {
+        const button = dialog.querySelector('#runProcessConfig');
+        if (button) button.textContent = outputFormat?.value === 'srt' ? 'Xuất file SRT' : 'Bắt đầu xử lý';
+    };
+    if (outputFormat) outputFormat.onchange = syncOutputLabel;
+    syncOutputLabel();
     set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
@@ -630,7 +641,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
-            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranscriptSource',
+            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranscriptSource', 'processOutputFormat',
             'processOcrLanguage', 'processOcrFps', 'processOcrConfidence', 'processOcrParallelism', 'processOcrSimilarity', 'processSubtitleStyle', 'processOriginalVolume',
             'processVoiceVolume', 'processTtsSpeed', 'processVoice',
             'processAspectRatio', 'processMusicUrl', 'processMusicVolume',
@@ -685,6 +696,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
         logoMode.dispatchEvent(new Event('change'));
         syncOcrOptions();
+        syncOutputLabel();
         syncSelectionFromFields();
         dialog._presetDirtySections.clear();
         dialog.dataset.presetApplying = '0';
@@ -974,6 +986,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
             source_language: value('processSourceLanguage') || 'auto',
             transcript_source: value('processTranscriptSource') || 'audio',
+            output_format: value('processOutputFormat') || 'video',
             ocr_language: value('processOcrLanguage') || 'auto',
             ocr_fps: Number(value('processOcrFps') || 2),
             ocr_min_confidence: Number(value('processOcrConfidence') || 0.45),
@@ -1018,7 +1031,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         };
         if (!isCurrent()) return;
         dialog.close();
-        processVideo(video, card, mode, config);
+        processVideo(video, card, config.output_format === 'srt' ? 'subtitle' : mode, config);
         } finally {
             submitting = false;
             submitButton.disabled = false;

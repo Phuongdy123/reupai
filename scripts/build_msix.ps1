@@ -5,7 +5,8 @@ param(
     [string]$IdentityName,
     [string]$Publisher,
     [string]$PublisherDisplayName,
-    [string]$DisplayName = "ReupAI Local Engine",
+    # Must match the product name reserved in Partner Center, not the EXE description.
+    [string]$DisplayName = "ReupAI",
     [string]$PackageVersion,
     [string]$StoreProductId,
     [string]$MakeAppxPath,

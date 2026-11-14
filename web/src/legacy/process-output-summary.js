@@ -18,8 +18,8 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
         const language = value('processSourceLanguage') || 'auto';
         const transcriptSource = value('processTranscriptSource') || 'audio';
         const sourceLabel = transcriptSource === 'video_subtitles'
-            ? `OCR trên hình · ${value('processOcrLanguage') === 'auto' ? 'đa ngôn ngữ' : selectedLabel('processOcrLanguage', 'OCR')}`
-            : 'Âm thanh · Whisper';
+            ? `Chữ trên video · ${value('processOcrLanguage') === 'auto' ? 'đa ngôn ngữ' : selectedLabel('processOcrLanguage', 'Tự nhận diện')}`
+            : 'Tự nhận diện lời thoại';
         const languageLabel = language === 'auto'
             ? `${sourceLabel} → Tiếng Việt`
             : language === 'vi'
@@ -33,7 +33,7 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
         const hasSelectedRegion = Number.isFinite(width) && width > 0
             && Number.isFinite(height) && height > 0;
 
-        write('mode', mode === 'subtitle' ? 'Vietsub' : 'Vietsub + Voice');
+        write('mode', value('processOutputFormat') === 'srt' ? 'Chỉ SRT' : mode === 'subtitle' ? 'Vietsub' : 'Vietsub + Voice');
         write('frame', value('processAspectRatio')
             ? selectedLabel('processAspectRatio', 'Giữ tỷ lệ gốc')
             : 'Giữ tỷ lệ gốc');
@@ -48,7 +48,7 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
             : hasSelectedRegion ? 'Vùng đã chọn'
                 : blurPreset ? selectedLabel('processBlurPreset', 'Theo vị trí đã chọn') : 'Tự nhận diện');
         summary.querySelectorAll('[data-output-summary-row="voice"]').forEach(row => {
-            const hidden = mode === 'subtitle';
+            const hidden = mode === 'subtitle' || value('processOutputFormat') === 'srt';
             if (row.hidden !== hidden) row.hidden = hidden;
         });
     };
