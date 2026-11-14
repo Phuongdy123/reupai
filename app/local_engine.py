@@ -75,6 +75,7 @@ from web.server import (
     api_stream,
     preview_source_video,
     local_source_for_process,
+    job_dir_for,
     find_result_file,
     validate_channel,
     validate_video_id,
@@ -113,7 +114,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.48"
+ENGINE_VERSION = "0.2.49"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -1011,6 +1012,11 @@ class SubtitleOcrPreviewRequest(BaseModel):
     use_gpu: bool = False
 
 
+class AudioTranscriptPreviewRequest(BaseModel):
+    channel: str = "2d_animation"
+    source_language: str = "auto"
+
+
 class ManualSubtitleTranslationLine(BaseModel):
     id: int
     text: str = Field(min_length=1, max_length=1000)
@@ -1037,6 +1043,46 @@ async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest,
         )
     except RuntimeError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str):
+    from core.pipeline import extract_audio
+    from services.transcriber import transcribe
+
+    try:
+        audio_path.parent.mkdir(parents=True, exist_ok=True)
+        extract_audio(source_path, audio_path, force=True)
+        lines = transcribe(str(audio_path), language=None if language == "auto" else language)
+        return {
+            "lines": [
+                {"id": index, "start": float(line["start"]), "end": float(line["end"]), "text": str(line["text"])}
+                for index, line in enumerate(lines, 1)
+                if str(line.get("text", "")).strip() and float(line.get("end", 0)) > float(line.get("start", 0))
+            ],
+            "count": len(lines),
+        }
+    finally:
+        audio_path.unlink(missing_ok=True)
+
+
+@app.post("/api/preview/transcript/{video_id}")
+async def audio_transcript_preview(video_id: str, body: AudioTranscriptPreviewRequest, _: str = Depends(require_token)):
+    """Run the pipeline's Whisper recognizer and return editable timed speech lines."""
+    channel = validate_channel(body.channel)
+    video_id = validate_video_id(video_id)
+    if body.source_language not in {"auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru", "it", "hi", "ar", "tr", "ms", "vi"}:
+        raise HTTPException(status_code=422, detail="Ngôn ngữ nguồn chưa được hỗ trợ.")
+    source = local_source_for_process(channel, video_id)
+    if not source or not Path(source).is_file():
+        raise HTTPException(status_code=404, detail="Hãy tải video về máy trước khi quét lời thoại.")
+    audio_path = job_dir_for(channel, video_id) / f".transcript-preview-{secrets.token_hex(8)}.wav"
+    try:
+        result = await run_in_threadpool(_transcribe_audio_preview, Path(source), audio_path, body.source_language)
+    except Exception as error:
+        raise HTTPException(status_code=422, detail=str(error) or "Không nhận diện được lời thoại.") from error
+    if not result["lines"]:
+        raise HTTPException(status_code=422, detail="Whisper không tìm thấy lời thoại. Thử chọn ngôn ngữ nguồn cụ thể hoặc dùng OCR nếu video có phụ đề sẵn.")
+    return result
 
 
 @app.post("/api/preview/subtitle-translation")

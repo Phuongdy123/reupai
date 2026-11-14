@@ -490,6 +490,12 @@ class DownloadRequest(BaseModel):
     video_id: str
 
 
+class ManualTranscriptLine(BaseModel):
+    start: float = Field(ge=0)
+    end: float = Field(gt=0)
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class ProcessRequest(BaseModel):
     url: str
     video_id: str
@@ -506,6 +512,9 @@ class ProcessRequest(BaseModel):
         "ru", "it", "hi", "ar", "tr", "ms", "vi",
     ] = "auto"
     transcript_source: Literal["audio", "video_subtitles"] = "audio"
+    # Optional Whisper/OCR transcript reviewed in the web editor. When present,
+    # the pipeline uses it as the source SRT and skips a second recognition pass.
+    manual_transcript: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=10000)
     output_format: Literal["video", "srt"] = "video"
     ocr_language: Literal["auto", "zh", "en", "ja", "ko", "vi", "th"] = "auto"
     ocr_fps: float = Field(default=2.0, ge=0.5, le=10.0)

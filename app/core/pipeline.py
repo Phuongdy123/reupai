@@ -3217,6 +3217,7 @@ def pipeline(
     transcription_signature = stable_fingerprint({
         "schema": 1,
         "transcript_source": transcript_source,
+        "manual_transcript": config.get("manual_transcript") or None,
         "source_language": source_language,
         "ocr_language": config.get("ocr_language", "auto"),
         "ocr_fps": float(config.get("ocr_fps", 2.0) or 2.0),
@@ -3715,7 +3716,26 @@ def pipeline(
                 ),
                 mode=mode,
             )
-        if transcript_source == "video_subtitles":
+        manual_transcript = config.get("manual_transcript") or []
+        if manual_transcript:
+            from services import transcriber
+
+            normalized_transcript = []
+            for line in manual_transcript:
+                try:
+                    start = max(0.0, float(line.get("start", 0)))
+                    end = float(line.get("end", 0))
+                    text = str(line.get("text", "")).strip()
+                except (AttributeError, TypeError, ValueError):
+                    continue
+                if text and end > start:
+                    normalized_transcript.append({"start": start, "end": end, "text": text})
+            if not normalized_transcript:
+                raise RuntimeError("Bản lời thoại đã sửa không có câu hợp lệ để xử lý.")
+            transcriber.save_srt(normalized_transcript, rel(chinese_srt))
+            print(f"[MANUAL TRANSCRIPT] Using {len(normalized_transcript)} reviewed subtitle lines.")
+            no_speech = False
+        elif transcript_source == "video_subtitles":
             if not (not transcription_force and file_ok(chinese_srt) and chinese_srt.read_text(encoding="utf-8-sig").strip()):
                 from services.subtitle_ocr import extract_subtitle_srt
 
