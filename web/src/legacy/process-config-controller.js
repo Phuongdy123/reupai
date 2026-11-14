@@ -260,6 +260,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         pickerToggle.disabled = !ready;
         autoBlurButton.disabled = !ready;
         downloadButton.hidden = ready || state === 'loading';
+        const manualLoadButton = dialog.querySelector('#processOcrLoadPreview');
+        if (manualLoadButton) {
+            manualLoadButton.hidden = ready;
+            manualLoadButton.disabled = state === 'downloading' || state === 'loading';
+            manualLoadButton.textContent = state === 'downloading' ? 'Đang tải video…' : 'Tải video để bắt đầu';
+        }
         empty.style.display = ready ? 'none' : '';
         empty.querySelector('strong').textContent = state === 'loading' ? 'Đang mở video…' : state === 'downloading' ? 'Đang tải video…' : 'Xem trước video';
         empty.querySelector('p').textContent = state === 'loading' || state === 'downloading'
@@ -477,6 +483,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             dragStart = null;
             if (selectedRect && selectedRect.width > 4 && selectedRect.height > 4) {
                 updateSelectionFields(selectedRect);
+                if (pickMode === 'ocr' && ocrStatus) ocrStatus.textContent = 'Đã chọn vùng. Bấm “Quét phụ đề” để nhận diện.';
             }
             try { canvas.releasePointerCapture(event.pointerId); } catch {}
         };
@@ -487,15 +494,22 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const ocrStatus = dialog.querySelector('#processOcrManualStatus');
     const ocrLines = dialog.querySelector('#processOcrLines');
     const ocrDownload = dialog.querySelector('#processOcrDownloadSrt');
+    const ocrLoadPreview = dialog.querySelector('#processOcrLoadPreview');
     let manualOcrRows = [];
+    if (ocrLoadPreview) ocrLoadPreview.onclick = () => downloadButton.click();
     if (ocrPickButton) ocrPickButton.onclick = () => {
+        if (dialog.dataset.previewState !== 'ready') {
+            if (ocrStatus) ocrStatus.textContent = 'Tải video trước để chọn vùng phụ đề.';
+            ocrLoadPreview?.click();
+            return;
+        }
         pickMode = 'ocr';
         syncPickButtons();
         setPickingEnabled(true);
         if (ocrStatus) ocrStatus.textContent = 'Kéo khung quanh chữ phụ đề trên video.';
     };
     if (ocrScanButton) ocrScanButton.onclick = async () => {
-        if (!video.downloaded || !preview.videoWidth || !selectedRect) {
+        if (dialog.dataset.previewState !== 'ready' || !preview.videoWidth || !selectedRect) {
             if (ocrStatus) ocrStatus.textContent = 'Tải video, rồi chọn vùng phụ đề trước khi quét.';
             return;
         }
