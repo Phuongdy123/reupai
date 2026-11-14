@@ -1,16 +1,16 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.44",
+    "version": "0.2.47",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.44/ReupAI-Setup-0.2.44.exe",
-    "sha256": "8ef5e0f49fff6cb8d3e146f3eea742b7981f9faf6fbe480747f1624a5afc02b1",
-    "size": 464927787,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.47/ReupAI-Setup-0.2.47.exe",
+    "sha256": "7286fa12f85db7e0b7c2fed5049dd83224411f5b061ad9cf2cada7ad9205b86d",
+    "size": 464978864,
     "notes": [
-      "Video dài: tiếp tục tải từ byte cuối khi mạng gián đoạn, kiểm tra đủ dữ liệu và thử CDN dự phòng."
+      "OCR thủ công có thể chọn vùng, quét, sửa câu và xuất SRT; bổ sung chọn khoảng tập trong Series."
     ],
-    "publishedAt": "2026-11-10T10:15:06+00:00"
+    "publishedAt": "2026-11-14T12:19:42+00:00"
   },
-  "signature": "CgNHCGhNYTqDJK11o0Gp3ZJ3mn7/q0keejzoXM0PBLS2OZ69vyQmz+wIYnxODg8livLbQN7+ktxOgvRe74oJAA=="
+  "signature": "sqaxlj/deyAqQCaCL2cgauSQbeJilGZpK8DCLY8QRS4GWUDX/4/SL7sESqtTL4TKHz+zixEMs7ECFzv9gRrSCg=="
 }
