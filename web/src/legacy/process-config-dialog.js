@@ -284,6 +284,14 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <small>OCR đọc phụ đề có sẵn trong khung hình, dịch và lưu thêm tệp SRT.</small>
                 </label>
                 <div id="processOcrOptions" class="process-ocr-options" hidden>
+                    <div class="process-ocr-manual-tools">
+                        <p>Muốn kiểm tra và sửa phụ đề trước khi dùng AI? Chọn vùng chữ trên video, quét thử rồi chỉnh từng câu và thời gian.</p>
+                        <button type="button" class="process-secondary-button" id="processOcrPickRegion">Chọn vùng phụ đề</button>
+                        <button type="button" class="process-secondary-button" id="processOcrScan">Quét câu phụ đề</button>
+                        <span id="processOcrManualStatus" role="status">Chưa quét</span>
+                        <div class="process-ocr-lines" id="processOcrLines" aria-live="polite"></div>
+                        <button type="button" class="process-secondary-button" id="processOcrDownloadSrt" hidden>Tải SRT đã chỉnh</button>
+                    </div>
                     <label>Ngôn ngữ nhận diện OCR
                         <select id="processOcrLanguage">
                             <option value="auto">Đa ngôn ngữ · Trung + Latin</option>

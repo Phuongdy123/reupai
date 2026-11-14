@@ -32,6 +32,7 @@ export function SeriesPage() {
   const [targetCollection, setTargetCollection] = useState("");
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [episodeRange, setEpisodeRange] = useState("");
   const sources = useMemo(() => [...new Map(series.flatMap((item) => item.sources || []).map((source) => [source.key, source])).values()], [series]);
   const currentSource = sources.find((item) => item.key === sourceKey);
   const loadSeries = useCallback(async () => {
@@ -98,6 +99,20 @@ export function SeriesPage() {
     } catch (requestError) { setError(requestError.message || "Không thể thêm tập vào Collection."); }
     finally { setSaving(false); }
   };
+  const selectEpisodeRange = () => {
+    const raw = episodeRange.trim();
+    if (!raw) { setSelectedVideos(new Set(filteredVideos.map((item) => item.video_id))); return; }
+    const match = raw.match(/^(\d+)(?:\s*[-–:]\s*(\d+))?$/);
+    if (!match) { setError("Nhập số tập, ví dụ 4 hoặc 5-80."); return; }
+    const from = Number(match[1]); const to = Number(match[2] || match[1]);
+    if (to < from) { setError("Tập cuối phải lớn hơn hoặc bằng tập đầu."); return; }
+    const chosen = filteredVideos.filter((item, index) => {
+      const episode = Number(item.episode_number || index + 1);
+      return episode >= from && episode <= to;
+    });
+    setSelectedVideos(new Set(chosen.map((item) => item.video_id)));
+    setNotice(`Đã chọn ${chosen.length} tập trong khoảng ${from}–${to}.`);
+  };
   if (status !== "connected") return <EngineGate status={status} connect={connect} check={check} title="Series" />;
   return <>
     <ErrorMessage error={error} retry={selected ? loadEpisodes : loadSeries} /><Notice>{notice}</Notice>
@@ -107,7 +122,7 @@ export function SeriesPage() {
       {!loading && !selected && !visibleSeries.length && <div className="empty-state">{series.length ? "Không có Series phù hợp bộ lọc." : "Chưa có Series. Đồng bộ video từ một nguồn để hệ thống nhận diện các tập."}</div>}
       {!loading && !selected && visibleSeries.length > 0 && <div className="library-grid">{visibleSeries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className="library-card" key={item.series_key}><div className="library-body"><div className="card-header-row"><h3 style={{ height: "auto", marginBottom: 10 }}><Icon name="folder" size={18} /> {item.name}</h3><span className="status">{item.count} tập</span></div><div className="library-meta"><span>{item.source_label || "Nguồn local"}</span>{item.episodes?.length > 0 && <span>Tập {item.episodes[0]}–{item.episodes[item.episodes.length - 1]}</span>}</div><button className="btn primary" onClick={() => { setSelected(item); setVideos([]); setQuery(""); }}>Xem các tập</button></div></article>)}</div>}
       {!loading && !selected && <Pager page={page} total={visibleSeries.length} pageSize={PAGE_SIZE} onChange={setPage} />}
-      {selected && !loading && filteredVideos.length > 0 && <><div className="library-actions" style={{ marginBottom: 18 }}><button className="btn secondary" onClick={() => setSelectedVideos(selectedVideos.size === filteredVideos.length ? new Set() : new Set(filteredVideos.map((video) => video.video_id)))}>{selectedVideos.size === filteredVideos.length ? "Bỏ chọn" : "Chọn tất cả"}</button><span className="status">{selectedVideos.size} đã chọn</span><button className="btn primary" disabled={saving || !localVideos.some((video) => selectedVideos.has(video.video_id) && !video.downloaded && video.url)} onClick={downloadSelection}><Icon name="download" size={15} />{saving ? "Đang thực hiện…" : "Tải các tập đã chọn"}</button><select value={targetCollection} onChange={(event) => setTargetCollection(event.target.value)} aria-label="Thêm tập vào Collection"><option value="">Chọn Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="btn secondary" disabled={!targetCollection || !selectedVideos.size || saving} onClick={addSelection}>Thêm vào Collection</button></div><div className="library-grid">{filteredVideos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((video) => <LibraryVideoCard key={video.video_id} client={client} video={video} selected={selectedVideos.has(video.video_id)} onSelect={(id) => setSelectedVideos((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onFavorite={toggleFavorite} onDownload={(item, source) => { download(item, source).catch(() => {}); }} onPreview={setPreview} busy={busy.has(video.video_id)} sourceFile={localFiles.sources.get(video.video_id || video.platform_video_id)} />)}</div><Pager page={page} total={filteredVideos.length} pageSize={PAGE_SIZE} onChange={setPage} /></>}
+      {selected && !loading && filteredVideos.length > 0 && <><div className="library-actions" style={{ marginBottom: 18 }}><button className="btn secondary" onClick={() => setSelectedVideos(selectedVideos.size === filteredVideos.length ? new Set() : new Set(filteredVideos.map((video) => video.video_id)))}>{selectedVideos.size === filteredVideos.length ? "Bỏ chọn" : "Chọn tất cả"}</button><input aria-label="Khoảng tập" placeholder="Chọn tập, ví dụ 4 hoặc 5-80" value={episodeRange} onChange={(event) => setEpisodeRange(event.target.value)} style={{ width: 190 }} /><button className="btn secondary" onClick={selectEpisodeRange}>Chọn khoảng tập</button><span className="status">{selectedVideos.size} đã chọn</span><button className="btn primary" disabled={saving || !localVideos.some((video) => selectedVideos.has(video.video_id) && !video.downloaded && video.url)} onClick={downloadSelection}><Icon name="download" size={15} />{saving ? "Đang thực hiện…" : "Tải các tập đã chọn"}</button><select value={targetCollection} onChange={(event) => setTargetCollection(event.target.value)} aria-label="Thêm tập vào Collection"><option value="">Chọn Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="btn secondary" disabled={!targetCollection || !selectedVideos.size || saving} onClick={addSelection}>Thêm vào Collection</button></div><div className="library-grid">{filteredVideos.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((video) => <LibraryVideoCard key={video.video_id} client={client} video={video} selected={selectedVideos.has(video.video_id)} onSelect={(id) => setSelectedVideos((previous) => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; })} onFavorite={toggleFavorite} onDownload={(item, source) => { download(item, source).catch(() => {}); }} onPreview={setPreview} busy={busy.has(video.video_id)} sourceFile={localFiles.sources.get(video.video_id || video.platform_video_id)} />)}</div><Pager page={page} total={filteredVideos.length} pageSize={PAGE_SIZE} onChange={setPage} /></>}
       {selected && !loading && !filteredVideos.length && <div className="empty-state">Không có tập phù hợp bộ lọc hiện tại.</div>}
     </section>
     {preview && <PreviewDialog client={client} item={preview} onClose={() => setPreview(null)} onError={setError} />}

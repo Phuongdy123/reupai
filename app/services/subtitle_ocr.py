@@ -116,12 +116,12 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
-def _frame_text(ocr, frame, confidence: float):
+def _frame_text(ocr, frame, confidence: float, *, pre_cropped=False):
     height = frame.shape[0]
     # Hardcoded subtitles most commonly sit in the lower part of the picture.
     # Start above the usual subtitle baseline so two-line bilingual captions
     # are retained, while avoiding OCR on most scenery and title cards.
-    crop_y = int(height * 0.25)
+    crop_y = 0 if pre_cropped else int(height * 0.25)
     crop = frame[crop_y:, :]
     predictions = ocr.predict(crop)
     candidates = []
@@ -280,3 +280,43 @@ def extract_subtitle_srt(
     elapsed = time.monotonic() - started
     print(f"[subtitle-ocr] Đã tạo {count} dòng SRT từ {len(detections)} lần nhận diện trong {elapsed:.1f}s.")
     return count
+
+
+def preview_subtitle_lines(
+    video_path: Path, *, region: dict, language="auto", fps=2.0,
+    min_confidence=0.45, parallelism=2, use_gpu=False,
+):
+    """Scan a selected normalized video region and return editable OCR samples."""
+    video_path = Path(video_path)
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError("Không mở được video để quét phụ đề.")
+    fps = min(10.0, max(0.5, float(fps or 2)))
+    try:
+        duration = float(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0) / max(float(cap.get(cv2.CAP_PROP_FPS) or 0), .001)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        if duration <= 0 or width <= 0 or height <= 0:
+            raise RuntimeError("Không đọc được thời lượng hoặc kích thước video.")
+        x = max(0, min(width - 1, int(float(region.get("x", 0)) * width)))
+        y = max(0, min(height - 1, int(float(region.get("y", .65)) * height)))
+        w = max(1, min(width - x, int(float(region.get("width", 1)) * width)))
+        h = max(1, min(height - y, int(float(region.get("height", .25)) * height)))
+        ocr, device = _get_ocr(language, parallelism, use_gpu)
+        lines = []
+        # Keep interactive review responsive; users can scan subsequent ranges later.
+        scan_duration = min(duration, 300.0)
+        count = max(1, int(math.ceil(scan_duration * fps)))
+        for index in range(count):
+            at = min(index / fps, scan_duration - .01)
+            cap.set(cv2.CAP_PROP_POS_MSEC, at * 1000)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue
+            crop = frame[y:y + h, x:x + w]
+            text, score = _frame_text(ocr, crop, min_confidence, pre_cropped=True)
+            if text:
+                lines.append({"start": round(at, 3), "end": round(min(scan_duration, at + 1 / fps), 3), "text": text, "confidence": round(score, 3)})
+        return {"duration": duration, "scanned_duration": scan_duration, "device": device, "lines": lines}
+    finally:
+        cap.release()

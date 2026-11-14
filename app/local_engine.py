@@ -35,6 +35,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from runtime_paths import (
     get_downloads_dir,
@@ -997,6 +998,34 @@ async def subtitle_region_preview(
         stat.st_size,
         stat.st_mtime_ns,
     )
+
+
+class SubtitleOcrPreviewRequest(BaseModel):
+    channel: str = "2d_animation"
+    region: dict = Field(default_factory=dict)
+    language: str = "auto"
+    fps: float = 2.0
+    min_confidence: float = 0.45
+    parallelism: int = 2
+    use_gpu: bool = False
+
+
+@app.post("/api/preview/subtitles/{video_id}")
+async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest, _: str = Depends(require_token)):
+    path = local_source_for_process(validate_channel(body.channel), validate_video_id(video_id))
+    if not path:
+        raise HTTPException(status_code=404, detail="Hãy tải video về máy trước khi quét phụ đề.")
+    if not 0.5 <= body.fps <= 10:
+        raise HTTPException(status_code=422, detail="FPS OCR phải nằm trong khoảng 0,5–10.")
+    try:
+        from services.subtitle_ocr import preview_subtitle_lines
+        return await run_in_threadpool(
+            preview_subtitle_lines, Path(path), region=body.region, language=body.language,
+            fps=body.fps, min_confidence=body.min_confidence,
+            parallelism=body.parallelism, use_gpu=body.use_gpu,
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.get("/library/source/{video_id}")

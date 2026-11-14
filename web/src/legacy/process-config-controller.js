@@ -391,6 +391,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processCustomBlurY', Math.round(rect.y));
             set('processCustomBlurWidth', Math.round(rect.width));
             set('processCustomBlurHeight', Math.round(rect.height));
+        } else if (pickMode === 'ocr') {
+            selectedRect = { ...rect };
         } else {
             rect = { ...rect, x: 0, width: preview.videoWidth || rect.width };
             selectedRect = rect;
@@ -479,6 +481,59 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             try { canvas.releasePointerCapture(event.pointerId); } catch {}
         };
     }
+
+    const ocrPickButton = dialog.querySelector('#processOcrPickRegion');
+    const ocrScanButton = dialog.querySelector('#processOcrScan');
+    const ocrStatus = dialog.querySelector('#processOcrManualStatus');
+    const ocrLines = dialog.querySelector('#processOcrLines');
+    const ocrDownload = dialog.querySelector('#processOcrDownloadSrt');
+    let manualOcrRows = [];
+    if (ocrPickButton) ocrPickButton.onclick = () => {
+        pickMode = 'ocr';
+        syncPickButtons();
+        setPickingEnabled(true);
+        if (ocrStatus) ocrStatus.textContent = 'Kéo khung quanh chữ phụ đề trên video.';
+    };
+    if (ocrScanButton) ocrScanButton.onclick = async () => {
+        if (!video.downloaded || !preview.videoWidth || !selectedRect) {
+            if (ocrStatus) ocrStatus.textContent = 'Tải video, rồi chọn vùng phụ đề trước khi quét.';
+            return;
+        }
+        ocrScanButton.disabled = true;
+        if (ocrStatus) ocrStatus.textContent = 'Đang quét OCR theo FPS đã chọn…';
+        try {
+            const result = await requestJson(`/api/preview/subtitles/${encodeURIComponent(video.video_id)}`, {
+                method: 'POST', timeoutMs: 300000,
+                body: JSON.stringify({
+                    channel: video.channel || '2d_animation',
+                    region: { x: selectedRect.x / preview.videoWidth, y: selectedRect.y / preview.videoHeight,
+                        width: selectedRect.width / preview.videoWidth, height: selectedRect.height / preview.videoHeight },
+                    language: dialog.querySelector('#processOcrLanguage')?.value || 'auto',
+                    fps: Number(dialog.querySelector('#processOcrFps')?.value || 2),
+                    min_confidence: Number(dialog.querySelector('#processOcrConfidence')?.value || .45),
+                    parallelism: Number(dialog.querySelector('#processOcrParallelism')?.value || 2),
+                    use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
+                }),
+            });
+            manualOcrRows = Array.isArray(result.lines) ? result.lines : [];
+            ocrLines.replaceChildren(...manualOcrRows.map((line, index) => {
+                const row = document.createElement('div'); row.className = 'process-ocr-line'; row.dataset.index = String(index);
+                row.innerHTML = `<label>In<input class="ocr-line-start" type="number" min="0" step="0.01" value="${Number(line.start).toFixed(2)}"></label><label>Đến<input class="ocr-line-end" type="number" min="0" step="0.01" value="${Number(line.end).toFixed(2)}"></label><label>Câu phụ đề<input class="ocr-line-text" type="text"></label><button type="button" aria-label="Xóa câu">Xóa</button>`;
+                row.querySelector('.ocr-line-text').value = String(line.text || '');
+                row.querySelector('button').onclick = () => { row.remove(); manualOcrRows[index] = null; };
+                return row;
+            }));
+            ocrDownload.hidden = !manualOcrRows.length;
+            if (ocrStatus) ocrStatus.textContent = `${manualOcrRows.length} câu nhận diện · ${result.device === 'gpu:0' ? 'GPU' : 'CPU'} · quét ${Number(result.scanned_duration).toFixed(0)} giây`;
+        } catch (error) { if (ocrStatus) ocrStatus.textContent = error.message || 'Không quét được OCR.'; }
+        finally { ocrScanButton.disabled = false; }
+    };
+    if (ocrDownload) ocrDownload.onclick = () => {
+        const stamp = value => { let ms = Math.max(0, Math.round(Number(value) * 1000)); const h = Math.floor(ms / 3600000); ms %= 3600000; const m = Math.floor(ms / 60000); ms %= 60000; const s = Math.floor(ms / 1000); ms %= 1000; return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`; };
+        const rows = [...ocrLines.querySelectorAll('.process-ocr-line')].map(row => ({ start: Number(row.querySelector('.ocr-line-start').value), end: Number(row.querySelector('.ocr-line-end').value), text: row.querySelector('.ocr-line-text').value.trim() })).filter(row => row.text && row.end > row.start);
+        const content = rows.map((row, i) => `${i + 1}\n${stamp(row.start)} --> ${stamp(row.end)}\n${row.text}`).join('\n\n') + '\n';
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([`\uFEFF${content}`], { type: 'application/x-subrip;charset=utf-8' })); a.download = `${video.video_id}-ocr.srt`; a.click(); URL.revokeObjectURL(a.href);
+    };
 
 
     preview.onerror = () => {
