@@ -420,16 +420,33 @@ export function createProcessConfigDialog({ document, uiIcon }) {
         reviewDialog.innerHTML = `
             <div class="process-transcript-review-shell">
                 <header class="process-transcript-review-head">
-                    <div><span class="process-transcript-step">BƯỚC 1 · KIỂM TRA PHỤ ĐỀ</span><h2 id="processTranscriptReviewTitle">Xem lại lời thoại</h2><p id="processTranscriptReviewDescription">Sửa câu và thời gian nếu cần. ReupAI chỉ dịch và xuất sau khi bạn xác nhận.</p></div>
+                    <div class="process-transcript-review-title">
+                        <span class="process-transcript-step">QUY TRÌNH XỬ LÝ VIDEO</span>
+                        <h2 id="processTranscriptReviewTitle">Duyệt lời thoại</h2>
+                        <p id="processTranscriptReviewDescription">Chọn câu để xem đúng đoạn video, chỉnh nội dung hoặc thời gian rồi tiếp tục.</p>
+                    </div>
                     <button type="button" class="btn secondary" id="processTranscriptReviewClose" aria-label="Quay lại thiết lập">Quay lại</button>
                 </header>
+                <nav class="process-transcript-stepper" aria-label="Các bước xử lý">
+                    <span class="is-complete"><b>1</b> Nhận diện</span><i aria-hidden="true"></i>
+                    <span class="is-current" aria-current="step"><b>2</b> Duyệt lời thoại</span><i aria-hidden="true"></i>
+                    <span><b>3</b> Dịch &amp; xuất</span>
+                </nav>
                 <div class="process-transcript-review-status" id="processTranscriptReviewStatus" role="status">Đang nhận diện lời thoại…</div>
-                <section class="process-ocr-result-section" aria-label="Lời thoại đã nhận diện">
-                    <div class="process-ocr-table-wrap"><table class="process-ocr-table"><thead><tr><th>#</th><th>Thời gian</th><th>Câu đã nhận diện · sửa trực tiếp</th><th></th></tr></thead><tbody class="process-ocr-lines" id="processTranscriptReviewLines" aria-live="polite"><tr class="process-ocr-empty"><td colspan="4">Đang chuẩn bị nhận diện…</td></tr></tbody></table></div>
-                </section>
+                <main class="process-transcript-review-workspace">
+                    <section class="process-transcript-preview-panel" aria-label="Xem trước video">
+                        <div class="process-transcript-panel-heading"><span>VIDEO NGUỒN</span><small>Chọn một câu để đến đúng thời điểm</small></div>
+                        <video id="processTranscriptReviewPreview" controls muted playsinline preload="metadata"></video>
+                    </section>
+                    <section class="process-ocr-result-section" aria-label="Lời thoại đã nhận diện">
+                        <div class="process-transcript-panel-heading"><span>LỜI THOẠI ĐÃ NHẬN DIỆN</span><small>Chỉnh câu gốc và thời gian ngay tại đây</small></div>
+                        <div class="process-ocr-table-wrap"><table class="process-ocr-table"><thead><tr><th>#</th><th>THỜI GIAN</th><th>CÂU GỐC · CÓ THỂ SỬA</th><th></th></tr></thead><tbody class="process-ocr-lines" id="processTranscriptReviewLines" aria-live="polite"><tr class="process-ocr-empty"><td colspan="4">Đang chuẩn bị nhận diện…</td></tr></tbody></table></div>
+                    </section>
+                </main>
                 <footer class="process-transcript-review-actions">
-                    <button type="button" class="btn secondary" id="processTranscriptReviewSkip" hidden>Bỏ qua bước kiểm tra</button>
-                    <button type="button" class="btn primary" id="processTranscriptReviewConfirm" disabled>Xác nhận · Tiếp tục xử lý</button>
+                    <div class="process-transcript-review-footnote">Các chỉnh sửa sẽ được dùng trực tiếp khi tạo phụ đề và render.</div>
+                    <div class="process-transcript-review-buttons"><button type="button" class="btn secondary" id="processTranscriptReviewSkip" hidden>Bỏ qua kiểm tra</button>
+                    <button type="button" class="btn primary" id="processTranscriptReviewConfirm" disabled>Đúng rồi · Tiếp tục</button></div>
                 </footer>
             </div>`;
         document.body.appendChild(reviewDialog);
