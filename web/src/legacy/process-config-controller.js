@@ -508,9 +508,17 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const scanSourceLanguage = () => transcriptSource?.value === 'video_subtitles'
         ? (dialog.querySelector('#processOcrLanguage')?.value || 'auto')
         : (dialog.querySelector('#processSourceLanguage')?.value || 'auto');
-    const ocrErrorMessage = error => error?.status === 404 && /^not found$/i.test(String(error?.message || '').trim())
-        ? 'Local Engine đang dùng chưa hỗ trợ mục này. Hãy thoát hẳn Local Engine, cập nhật bản mới rồi mở lại.'
-        : error?.message || 'Không hoàn tất được thao tác OCR.';
+    const ocrErrorMessage = error => {
+        const detail = String(error?.message || '').trim();
+        if (error?.status === 404 && /^not found$/i.test(detail)) {
+            return 'Local Engine đang dùng chưa hỗ trợ mục này. Hãy thoát hẳn Local Engine, cập nhật bản mới rồi mở lại.';
+        }
+        if (error?.status === 422) {
+            return `Local Engine không thể hoàn tất yêu cầu quét${detail && !/^Local Engine HTTP 422$/i.test(detail) ? `: ${detail}` : '. Kiểm tra video đã tải về và ngôn ngữ nguồn, sau đó thử lại.'}`;
+        }
+        if (error?.name === 'AbortError') return 'Đã dừng thao tác quét.';
+        return detail || 'Không hoàn tất được thao tác OCR.';
+    };
     const logOcrActivity = message => {
         if (!ocrActivity) return;
         const entry = document.createElement('div');

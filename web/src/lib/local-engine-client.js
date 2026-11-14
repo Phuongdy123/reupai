@@ -115,8 +115,24 @@ export class LocalEngineClient {
     let data = {};
     try { data = await response.json(); } catch (_) { /* no body */ }
     if (!response.ok) {
-      const error = new Error(typeof data.detail === "string" ? data.detail : `Local Engine HTTP ${response.status}`);
+      const formatDetail = (detail) => {
+        if (typeof detail === "string") return detail.trim();
+        if (Array.isArray(detail)) {
+          return detail.map((item) => {
+            if (typeof item === "string") return item;
+            const message = item?.msg || item?.message || "";
+            const location = Array.isArray(item?.loc) ? item.loc.filter((part) => part !== "body").join(" → ") : "";
+            return [location, message].filter(Boolean).join(": ");
+          }).filter(Boolean).join(" · ");
+        }
+        if (detail && typeof detail === "object") return detail.message || detail.msg || "";
+        return "";
+      };
+      const detail = formatDetail(data.detail);
+      const error = new Error(detail || `Local Engine HTTP ${response.status}`);
       error.status = response.status;
+      error.path = path;
+      error.response = data;
       throw error;
     }
     return data;
