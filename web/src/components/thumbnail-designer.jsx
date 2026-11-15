@@ -40,7 +40,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
   const [color, setColor] = useState("#ffe066");
   const [background, setBackground] = useState("#ac142b");
   const [position, setPosition] = useState("top");
-  const [showBackground, setShowBackground] = useState(true);
+  const [showBackground, setShowBackground] = useState(false);
   const [tone, setTone] = useState(DEFAULT_TONE);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -62,37 +62,55 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
     context.fillStyle = "#101012";
     context.fillRect(0, 0, 1280, 720);
     context.filter = `brightness(${tone.brightness}%) contrast(${tone.contrast}%) saturate(${tone.saturation}%)`;
-    // Keep the entire source frame: portrait videos are never cropped away.
+    const portrait = image.naturalWidth / image.naturalHeight < 1;
+    if (portrait) {
+      const cover = Math.max(1320 / image.naturalWidth, 760 / image.naturalHeight);
+      context.filter += " blur(20px)";
+      context.drawImage(image, (1280-image.naturalWidth*cover)/2, (720-image.naturalHeight*cover)/2, image.naturalWidth*cover, image.naturalHeight*cover);
+    }
+    context.filter = `brightness(${tone.brightness}%) contrast(${tone.contrast}%) saturate(${tone.saturation}%)`;
     const scale = Math.min(1280 / image.naturalWidth, 720 / image.naturalHeight);
     const width = image.naturalWidth * scale, height = image.naturalHeight * scale;
-    context.drawImage(image, (1280 - width) / 2, (720 - height) / 2, width, height);
+    context.drawImage(image, portrait ? 1280-width-32 : (1280-width)/2, (720-height)/2, width, height);
     context.filter = "none";
+    const shade = portrait ? context.createLinearGradient(0, 0, 1050, 0) : context.createLinearGradient(0, 0, 0, 720);
+    if (portrait) { shade.addColorStop(0, "#080a10ef"); shade.addColorStop(.65, "#080a10d9"); shade.addColorStop(1, "#080a1000"); }
+    else { shade.addColorStop(0, position === "top" ? "#080a10c9" : "#080a1000"); shade.addColorStop(1, position === "bottom" ? "#080a10df" : "#080a1000"); }
+    if (portrait || text.trim()) { context.fillStyle = shade; context.fillRect(0,0,1280,720); }
     if (text.trim()) {
-      let size = 92, lines;
+      const textWidth = portrait ? 680 : 1110;
+      let size = portrait ? 78 : 72, lines;
       do {
-        context.font = `900 ${size}px ${FONTS[font].value}`;
-        lines = wrapTitle(context, text.replace(/\s+/gu, " "), 1140);
-        if (lines.length <= 3) break;
+        context.font = `800 ${size}px ${FONTS[font].value}`;
+        lines = wrapTitle(context, text.replace(/\s+/gu, " "), textWidth);
+        if (lines.length <= (portrait ? 4 : 3)) break;
         size -= 2;
       } while (size > 26);
-      const lineHeight = size * 1.2;
-      const boxHeight = lines.length * lineHeight + 36;
-      const y = position === "top" ? 28 : 720 - boxHeight - 28;
-      if (showBackground) {
-        context.fillStyle = background;
-        context.globalAlpha = .9;
-        context.fillRect(32, y, 1216, boxHeight);
-        context.globalAlpha = 1;
-      }
+      const lineHeight = size * 1.24;
+      const boxHeight = lines.length * lineHeight;
+      const x = portrait ? 64 : 640;
+      const y = portrait ? (position === "top" ? Math.max(100,(720-boxHeight)/2-25) : 660-boxHeight) : position === "top" ? 64 : 654-boxHeight;
       context.textBaseline = "top";
-      context.textAlign = "center";
+      context.textAlign = portrait ? "left" : "center";
       context.lineJoin = "round";
-      context.strokeStyle = "#101012";
-      context.lineWidth = Math.max(3, size * .09);
-      context.fillStyle = color;
+      context.strokeStyle = "#080a10";
+      context.lineWidth = Math.max(2, size * .045);
       lines.forEach((line, index) => {
-        context.strokeText(line, 640, y + 18 + index * lineHeight);
-        context.fillText(line, 640, y + 18 + index * lineHeight);
+        const lineY = y + index * lineHeight;
+        if (showBackground) {
+          const measured = context.measureText(line).width;
+          context.fillStyle = background;
+          context.globalAlpha = .88;
+          context.fillRect(portrait ? x-12 : x-measured/2-12, lineY-6, measured+24, lineHeight-2);
+          context.globalAlpha = 1;
+        }
+        context.shadowColor = "#000b";
+        context.shadowBlur = 14;
+        context.shadowOffsetY = 4;
+        context.fillStyle = index === lines.length-1 ? color : "#ffffff";
+        context.strokeText(line, x, lineY);
+        context.fillText(line, x, lineY);
+        context.shadowBlur = 0; context.shadowOffsetY = 0;
       });
     }
     setReady(true);
@@ -107,7 +125,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
     if (!caption || /[\p{Script=Han}]/u.test(caption)) { setError("Chưa có tiêu đề tiếng Việt. Hãy dịch hoặc nhập chữ tiếng Việt cho ảnh bìa."); return; }
     setError("");
     setText(String(caption || "").replace(/#[^\s]+/gu, "").replace(/\s+/gu, " ").trim().slice(0, 100));
-    chooseLook("story"); setPosition("top");
+    chooseLook("story"); setPosition("top"); setShowBackground(false);
   };
   const apply = () => {
     if (!ready || !canvas.current) return;
@@ -130,7 +148,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
     <label className="thumbnail-background-toggle"><input type="checkbox" checked={!showBackground} onChange={event=>setShowBackground(!event.target.checked)} />Không nền chữ · chỉ giữ chữ và viền</label>
     <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={position} onChange={event=>setPosition(event.target.value)}><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
-    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("top");setShowBackground(true);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
+    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("top");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
     <small>Chỉnh ảnh trong trình duyệt. Bấm “Dùng ảnh bìa này” để áp dụng vào lượt đăng. Font hiển thị tùy theo thiết bị.</small>
   </section>;
 }
