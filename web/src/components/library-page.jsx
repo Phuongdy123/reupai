@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, HistoryTable, LibraryVideoCard, Loading, Notice, Pager, PreviewDialog, addVideosToCollection, createLocalFileIndex, jobVideoId, sourcePath, videoBody, withLocalFiles } from "./library-ui";
@@ -30,7 +31,9 @@ export function LibraryPage({ kind }) {
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerSelected, setPickerSelected] = useState(new Set());
   const [saving, setSaving] = useState(false);
-  const title = kind === "favorites" ? "Video yêu thích" : kind === "collections" ? "Collections" : "Lịch sử job";
+  const [savedSeries, setSavedSeries] = useState([]);
+  const [seriesBusy, setSeriesBusy] = useState(false);
+  const title = kind === "favorites" ? "Video yêu thích" : kind === "collections" ? "Collections & Tiến độ Series" : "Lịch sử job";
 
   useEffect(() => { selectedCollectionRef.current = selectedCollection; }, [selectedCollection]);
   const load = useCallback(async (collectionId = undefined, { silent = false } = {}) => {
@@ -41,9 +44,15 @@ export function LibraryPage({ kind }) {
         const data = await client.json("/api/library/history?limit=200", { cache: "no-store" });
         setItems(data.history || []);
       } else {
-        const [listData, downloaded, rendered] = await Promise.all([client.json("/api/library/collections"), client.json("/api/library/downloads"), client.json("/api/library/outputs")]);
+        const [listData, downloaded, rendered, savedSeriesRes] = await Promise.all([
+          client.json("/api/library/collections"),
+          client.json("/api/library/downloads"),
+          client.json("/api/library/outputs"),
+          kind === "collections" ? client.json("/api/library/series/saved").catch(() => ({ series: [] })) : Promise.resolve({ series: [] }),
+        ]);
         const list = listData.collections || [];
         setCollections(list); setDownloads(downloaded.videos || []); setOutputs(rendered.outputs || []);
+        if (kind === "collections") setSavedSeries(savedSeriesRes.series || []);
         if (kind === "collections") {
           const requestedId = collectionId === undefined ? selectedCollectionRef.current : collectionId;
           const activeId = list.some((item) => String(item.id) === String(requestedId)) ? String(requestedId) : list[0] ? String(list[0].id) : "";
@@ -144,11 +153,138 @@ export function LibraryPage({ kind }) {
     catch (requestError) { setError(requestError.message || "Không thể dừng job."); }
     finally { setBusyId(id, false); }
   };
+  useEffect(() => {
+    if (kind !== "collections" || status !== "connected") return undefined;
+    if (!savedSeries.some((item) => (item.processing_count || 0) > 0)) return undefined;
+    const timer = setInterval(() => { load(undefined, { silent: true }); }, 5000);
+    return () => clearInterval(timer);
+  }, [kind, status, savedSeries, load]);
+
+  const resumeSavedSeries = async (item) => {
+    setSeriesBusy(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({ series: item.series_key, limit: "2000" });
+      const data = await client.json(`/api/library/videos?${params}`);
+      const list = [...(data.videos || [])].sort((a, b) => {
+        if (item.sort_mode === "oldest_first") {
+          const pa = String(a.published_at || "9999-99-99");
+          const pb = String(b.published_at || "9999-99-99");
+          if (pa !== pb) return pa.localeCompare(pb);
+        }
+        const ea = a.episode_number != null ? Number(a.episode_number) : 999999;
+        const eb = b.episode_number != null ? Number(b.episode_number) : 999999;
+        return ea - eb;
+      });
+      const remaining = list.filter((v) => !v.has_subtitle_result && !v.has_voice_result && !(v.output_files || []).length && !v.processing);
+      if (!remaining.length) {
+        setNotice(`Series "${item.name}" đã xử lý xong toàn bộ (${item.processed_count}/${item.total_count}).`);
+        return;
+      }
+      const cfg = item.config || {};
+      let queued = 0;
+      for (const video of remaining) {
+        try {
+          await client.json("/api/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              video_id: video.video_id,
+              channel: "default",
+              url: video.url || "",
+              title: video.title || video.video_id,
+              mode: cfg.mode || "both",
+              voice: cfg.voice || "vi-VN-NamMinhNeural",
+              voice_speed: Number(cfg.voice_speed || 1.0),
+              source_lang: cfg.source_lang || "auto",
+              target_lang: cfg.target_lang || "vi",
+              transcript_source: cfg.transcript_source || "audio",
+              aspect_ratio: cfg.aspect_ratio || "auto",
+              boost_gpu: Boolean(cfg.boost_gpu),
+              ocr_use_gpu: Boolean(cfg.boost_gpu),
+              ocr_parallelism: cfg.boost_gpu ? 4 : 2,
+            }),
+          });
+          queued += 1;
+        } catch {
+          // ignore already running
+        }
+      }
+      await load(undefined, { silent: true });
+      setNotice(`Đã đẩy ${queued} tập còn lại của "${item.name}" vào hàng chờ.`);
+    } catch (requestError) {
+      setError(requestError.message || "Không thể xử lý tiếp Series.");
+    } finally {
+      setSeriesBusy(false);
+    }
+  };
+
+  const deleteSavedSeriesItem = async (seriesKey) => {
+    setError(null);
+    try {
+      await client.json(`/api/library/series/saved/${encodeURIComponent(seriesKey)}`, { method: "DELETE" });
+      setSavedSeries((prev) => prev.filter((item) => item.series_key !== seriesKey));
+      setNotice("Đã xóa Series khỏi danh mục tiến độ.");
+    } catch (requestError) {
+      setError(requestError.message || "Không thể xóa Series.");
+    }
+  };
+
   if (status !== "connected") return <EngineGate status={status} connect={connect} check={check} title={title} />;
   const activeCollection = collections.find((item) => String(item.id) === selectedCollection);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <>
     <ErrorMessage error={error} retry={() => load()} /><Notice>{notice}</Notice>
+    {kind === "collections" && (
+      <section className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-head">
+          <div>
+            <h2>Series đã lưu &amp; Tiến độ xử lý</h2>
+            <p>Theo dõi số tập đã hoàn thành (vd 3/7), hàng chờ và xử lý tiếp các tập còn lại.</p>
+          </div>
+          <Link className="btn secondary" href="/series">Mở trang Series</Link>
+        </div>
+        {!savedSeries.length ? (
+          <div className="empty-state">
+            Chưa có Series nào được lưu. Vào <Link href="/series">Series</Link> chọn tập &amp; cấu hình rồi bấm <strong>Lưu Series</strong> hoặc <strong>Xử lý hàng loạt</strong> để theo dõi tiến độ tại đây.
+          </div>
+        ) : (
+          <div className="library-grid">
+            {savedSeries.map((item) => {
+              const total = item.total_count || 0;
+              const done = item.processed_count || 0;
+              const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+              return (
+                <article className="library-card" key={item.series_key}>
+                  <div className="library-body">
+                    <div className="card-header-row">
+                      <h3 style={{ height: "auto", marginBottom: 6 }}><Icon name="folder" size={18} /> {item.name}</h3>
+                      <span className="status is-active">Đã xử lý {done}/{total}</span>
+                    </div>
+                    <div style={{ height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 4, overflow: "hidden", marginBottom: 10 }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: "#ef4444", transition: "width 200ms ease" }} />
+                    </div>
+                    <div className="library-meta">
+                      <span>{item.source_label || "Nguồn local"}</span>
+                      <span>{item.sort_mode === "oldest_first" ? "Ngày đăng cũ → mới" : "Từ tập 1 → cuối"}</span>
+                      {item.processing_count > 0 && <span>Đang chạy: {item.processing_count}</span>}
+                    </div>
+                    <div className="library-actions" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                      <button className="btn primary" disabled={seriesBusy || item.pending_count === 0} onClick={() => resumeSavedSeries(item)}>
+                        <Icon name="play" size={15} />
+                        {item.pending_count === 0 ? "Đã xong hết" : `Xử lý tiếp (${item.pending_count} tập)`}
+                      </button>
+                      <Link className="btn secondary" href="/series">Chi tiết</Link>
+                      <button className="btn secondary" onClick={() => deleteSavedSeriesItem(item.series_key)}>Xóa</button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    )}
     {kind === "collections" && <section className="panel"><div className="panel-head"><div><h2>Collections</h2><p>Tạo và quản lý các nhóm video trên máy.</p></div></div><form className="control-bar" onSubmit={createCollection} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><input aria-label="Tên Collection mới" value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Tên Collection mới" required style={{ flex: "1 1 180px" }} /><input aria-label="Mô tả Collection" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Mô tả (không bắt buộc)" style={{ flex: "1 1 180px" }} /><button className="btn primary" disabled={saving} type="submit">Tạo Collection</button></form><div className="control-bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}><select aria-label="Chọn Collection" value={selectedCollection} onChange={(event) => { const value = event.target.value; setSelectedCollection(value); load(value); }} style={{ flex: 1 }}><option value="">Chọn Collection</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.video_count || 0} video</option>)}</select><button className="btn secondary" disabled={!selectedCollection || saving} onClick={openPicker}>Thêm video</button><button className="btn danger" disabled={!selectedCollection || saving} onClick={deleteCollection}>Xóa Collection</button></div></section>}
     <section className="panel"><div className="panel-head"><div><h2>{kind === "collections" ? activeCollection?.name || "Video trong Collection" : title}</h2><p>{kind === "history" ? "Tối đa 200 job gần nhất trong SQLite." : `${items.length} video${activeCollection?.description ? ` · ${activeCollection.description}` : ""}`}</p></div><button className="btn secondary" disabled={loading} onClick={() => load()}><Icon name="refresh" size={16} />Làm mới</button></div>
       <div className="control-bar" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm video, ID hoặc tên nguồn..." aria-label="Tìm trong thư viện" style={{ flex: "1 1 220px" }} /><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Lọc trạng thái"><option value="">Tất cả trạng thái</option>{kind === "history" ? <><option value="completed">Hoàn tất</option><option value="failed">Lỗi</option><option value="interrupted">Bị gián đoạn</option><option value="cancelled">Đã dừng</option><option value="queued">Đang chờ</option><option value="processing">Đang xử lý</option></> : <><option value="downloaded">Đã tải</option><option value="not-downloaded">Chưa tải</option><option value="subtitle">Có Vietsub</option><option value="voiceover">Có Voice</option><option value="processing">Đang xử lý</option></>}</select></div>
