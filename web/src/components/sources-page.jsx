@@ -17,13 +17,22 @@ export function SourcesPage() {
   const { status, error: connectionError, client, connect, check } = useEngine();
   const youtube = useYoutubeConnection();
   const [diagnostics, setDiagnostics] = useState(null);
-  useEffect(() => {
+  const loadDiagnostics = () => {
     if (status !== "connected") return;
     client.json("/api/diagnostics", { cache: "no-store" })
       .then(result => setDiagnostics(result))
       .catch(() => {});
+  };
+  useEffect(() => {
+    loadDiagnostics();
+    const onVisible = () => { if (document.visibilityState === "visible") loadDiagnostics(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [client, status]);
-  const geminiReady = Boolean(diagnostics?.configuration?.gemini_api_key_configured) || Boolean(diagnostics?.configuration?.gemini_oauth?.connected);
+  const googleOAuth = diagnostics?.configuration?.gemini_oauth;
+  const apiKeyConfigured = Boolean(diagnostics?.configuration?.gemini_api_key_configured);
+  const geminiReady = apiKeyConfigured || Boolean(diagnostics?.readiness?.translation) || (Boolean(googleOAuth?.connected) && Boolean(googleOAuth?.project_id) && !googleOAuth?.needs_reauthorization);
+  const geminiNeedsProject = Boolean(googleOAuth?.connected) && !googleOAuth?.project_id && !apiKeyConfigured;
   const [socialItem, setSocialItem] = useState(null);
   useEffect(() => {
     const open = event => { if (event.detail?.video_id) setSocialItem(event.detail); };
@@ -166,11 +175,11 @@ export function SourcesPage() {
       >
         <div>
           <small style={{ color: "#c4b5fd" }}>TRÍ TUỆ NHÂN TẠO AI</small>
-          <strong style={{ color: "#fff" }}>AI Gemini (Dịch & Lồng tiếng)</strong>
-          <p>Chưa kết nối Google. Kết nối để dùng AI dịch phụ đề, Vietsub và lồng tiếng bằng quota miễn phí của bạn.</p>
+          <strong style={{ color: "#fff" }}>{geminiNeedsProject ? "AI Gemini (Cần chọn Project)" : "AI Gemini (Dịch & Lồng tiếng)"}</strong>
+          <p>{geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc tạo Project ID để hoàn tất kích hoạt quota Gemini." : "Chưa kết nối Google. Kết nối để dùng AI dịch phụ đề, Vietsub và lồng tiếng bằng quota miễn phí của bạn."}</p>
         </div>
         <Link
-          href="/settings?reconnect=1#diagnostics"
+          href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"}
           className="btn primary"
           style={{
             display: "inline-flex",
@@ -183,7 +192,7 @@ export function SourcesPage() {
             whiteSpace: "nowrap"
           }}
         >
-          Kết nối Google ngay
+          {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
         </Link>
       </section>
     )}

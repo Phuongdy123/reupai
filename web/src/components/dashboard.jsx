@@ -94,7 +94,8 @@ export function Dashboard() {
   const stats = !isGuest && status === "connected" ? data?.stats || {} : {};
   const googleOAuth = diagnostics?.configuration?.gemini_oauth;
   const apiKeyConfigured = Boolean(diagnostics?.configuration?.gemini_api_key_configured);
-  const geminiReady = apiKeyConfigured || Boolean(googleOAuth?.connected);
+  const geminiReady = apiKeyConfigured || Boolean(diagnostics?.readiness?.translation) || (Boolean(googleOAuth?.connected) && Boolean(googleOAuth?.project_id) && !googleOAuth?.needs_reauthorization);
+  const geminiNeedsProject = Boolean(googleOAuth?.connected) && !googleOAuth?.project_id && !apiKeyConfigured;
   const hasActiveJobs = jobs.some((job) => ACTIVE_JOBS.has(job.status));
   useEffect(() => {
     if (status !== "connected") return undefined;
@@ -158,16 +159,16 @@ export function Dashboard() {
             </span>
             <div>
               <strong style={{ display: "block", fontSize: "15px", color: "#f9fafb", marginBottom: "4px", fontWeight: "650" }}>
-                Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu
+                {geminiNeedsProject ? "Đã kết nối Google · Cần chọn Project Gemini" : "Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu"}
               </strong>
               <p style={{ margin: 0, fontSize: "13px", color: "#d1d5db", lineHeight: 1.55 }}>
-                Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này.
+                {geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc nhập Project ID để hoàn tất kích hoạt quota Gemini." : "Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này."}
               </p>
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
             <Link
-              href="/settings?reconnect=1#diagnostics"
+              href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"}
               className="btn primary"
               style={{
                 display: "inline-flex",
@@ -185,7 +186,7 @@ export function Dashboard() {
                 border: "1px solid rgba(255, 255, 255, 0.2)"
               }}
             >
-              <Icon name="spark" size={17} /> Kết nối Google ngay
+              <Icon name="spark" size={17} /> {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
             </Link>
           </div>
         </section>
