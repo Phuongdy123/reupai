@@ -72,6 +72,17 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 await designer.get_by_label("Yêu cầu cho AI").fill("Bí ẩn")
                 await designer.get_by_role("button", name="AI viết chữ và ghép ảnh").click()
                 await expect(designer.get_by_label("Chữ trên ảnh")).to_have_value("Bí mật cuốn nhật ký")
+                async def image_response(route):
+                    request = route.request
+                    assert request.headers["x-goog-api-key"] == "fixture-key"
+                    assert request.post_data_json["generationConfig"]["responseFormat"]["image"]["aspectRatio"] == "16:9"
+                    png = await page.evaluate("""() => { const c = document.createElement('canvas'); c.width=320; c.height=180; return c.toDataURL().split(',')[1]; }""")
+                    await route.fulfill(json={"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":png}}]}}]})
+                await page.route("https://generativelanguage.googleapis.com/**", image_response)
+                await designer.get_by_label("Gemini API key").fill("fixture-key")
+                await designer.get_by_role("button", name="Tạo hình AI").click()
+                await expect(designer.get_by_role("button", name="Dùng lại khung hình gốc")).to_be_visible()
+                await designer.get_by_role("button", name="Dùng lại khung hình gốc").click()
                 await designer.locator("canvas").press("ArrowRight")
                 await designer.get_by_role("button", name="Lưu làm mẫu").click()
                 await designer.get_by_role("button", name="Đóng chỉnh ảnh").click()

@@ -51,6 +51,11 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
   const [savedTemplate, setSavedTemplate] = useState(null);
   const [templateMessage, setTemplateMessage] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [imageKey, setImageKey] = useState("");
+  const [generatedImage, setGeneratedImage] = useState("");
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const imageRequest = useRef(null);
+  const imageSource = generatedImage || source;
   const orientation = image && (image.naturalWidth < image.naturalHeight ? "portrait" : "landscape");
   const templateKey = orientation && `reupai:thumbnail-template:v1:${accountId || "local"}:${channelId || "default"}:${orientation}`;
 
@@ -64,15 +69,19 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     } catch { /* An unavailable or invalid saved template does not block editing. */ }
   }, [templateKey]);
 
+  useEffect(() => () => imageRequest.current?.abort(), []);
+
   useEffect(() => {
     let active = true;
-    if (!/^data:image\/(jpeg|png);base64,/i.test(source)) { setError("Chọn ảnh JPEG/PNG từ video hoặc máy trước khi thiết kế."); return; }
+    setReady(false);
+    setImage(null);
+    if (!/^data:image\/(jpeg|png);base64,/i.test(imageSource)) { setError("Chọn ảnh JPEG/PNG từ video hoặc máy trước khi thiết kế."); return; }
     const picture = new Image();
     picture.onload = () => { if (active) setImage(picture); };
     picture.onerror = () => { if (active) setError("Không đọc được ảnh bìa. Hãy chọn lại ảnh."); };
-    picture.src = source;
+    picture.src = imageSource;
     return () => { active = false; };
-  }, [source]);
+  }, [imageSource]);
 
   useEffect(() => {
     if (!image || !canvas.current) return;
@@ -220,6 +229,49 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     try { layoutCaption(await onGenerateCaption(prompt.trim())); }
     catch (requestError) { setError(requestError.message || "Chưa tạo được chữ ảnh bìa."); }
   };
+  const generateArtwork = async () => {
+    if (imageRequest.current || !imageKey.trim() || !prompt.trim()) return;
+    const reference = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec(source);
+    if (!reference) { setError("Chưa có ảnh tham chiếu JPEG hoặc PNG."); return; }
+    const controller = new AbortController();
+    imageRequest.current = controller;
+    setGeneratingImage(true);
+    setError("");
+    try {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: `Create a polished 16:9 YouTube thumbnail illustration inspired by this frame. Retain the recognizable character design and the story setting, with cinematic lighting, visual depth and a strong focal point. Leave the opposite side available for a headline. Do not render any letters, subtitles, logos or watermarks. Respect the requested visual direction: ${prompt.trim()}` },
+            { inlineData: { mimeType: reference[1], data: reference[2] } },
+          ] }],
+          generationConfig: { responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "16:9", imageSize: "1K" } } },
+        }),
+      });
+      if (response.status === 429) throw new Error("Gemini đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức của project.");
+      if ([400, 401, 403].includes(response.status)) {
+        const result = await response.json().catch(() => null);
+        const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
+        if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
+      }
+      if (!response.ok) throw new Error(`Gemini chưa tạo được ảnh (HTTP ${response.status}).`);
+      const result = await response.json();
+      const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
+      if (!artwork) throw new Error("Gemini không trả về ảnh dùng được. Hãy thử mô tả khác.");
+      const newImage = `data:${artwork.mimeType};base64,${artwork.data}`;
+      if (!controller.signal.aborted && newImage !== imageSource) {
+        setReady(false);
+        setGeneratedImage(newImage);
+      }
+    } catch (requestError) {
+      if (!controller.signal.aborted) setError(requestError.name === "TimeoutError" ? "Gemini tạo ảnh quá lâu. Hãy thử lại." : requestError.message);
+    } finally {
+      imageRequest.current = null;
+      if (!controller.signal.aborted) setGeneratingImage(false);
+    }
+  };
   const apply = () => {
     if (!ready || !canvas.current) return;
     if (/[\p{Script=Han}]/u.test(text)) { setError("Chữ trên ảnh vẫn còn tiếng Trung. Bấm Tự bố trí theo tiêu đề hoặc sửa thành tiếng Việt trước khi áp dụng."); return; }
@@ -241,12 +293,19 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     <div className="thumbnail-looks"><button type="button" className="btn secondary" disabled={!ready} onClick={saveTemplate}>{savedTemplate ? "Cập nhật mẫu đã lưu" : "Lưu làm mẫu"}</button>{savedTemplate && <button type="button" className="btn secondary" onClick={() => applyTemplate(savedTemplate)}>Dùng mẫu đã lưu</button>}</div>
     {templateMessage && <small role="status">{templateMessage}</small>}
     {onGenerateCaption && <div className="youtube-ai-draft"><label>Yêu cầu cho AI<input value={prompt} maxLength={400} onChange={event => setPrompt(event.target.value)} placeholder="Ví dụ: Câu ngắn, bí ẩn, nhấn vào cuốn nhật ký" /></label><button type="button" className="btn secondary" disabled={!ready || !prompt.trim()} onClick={generateCaption}>AI viết chữ và ghép ảnh</button></div>}
+    <div className="youtube-ai-draft">
+      <strong>Tạo hình với Nano Banana 2</strong>
+      <label>Gemini API key<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
+      <small>Nhập yêu cầu ở ô trên. Khung hình tham chiếu được gửi trực tiếp tới Gemini. Lượt tạo ảnh dùng hạn mức của project bạn nhập.</small>
+      <button type="button" className="btn primary" disabled={generatingImage || !imageKey.trim() || !prompt.trim()} onClick={generateArtwork}>{generatingImage ? "Đang tạo hình…" : "Tạo hình AI"}</button>
+      {generatedImage && <button type="button" className="btn secondary" disabled={generatingImage} onClick={() => { setError(""); setGeneratedImage(""); }}>Dùng lại khung hình gốc</button>}
+    </div>
     <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>{setText(event.target.value);setError("");}} /></label>
     <label className="thumbnail-background-toggle"><input type="checkbox" checked={!showBackground} onChange={event=>setShowBackground(!event.target.checked)} />Không nền chữ · chỉ giữ chữ và viền</label>
     <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={captionPosition ? "free" : position} onChange={event=>{setPosition(event.target.value);setCaptionPosition(null);}}><option value="free" disabled>Kéo tự do</option><option value="auto">Tự căn</option><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
     {image && image.naturalWidth < image.naturalHeight && <label>Vị trí ảnh dọc<select value={portraitSide} onChange={event => {setPortraitSide(event.target.value);setCaptionPosition(null);}}><option value="right">Ảnh phải · Chữ trái</option><option value="left">Ảnh trái · Chữ phải</option></select></label>}
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
-    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("auto");setCaptionPosition(null);setPortraitSide("right");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
+    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("auto");setCaptionPosition(null);setPortraitSide("right");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || generatingImage || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
     <small>Chỉnh ảnh trong trình duyệt. Bấm “Dùng ảnh bìa này” để áp dụng vào lượt đăng. Font hiển thị tùy theo thiết bị.</small>
   </section>;
 }
