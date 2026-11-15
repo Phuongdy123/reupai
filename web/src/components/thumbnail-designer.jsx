@@ -238,23 +238,43 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
     try { layoutCaption(await onGenerateCaption(prompt.trim())); }
     catch (requestError) { setError(requestError.message || "Chưa tạo được chữ ảnh bìa."); }
   };
+  const fetchFreeFluxImage = async (scenePrompt, signal) => {
+    const seed = Math.floor(Math.random() * 999999) + 1;
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
+    const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(90000)]) });
+    if (!response.ok) throw new Error(`Dịch vụ tạo ảnh miễn phí tạm bận (HTTP ${response.status}). Hãy thử lại sau.`);
+    const blob = await response.blob();
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Không đọc được ảnh tải về."));
+      reader.readAsDataURL(blob);
+    });
+    if (!/^data:image\/(jpeg|png|webp);base64,/i.test(dataUrl)) throw new Error("Ảnh miễn phí trả về không hợp lệ.");
+    return dataUrl;
+  };
+
   const generateArtwork = async () => {
-    if (imageRequest.current || (!onGenerateArtwork && !imageKey.trim())) return;
+    if (imageRequest.current) return;
     const reference = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec(source);
-    if (!reference) { setError("Chưa có ảnh tham chiếu JPEG hoặc PNG."); return; }
     const controller = new AbortController();
     imageRequest.current = controller;
     setGeneratingImage(true);
     setError("");
+    const freePrompt = `${artDirection.trim() || "Dramatic anime story poster, expressive lead character, vivid rim lighting"}, ${title ? `context: ${title}, ` : ""}16:9 YouTube thumbnail artwork, no text, no watermark`.slice(0, 380);
     const artworkPrompt = `Illustrate a completely new, polished 16:9 YouTube story thumbnail. The reference image is for character identity, art style and story context only. Never reuse the original frame as the background, trace its composition, or just retouch it. Stage a fresh scene with different poses and a different camera angle, a prominent lead character, expressive faces, vivid lighting and clear foreground and background layers. Compose with visual energy and strong contrast like an anime story poster, keeping the lower third visually quiet for a Vietnamese headline to be added later. Do not draw any words, subtitles, logos, borders or interface elements. Stay faithful to the video context: ${title || "the reference image"}. Art direction from the user: ${artDirection.trim() || "dramatic anime story poster"}.`;
     try {
-      let newImage;
-      if (onGenerateArtwork && !imageKey.trim()) {
-        const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
-        newImage = result.image;
-      } else {
-        let lastErr = null;
-        let quotaErr = null;
+      let newImage = null;
+      if (reference && onGenerateArtwork && !imageKey.trim()) {
+        try {
+          const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
+          newImage = result?.image || null;
+        } catch (backendErr) {
+          if (controller.signal.aborted) throw backendErr;
+          // Auto-fallback to free Flux if backend Nano Banana hits quota/billing/unavailable
+          newImage = await fetchFreeFluxImage(freePrompt, controller.signal);
+        }
+      } else if (reference && imageKey.trim()) {
         for (const modelName of NANO_BANANA_MODELS) {
           const generationConfig = modelName === "gemini-2.0-flash-exp-image-generation"
             ? { responseModalities: ["TEXT", "IMAGE"] }
@@ -271,26 +291,8 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
               generationConfig,
             }),
           });
-          if (response.status === 404) { lastErr = `Model ${modelName} chưa khả dụng.`; continue; }
-          if (response.status === 429) {
-            const result = await response.json().catch(() => null);
-            const reason = String(result?.error?.message || "").toLowerCase();
-            quotaErr = /limit:\s*0|free[_\s]tier/.test(reason)
-              ? "Project Gemini (Free Tier) đang có hạn mức tạo ảnh = 0 cho Nano Banana. Hãy bật Billing (Pay-as-you-go) trong Google AI Studio / Cloud Console hoặc dùng API key khác."
-              : "Nano Banana đang giới hạn lượt tạo ảnh tạm thời (429). Hãy đợi 30–60 giây rồi thử lại hoặc kiểm tra hạn mức của project.";
-            lastErr = quotaErr;
-            continue;
-          }
-          if ([400, 401, 403].includes(response.status)) {
-            const result = await response.json().catch(() => null);
-            const reason = String(result?.error?.message || "").toLowerCase();
-            if (/billing|paid/.test(reason)) throw new Error("Project Gemini cần bật thanh toán để tạo ảnh Nano Banana.");
-            if (response.status === 400 && /not found|not supported/.test(reason)) { lastErr = reason; continue; }
-            if (response.status === 400 && /unknown name|invalid json|imageconfig|responseformat/.test(reason)) throw new Error("Gemini từ chối cấu hình tạo ảnh.");
-            const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
-            if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
-          }
-          if (!response.ok) throw new Error(`Nano Banana chưa tạo được ảnh (HTTP ${response.status}).`);
+          if (response.status === 404 || response.status === 429 || response.status === 401 || response.status === 403) continue;
+          if (!response.ok) continue;
           const result = await response.json();
           const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
           if (artwork) {
@@ -298,15 +300,19 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
             break;
           }
         }
-        if (!newImage) throw new Error(quotaErr || lastErr || "Nano Banana không trả về ảnh dùng được. Hãy thử mô tả khác.");
+        if (!newImage && !controller.signal.aborted) {
+          newImage = await fetchFreeFluxImage(freePrompt, controller.signal);
+        }
+      } else {
+        newImage = await fetchFreeFluxImage(freePrompt, controller.signal);
       }
-      if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(newImage || "")) throw new Error("Gemini không trả về ảnh dùng được.");
+      if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(newImage || "")) throw new Error("Không tạo được ảnh dùng được.");
       if (!controller.signal.aborted && newImage !== imageSource) {
         setReady(false);
         setGeneratedImage(newImage);
       }
     } catch (requestError) {
-      if (!controller.signal.aborted) setError(requestError.name === "TimeoutError" ? "Gemini tạo ảnh quá lâu. Hãy thử lại." : requestError.message);
+      if (!controller.signal.aborted) setError(requestError.name === "TimeoutError" ? "Tạo ảnh quá lâu. Hãy thử lại." : requestError.message);
     } finally {
       imageRequest.current = null;
       if (!controller.signal.aborted) setGeneratingImage(false);
@@ -320,18 +326,7 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
     setError("");
     const scenePrompt = `${artDirection.trim() || "Dramatic anime story poster, expressive lead character, vivid rim lighting"}, ${title ? `context: ${title}, ` : ""}16:9 YouTube thumbnail artwork, no text, no watermark`.slice(0, 380);
     try {
-      const seed = Math.floor(Math.random() * 999999) + 1;
-      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
-      const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]) });
-      if (!response.ok) throw new Error(`Dịch vụ tạo ảnh miễn phí tạm bận (HTTP ${response.status}). Hãy thử lại sau.`);
-      const blob = await response.blob();
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("Không đọc được ảnh tải về."));
-        reader.readAsDataURL(blob);
-      });
-      if (!/^data:image\/(jpeg|png|webp);base64,/i.test(dataUrl)) throw new Error("Ảnh miễn phí trả về không hợp lệ.");
+      const dataUrl = await fetchFreeFluxImage(scenePrompt, controller.signal);
       if (!controller.signal.aborted) {
         setReady(false);
         setGeneratedImage(dataUrl);
@@ -372,7 +367,7 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
       {onGenerateArtwork && <small>Để trống key để dùng kết nối Gemini / API key trong Cài đặt.</small>}
       <label>{onGenerateArtwork ? "Gemini API key (tùy chọn)" : "Gemini API key"}<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
       <div className="thumbnail-looks">
-        <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Đang vẽ ảnh AI…" : generatedImage ? "Tạo lại bằng Nano Banana" : "Tạo ảnh AI (Nano Banana)"}</button>
+        <button type="button" className="btn primary" disabled={generatingImage} onClick={generateArtwork}>{generatingImage ? "Đang vẽ ảnh AI…" : generatedImage ? "Tạo ảnh AI khác" : "Tạo ảnh AI (Nano Banana / Free)"}</button>
         <button type="button" className="btn secondary" disabled={generatingImage} onClick={generateFreeArtwork}>{generatingImage ? "Đang vẽ…" : "Tạo ảnh AI Free (Flux · không cần key)"}</button>
       </div>
     </div>}
