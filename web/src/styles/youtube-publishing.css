@@ -89,3 +89,18 @@
  .youtube-publish-stage video { max-height: 30dvh; }
  .source-youtube-banner { flex-wrap: wrap; padding: 18px; }
 }
+
+.thumbnail-designer { display: grid; gap: 14px; padding: 18px; border: 1px solid #606068; border-radius: 18px; background: #121214; }
+.youtube-publish-dialog .thumbnail-designer header { display: flex; flex-wrap: wrap; align-items: center; padding: 0; border: 0; gap: 12px; }
+.thumbnail-designer header p { margin: 6px 0 0; color: #aaaab2; font-size: 11px; }
+.thumbnail-designer canvas { display: block; width: 100%; height: auto; border-radius: 12px; background: #09090a; }
+.thumbnail-designer > label, .thumbnail-controls > label, .thumbnail-tone label { display: grid; gap: 7px; min-width: 0; font-size: 12px; }
+.thumbnail-designer .thumbnail-looks { display: flex; gap: 8px; flex-wrap: wrap; }
+.thumbnail-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.youtube-publish-fields .thumbnail-designer input[type=color] { padding: 4px; height: 40px; cursor: pointer; }
+.youtube-publish-fields .thumbnail-designer textarea { min-height: 65px; }
+.thumbnail-tone { display: grid; gap: 12px; }
+.thumbnail-tone output { color: #b3b3bb; font-size: 11px; }
+.youtube-publish-fields .thumbnail-designer input[type=range] { padding: 0; height: 24px; accent-color: #eeeeef; cursor: pointer; }
+.youtube-chosen-thumbnail > .library-actions { display: grid; justify-content: start; gap: 10px; }
+@media(max-width:480px) { .thumbnail-controls { grid-template-columns: 1fr; } .youtube-chosen-thumbnail { grid-template-columns: 1fr; } .thumbnail-designer { padding: 12px; } }

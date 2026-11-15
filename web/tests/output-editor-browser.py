@@ -18,7 +18,7 @@ spec.loader.exec_module(fixture)
 
 async def main():
     bundle = "\n".join(re.sub(r"^import .*?;\s*$", "", (ROOT / "web/src/components" / name).read_text(encoding="utf-8"), flags=re.M).replace("export function", "function")
-                       for name in ["output-transcript-editor.jsx", "youtube-publish-dialog.jsx", "output-youtube-actions.jsx", "output-editor.jsx"])
+                       for name in ["output-transcript-editor.jsx", "thumbnail-designer.jsx", "youtube-publish-dialog.jsx", "output-youtube-actions.jsx", "output-editor.jsx"])
     node = "const b=require('./web/node_modules/next/dist/compiled/babel/core');const p=require('./web/node_modules/next/dist/compiled/babel/preset-react');let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>process.stdout.write(b.transformSync(s,{presets:[[p,{runtime:'classic'}]],configFile:false,babelrc:false}).code));"
     js = subprocess.check_output(["node", "-e", node], input=bundle.encode(), cwd=ROOT).decode()
     with tempfile.TemporaryDirectory() as folder:
