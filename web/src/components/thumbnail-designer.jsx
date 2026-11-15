@@ -32,7 +32,7 @@ function wrapTitle(context, text, width) {
   return lines;
 }
 
-export function ThumbnailDesigner({ source, artworkOnly, title, accountId, channelId, onTranslateTitle, onGenerateCaption, onApply, onClose }) {
+export function ThumbnailDesigner({ source, artworkOnly, title, accountId, channelId, onTranslateTitle, onGenerateCaption, onGenerateArtwork, onApply, onClose }) {
   const canvas = useRef(null);
   const captionBounds = useRef(null);
   const drag = useRef(null);
@@ -232,37 +232,45 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
     catch (requestError) { setError(requestError.message || "Chưa tạo được chữ ảnh bìa."); }
   };
   const generateArtwork = async () => {
-    if (imageRequest.current || !imageKey.trim()) return;
+    if (imageRequest.current || (!onGenerateArtwork && !imageKey.trim())) return;
     const reference = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec(source);
     if (!reference) { setError("Chưa có ảnh tham chiếu JPEG hoặc PNG."); return; }
     const controller = new AbortController();
     imageRequest.current = controller;
     setGeneratingImage(true);
     setError("");
+    const artworkPrompt = `Illustrate a completely new, polished 16:9 YouTube story thumbnail. The reference image is for character identity, art style and story context only. Never reuse the original frame as the background, trace its composition, or just retouch it. Stage a fresh scene with different poses and a different camera angle, a prominent lead character, expressive faces, vivid lighting and clear foreground and background layers. Compose with visual energy and strong contrast like an anime story poster, keeping the lower third visually quiet for a Vietnamese headline to be added later. Do not draw any words, subtitles, logos, borders or interface elements. Stay faithful to the video context: ${title || "the reference image"}. Art direction from the user: ${artDirection.trim() || "dramatic anime story poster"}.`;
     try {
-      const response = await fetch("https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
-        body: JSON.stringify({
-          contents: [{ parts: [
-            { text: `Illustrate a completely new, polished 16:9 YouTube story thumbnail. The reference image is for character identity, art style and story context only. Never reuse the original frame as the background, trace its composition, or just retouch it. Stage a fresh scene with different poses and a different camera angle, a prominent lead character, expressive faces, vivid lighting and clear foreground and background layers. Compose with visual energy and strong contrast like an anime story poster, keeping the lower third visually quiet for a Vietnamese headline to be added later. Do not draw any words, subtitles, logos, borders or interface elements. Stay faithful to the video context: ${title || "the reference image"}. Art direction from the user: ${artDirection.trim() || "dramatic anime story poster"}.` },
-            { inlineData: { mimeType: reference[1], data: reference[2] } },
-          ] }],
-          generationConfig: { responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "16:9", imageSize: "1K" } } },
-        }),
-      });
-      if (response.status === 429) throw new Error("Gemini đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức của project.");
-      if ([400, 401, 403].includes(response.status)) {
-        const result = await response.json().catch(() => null);
-        const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
-        if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
+      let newImage;
+      if (onGenerateArtwork && !imageKey.trim()) {
+        const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
+        newImage = result.image;
+      } else {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+          body: JSON.stringify({
+            contents: [{ parts: [
+              { text: artworkPrompt },
+              { inlineData: { mimeType: reference[1], data: reference[2] } },
+            ] }],
+            generationConfig: { responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "16:9", imageSize: "1K" } } },
+          }),
+        });
+        if (response.status === 429) throw new Error("Gemini đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức của project.");
+        if ([400, 401, 403].includes(response.status)) {
+          const result = await response.json().catch(() => null);
+          const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
+          if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
+        }
+        if (!response.ok) throw new Error(`Gemini chưa tạo được ảnh (HTTP ${response.status}).`);
+        const result = await response.json();
+        const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
+        if (!artwork) throw new Error("Gemini không trả về ảnh dùng được. Hãy thử mô tả khác.");
+        newImage = `data:${artwork.mimeType};base64,${artwork.data}`;
       }
-      if (!response.ok) throw new Error(`Gemini chưa tạo được ảnh (HTTP ${response.status}).`);
-      const result = await response.json();
-      const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
-      if (!artwork) throw new Error("Gemini không trả về ảnh dùng được. Hãy thử mô tả khác.");
-      const newImage = `data:${artwork.mimeType};base64,${artwork.data}`;
+      if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(newImage || "")) throw new Error("Gemini không trả về ảnh dùng được.");
       if (!controller.signal.aborted && newImage !== imageSource) {
         setReady(false);
         setGeneratedImage(newImage);
@@ -292,9 +300,10 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
     {artworkOnly && <div className="youtube-ai-draft">
       <div className="thumbnail-reference"><img src={source} alt="Khung hình tham chiếu" /><div><strong>Ảnh tham chiếu</strong><p>Gemini dùng ảnh này để hiểu nhân vật rồi dựng cảnh mới.</p></div></div>
       <label>Phong cách ảnh mới<input value={artDirection} maxLength={400} onChange={event => setArtDirection(event.target.value)} placeholder="Ví dụ: Poster anime, nhân vật chính nổi bật, ánh sáng xanh vàng" /></label>
-      <label>Gemini API key<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
+      {onGenerateArtwork && <small>Để trống key để dùng kết nối Gemini trong Cài đặt.</small>}
+      <label>{onGenerateArtwork ? "Gemini API key (tùy chọn)" : "Gemini API key"}<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
       <small>Khung hình tham chiếu được gửi trực tiếp tới Gemini. Lượt tạo ảnh dùng hạn mức của project bạn nhập.</small>
-      <button type="button" className="btn primary" disabled={generatingImage || !imageKey.trim()} onClick={generateArtwork}>{generatingImage ? "Đang dựng ảnh mới…" : generatedImage ? "Tạo phiên bản khác" : "Gemini dựng ảnh mới"}</button>
+      <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Đang dựng ảnh mới…" : generatedImage ? "Tạo phiên bản khác" : "Gemini dựng ảnh mới"}</button>
     </div>}
     {imageSource && <>
     {artworkOnly && <strong>Ảnh mới · Xem trước</strong>}

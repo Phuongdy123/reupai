@@ -137,6 +137,7 @@ ENGINE_CAPABILITIES = {
     "output_subtitle_edit": True,
     "subtitle_srt_export": True,
     "youtube_publishing": True,
+    "gemini_thumbnail_artwork": True,
     "subtitle_styles": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
@@ -656,6 +657,13 @@ def _youtube_video(payload, owner):
 def youtube_thumbnails(payload: dict, owner: str = Depends(youtube_owner)):
     from services.youtube_publishing import thumbnail_choices
     return {"images": _youtube_call(thumbnail_choices, _youtube_video(payload, owner))}
+
+
+@app.post("/api/youtube/thumbnail-artwork")
+def youtube_thumbnail_artwork(payload: dict, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import generate_thumbnail_artwork
+    _youtube_video(payload, owner)
+    return _youtube_call(generate_thumbnail_artwork, payload.get("reference"), payload.get("prompt"))
 
 
 @app.post("/api/youtube/suggest")
