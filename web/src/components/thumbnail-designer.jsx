@@ -32,7 +32,7 @@ function wrapTitle(context, text, width) {
   return lines;
 }
 
-export function ThumbnailDesigner({ source, title, accountId, channelId, onTranslateTitle, onGenerateCaption, onApply, onClose }) {
+export function ThumbnailDesigner({ source, artworkOnly, title, accountId, channelId, onTranslateTitle, onGenerateCaption, onApply, onClose }) {
   const canvas = useRef(null);
   const captionBounds = useRef(null);
   const drag = useRef(null);
@@ -51,11 +51,12 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
   const [savedTemplate, setSavedTemplate] = useState(null);
   const [templateMessage, setTemplateMessage] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [artDirection, setArtDirection] = useState("");
   const [imageKey, setImageKey] = useState("");
   const [generatedImage, setGeneratedImage] = useState("");
   const [generatingImage, setGeneratingImage] = useState(false);
   const imageRequest = useRef(null);
-  const imageSource = generatedImage || source;
+  const imageSource = generatedImage || (artworkOnly ? "" : source);
   const orientation = image && (image.naturalWidth < image.naturalHeight ? "portrait" : "landscape");
   const templateKey = orientation && `reupai:thumbnail-template:v1:${accountId || "local"}:${channelId || "default"}:${orientation}`;
 
@@ -75,6 +76,7 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     let active = true;
     setReady(false);
     setImage(null);
+    if (!imageSource) return;
     if (!/^data:image\/(jpeg|png);base64,/i.test(imageSource)) { setError("Chọn ảnh JPEG/PNG từ video hoặc máy trước khi thiết kế."); return; }
     const picture = new Image();
     picture.onload = () => { if (active) setImage(picture); };
@@ -230,7 +232,7 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     catch (requestError) { setError(requestError.message || "Chưa tạo được chữ ảnh bìa."); }
   };
   const generateArtwork = async () => {
-    if (imageRequest.current || !imageKey.trim() || !prompt.trim()) return;
+    if (imageRequest.current || !imageKey.trim()) return;
     const reference = /^data:(image\/(?:jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec(source);
     if (!reference) { setError("Chưa có ảnh tham chiếu JPEG hoặc PNG."); return; }
     const controller = new AbortController();
@@ -244,7 +246,7 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
         body: JSON.stringify({
           contents: [{ parts: [
-            { text: `Create a polished 16:9 YouTube thumbnail illustration inspired by this frame. Retain the recognizable character design and the story setting, with cinematic lighting, visual depth and a strong focal point. Leave the opposite side available for a headline. Do not render any letters, subtitles, logos or watermarks. Respect the requested visual direction: ${prompt.trim()}` },
+            { text: `Illustrate a completely new, polished 16:9 YouTube story thumbnail. The reference image is for character identity, art style and story context only. Never reuse the original frame as the background, trace its composition, or just retouch it. Stage a fresh scene with different poses and a different camera angle, a prominent lead character, expressive faces, vivid lighting and clear foreground and background layers. Compose with visual energy and strong contrast like an anime story poster, keeping the lower third visually quiet for a Vietnamese headline to be added later. Do not draw any words, subtitles, logos, borders or interface elements. Stay faithful to the video context: ${title || "the reference image"}. Art direction from the user: ${artDirection.trim() || "dramatic anime story poster"}.` },
             { inlineData: { mimeType: reference[1], data: reference[2] } },
           ] }],
           generationConfig: { responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "16:9", imageSize: "1K" } } },
@@ -273,7 +275,7 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
     }
   };
   const apply = () => {
-    if (!ready || !canvas.current) return;
+    if (!ready || !canvas.current || (artworkOnly && !generatedImage)) return;
     if (/[\p{Script=Han}]/u.test(text)) { setError("Chữ trên ảnh vẫn còn tiếng Trung. Bấm Tự bố trí theo tiêu đề hoặc sửa thành tiếng Việt trước khi áp dụng."); return; }
     try {
       let data;
@@ -287,25 +289,27 @@ export function ThumbnailDesigner({ source, title, accountId, channelId, onTrans
   return <section className="thumbnail-designer" aria-label="Thiết kế ảnh bìa">
     <header><div><strong>Thiết kế thumbnail</strong><p>Đổi màu, thêm chữ và xem ngay trên ảnh · 1280 × 720</p></div><button type="button" className="btn secondary" onClick={onClose}>Đóng chỉnh ảnh</button></header>
     {error && <p role="alert" className="youtube-error">{error}</p>}
+    {artworkOnly && <div className="youtube-ai-draft">
+      <div className="thumbnail-reference"><img src={source} alt="Khung hình tham chiếu" /><div><strong>Ảnh tham chiếu</strong><p>Gemini dùng ảnh này để hiểu nhân vật rồi dựng cảnh mới.</p></div></div>
+      <label>Phong cách ảnh mới<input value={artDirection} maxLength={400} onChange={event => setArtDirection(event.target.value)} placeholder="Ví dụ: Poster anime, nhân vật chính nổi bật, ánh sáng xanh vàng" /></label>
+      <label>Gemini API key<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
+      <small>Khung hình tham chiếu được gửi trực tiếp tới Gemini. Lượt tạo ảnh dùng hạn mức của project bạn nhập.</small>
+      <button type="button" className="btn primary" disabled={generatingImage || !imageKey.trim()} onClick={generateArtwork}>{generatingImage ? "Đang dựng ảnh mới…" : generatedImage ? "Tạo phiên bản khác" : "Gemini dựng ảnh mới"}</button>
+    </div>}
+    {imageSource && <>
+    {artworkOnly && <strong>Ảnh mới · Xem trước</strong>}
     <canvas ref={canvas} width={1280} height={720} tabIndex={text.trim() ? 0 : undefined} aria-label="Ảnh bìa xem trước. Kéo chữ hoặc dùng phím mũi tên để di chuyển." className={text.trim() ? "thumbnail-draggable" : undefined} onPointerDown={startDrag} onPointerMove={moveDrag} onLostPointerCapture={endDrag} onPointerCancel={endDrag} onKeyDown={moveWithKeys} />
     {text.trim() && <small>Kéo chữ trên ảnh để đổi vị trí. Dùng phím mũi tên để chỉnh từng bước.</small>}
     <div className="thumbnail-looks">{Object.entries(LOOKS).map(([key, look]) => <button type="button" className="btn secondary" key={key} onClick={()=>chooseLook(key)}>{look.label}</button>)}<button type="button" className="btn primary" onClick={autoLayout} disabled={!title}>Tự bố trí theo tiêu đề</button></div>
     <div className="thumbnail-looks"><button type="button" className="btn secondary" disabled={!ready} onClick={saveTemplate}>{savedTemplate ? "Cập nhật mẫu đã lưu" : "Lưu làm mẫu"}</button>{savedTemplate && <button type="button" className="btn secondary" onClick={() => applyTemplate(savedTemplate)}>Dùng mẫu đã lưu</button>}</div>
     {templateMessage && <small role="status">{templateMessage}</small>}
     {onGenerateCaption && <div className="youtube-ai-draft"><label>Yêu cầu cho AI<input value={prompt} maxLength={400} onChange={event => setPrompt(event.target.value)} placeholder="Ví dụ: Câu ngắn, bí ẩn, nhấn vào cuốn nhật ký" /></label><button type="button" className="btn secondary" disabled={!ready || !prompt.trim()} onClick={generateCaption}>AI viết chữ và ghép ảnh</button></div>}
-    <div className="youtube-ai-draft">
-      <strong>Tạo hình với Nano Banana 2</strong>
-      <label>Gemini API key<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
-      <small>Nhập yêu cầu ở ô trên. Khung hình tham chiếu được gửi trực tiếp tới Gemini. Lượt tạo ảnh dùng hạn mức của project bạn nhập.</small>
-      <button type="button" className="btn primary" disabled={generatingImage || !imageKey.trim() || !prompt.trim()} onClick={generateArtwork}>{generatingImage ? "Đang tạo hình…" : "Tạo hình AI"}</button>
-      {generatedImage && <button type="button" className="btn secondary" disabled={generatingImage} onClick={() => { setError(""); setGeneratedImage(""); }}>Dùng lại khung hình gốc</button>}
-    </div>
     <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>{setText(event.target.value);setError("");}} /></label>
     <label className="thumbnail-background-toggle"><input type="checkbox" checked={!showBackground} onChange={event=>setShowBackground(!event.target.checked)} />Không nền chữ · chỉ giữ chữ và viền</label>
     <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={captionPosition ? "free" : position} onChange={event=>{setPosition(event.target.value);setCaptionPosition(null);}}><option value="free" disabled>Kéo tự do</option><option value="auto">Tự căn</option><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
     {image && image.naturalWidth < image.naturalHeight && <label>Vị trí ảnh dọc<select value={portraitSide} onChange={event => {setPortraitSide(event.target.value);setCaptionPosition(null);}}><option value="right">Ảnh phải · Chữ trái</option><option value="left">Ảnh trái · Chữ phải</option></select></label>}
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
     <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("auto");setCaptionPosition(null);setPortraitSide("right");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || generatingImage || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
-    <small>Chỉnh ảnh trong trình duyệt. Bấm “Dùng ảnh bìa này” để áp dụng vào lượt đăng. Font hiển thị tùy theo thiết bị.</small>
+    </>}
   </section>;
 }

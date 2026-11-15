@@ -17,7 +17,9 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const [images, setImages] = useState([]);
   const [thumbnail, setThumbnail] = useState("");
   const [designerSource, setDesignerSource] = useState("");
-  const selectThumbnail = source => { setThumbnail(source); setDesignerSource(""); setConfirmed(false); };
+  const [referenceMode, setReferenceMode] = useState(false);
+  const closeDesigner = () => { setDesignerSource(""); setReferenceMode(false); };
+  const selectThumbnail = source => { setThumbnail(source); closeDesigner(); setConfirmed(false); };
   const [privacy, setPrivacy] = useState("private");
   const [audience, setAudience] = useState("");
   const [scheduleMode, setScheduleMode] = useState("now");
@@ -86,20 +88,9 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const startThumbnailDesign = async () => {
     setConfirmed(false);
     setError("");
-    if (thumbnail) { setDesignerSource(thumbnail); return; }
-    const existingFrame = images.find(Boolean);
-    if (existingFrame) { setDesignerSource(existingFrame); return; }
-    setBusy("thumbnail-frame");
-    try {
-      const frames = await fetchThumbnailFrames();
-      if (!live.current) return;
-      setImages(frames);
-      const frame = frames.find(Boolean);
-      if (frame) setDesignerSource(frame);
-      else setError("Chưa lấy được khung hình. Hãy chọn ảnh trên máy rồi bấm lại Tạo ảnh bìa với AI.");
-    } catch (requestError) {
-      if (live.current) setError(requestError.message || "Không thể lấy ảnh từ video. Bạn có thể chọn ảnh trên máy.");
-    } finally { if (live.current) setBusy(""); }
+    setDesignerSource("");
+    setReferenceMode(true);
+    if (!images.length) await loadImages();
   };
   const suggest = async () => {
     setBusy("ai"); setError("");
@@ -144,13 +135,18 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
     if (!file) return;
     if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 2 * 1024 * 1024) { setError("Chọn ảnh JPEG hoặc PNG dưới 2 MB."); return; }
     const reader = new FileReader();
-    reader.onload = () => { if (live.current) { selectThumbnail(String(reader.result)); } };
+    reader.onload = () => {
+      if (!live.current) return;
+      const source = String(reader.result);
+      if (referenceMode) setDesignerSource(source);
+      else selectThumbnail(source);
+    };
     reader.onerror = () => { if (live.current) setError("Không đọc được ảnh bìa."); };
     reader.readAsDataURL(file);
   };
   const submit = async (event) => {
     event.preventDefault();
-    if (locked || !confirmed || !audience || designerSource) return;
+    if (locked || !confirmed || !audience || designerSource || referenceMode) return;
     if (!scheduleValid) { setError("Chọn ngày và giờ đăng cách hiện tại ít nhất 1 phút."); return; }
     setBusy("upload"); setError("");
     try {
@@ -179,13 +175,27 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
           <label>Tiêu đề <small>{title.length}/100</small><input required maxLength={100} value={title} onChange={e => { setTitle(e.target.value); setConfirmed(false); }} /></label>
           <label>Mô tả và hashtag<textarea rows={6} value={description} onChange={e => { setDescription(e.target.value); setConfirmed(false); }} maxLength={5000} /></label>
           <label>Tag / từ khóa<input value={tags} onChange={e => { setTags(e.target.value); setConfirmed(false); }} placeholder="Các từ khóa, ngăn cách bằng dấu phẩy" /></label>
-          <section className="youtube-thumbnails"><div className="library-actions"><strong>Ảnh bìa</strong><button type="button" className="btn primary" onClick={startThumbnailDesign}>{busy === "thumbnail-frame" ? "Đang lấy ảnh nền…" : "Tạo ảnh bìa với AI"}</button><button type="button" className="btn secondary" onClick={loadImages}>{busy === "images" ? "Đang lấy khung hình…" : "Lấy ảnh từ video"}</button><label className="btn secondary youtube-file-label">Chọn ảnh trên máy<input type="file" accept="image/jpeg,image/png" onChange={chooseImage} /></label></div>{images.length > 0 && <div className="youtube-thumbnail-grid">{images.map((src, index) => <button key={index} type="button" className={thumbnail === src ? "selected" : ""} aria-label={`Chọn ảnh bìa ${index + 1}`} aria-pressed={thumbnail === src} onClick={() => { selectThumbnail(src); }}><img src={src} alt={`Khung hình ${index + 1}`} /></button>)}</div>}{thumbnail && <div className="youtube-chosen-thumbnail"><img src={thumbnail} alt="Ảnh bìa đã chọn" /><div className="library-actions"><button type="button" className="btn secondary" onClick={() => selectThumbnail("")}>Bỏ ảnh bìa</button></div></div>}{designerSource && <ThumbnailDesigner source={designerSource} title={title} accountId={connection.account_id} channelId={connection.channel.id} onTranslateTitle={translateThumbnailTitle} onGenerateCaption={generateThumbnailCaption} onClose={() => setDesignerSource("")} onApply={selectThumbnail} />}<small>AI viết chữ bìa theo yêu cầu và ghép lên khung hình video hoặc ảnh bạn chọn.</small></section>
+          <section className="youtube-thumbnails">
+            <div className="library-actions">
+              <strong>Ảnh bìa</strong>
+              {referenceMode ? <button type="button" className="btn secondary" onClick={closeDesigner}>Thoát tạo ảnh mới</button> : <button type="button" className="btn primary" onClick={startThumbnailDesign}>Tạo ảnh mới bằng AI</button>}
+              <button type="button" className="btn secondary" onClick={loadImages}>{busy === "images" ? "Đang lấy khung hình…" : "Lấy ảnh từ video"}</button>
+              <label className="btn secondary youtube-file-label">{referenceMode ? "Tải ảnh tham chiếu" : "Chọn ảnh trên máy"}<input key={String(referenceMode)} type="file" accept="image/jpeg,image/png" onChange={chooseImage} /></label>
+            </div>
+            {referenceMode && <small>Chọn khung hình tham chiếu để Gemini dựng một cảnh mới. Ảnh bìa chỉ đổi khi bạn áp dụng kết quả.</small>}
+            {images.length > 0 && <div className="youtube-thumbnail-grid">{images.map((src, index) => {
+              const selected = (referenceMode ? designerSource : thumbnail) === src;
+              return <button key={index} type="button" className={selected ? "selected" : ""} aria-label={`${referenceMode ? "Chọn ảnh tham chiếu" : "Chọn ảnh bìa"} ${index + 1}`} aria-pressed={selected} onClick={() => referenceMode ? setDesignerSource(src) : selectThumbnail(src)}><img src={src} alt={`Khung hình ${index + 1}`} /></button>;
+            })}</div>}
+            {thumbnail && !referenceMode && <div className="youtube-chosen-thumbnail"><img src={thumbnail} alt="Ảnh bìa đã chọn" /><div className="library-actions"><button type="button" className="btn secondary" onClick={() => setDesignerSource(thumbnail)}>Chỉnh ảnh đã chọn</button><button type="button" className="btn secondary" onClick={() => selectThumbnail("")}>Bỏ ảnh bìa</button></div></div>}
+            {designerSource && <ThumbnailDesigner key={designerSource} source={designerSource} artworkOnly={referenceMode} title={title} accountId={connection.account_id} channelId={connection.channel.id} onTranslateTitle={translateThumbnailTitle} onGenerateCaption={generateThumbnailCaption} onClose={closeDesigner} onApply={selectThumbnail} />}
+          </section>
           <div className="youtube-publish-grid"><label>Chế độ hiển thị<select disabled={scheduleMode === "scheduled"} value={scheduleMode === "scheduled" ? "private" : privacy} onChange={e => { setPrivacy(e.target.value); setConfirmed(false); }}><option value="private">Riêng tư · Nên dùng khi thử</option><option value="unlisted">Không công khai</option><option value="public">Công khai</option></select></label><label>Video có dành cho trẻ em không?<select required value={audience} onChange={e => { setAudience(e.target.value); setConfirmed(false); }}><option value="">Bạn cần chọn</option><option value="no">Không dành riêng cho trẻ em</option><option value="yes">Có, dành cho trẻ em</option></select></label></div>
           <section className="youtube-schedule"><div><strong>Thời điểm đăng</strong><p>Chọn đăng ngay hoặc đặt lịch công khai.</p></div><div className="youtube-schedule-toggle"><button type="button" aria-pressed={scheduleMode === "now"} className={`btn ${scheduleMode === "now" ? "primary" : "secondary"}`} onClick={() => { setScheduleMode("now"); setConfirmed(false); }}>Đăng ngay</button><button type="button" aria-pressed={scheduleMode === "scheduled"} className={`btn ${scheduleMode === "scheduled" ? "primary" : "secondary"}`} onClick={() => { setScheduleMode("scheduled"); setConfirmed(false); }}>Hẹn giờ đăng</button></div>{scheduleMode === "scheduled" && <><div className="youtube-publish-grid"><label>Ngày đăng<input type="date" required value={scheduleDate} onChange={e => { setScheduleDate(e.target.value); setConfirmed(false); }} /></label><label>Giờ đăng<input type="time" required value={scheduleTime} onChange={e => { setScheduleTime(e.target.value); setConfirmed(false); }} /></label></div><div className="library-actions"><button type="button" className="btn secondary" onClick={()=>chooseSchedule(1)}>Sau 1 giờ</button><button type="button" className="btn secondary" onClick={()=>chooseSchedule(24)}>Ngày mai, giờ này</button></div><small>Múi giờ: {timezone}. Video được tải lên riêng tư trước và công khai theo lịch.</small>{!scheduleValid && <p className="youtube-schedule-warning" role="status">Chọn lịch đăng cách hiện tại ít nhất 1 phút.</p>}{scheduleValid && <p className="youtube-schedule-summary">Dự kiến công khai: {new Date(publishAt).toLocaleString("vi-VN")}</p>}</>}</section>
           <label className="youtube-publish-confirm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Tôi đã xem lại video và nội dung, đồng ý đăng lên kênh {connection.channel.title}.</label>
         </fieldset>
       </div></div>
-      <footer><button type="button" className="btn secondary" onClick={onClose}>Đóng</button><button type="submit" className="btn primary" disabled={locked || !confirmed || !audience || !scheduleValid || Boolean(designerSource)}>{busy === "upload" ? "Đang bắt đầu…" : scheduleMode === "scheduled" ? "Xác nhận hẹn đăng" : privacy === "private" ? "Đăng thử riêng tư" : "Xác nhận đăng YouTube"}</button></footer>
+      <footer><button type="button" className="btn secondary" onClick={onClose}>Đóng</button><button type="submit" className="btn primary" disabled={locked || !confirmed || !audience || !scheduleValid || Boolean(designerSource) || referenceMode}>{busy === "upload" ? "Đang bắt đầu…" : scheduleMode === "scheduled" ? "Xác nhận hẹn đăng" : privacy === "private" ? "Đăng thử riêng tư" : "Xác nhận đăng YouTube"}</button></footer>
     </form>
   </dialog>, document.body);
 }

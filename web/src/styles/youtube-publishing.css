@@ -110,3 +110,7 @@
 
 .thumbnail-designer canvas.thumbnail-draggable { touch-action: none; cursor: grab; }
 .thumbnail-designer canvas.thumbnail-draggable:active { cursor: grabbing; }
+
+.thumbnail-reference { display: flex; gap: 14px; align-items: center; }
+.thumbnail-reference img { width: 100px; height: 66px; object-fit: contain; border-radius: 8px; background: #09090a; }
+.thumbnail-reference p { margin: 4px 0 0; color: #aaaab2; font-size: 12px; }
