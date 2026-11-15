@@ -2330,6 +2330,11 @@ function ensureProcessConfigDialog() {
                     Tự động làm mờ ID/chữ watermark
                     <small>Chỉ bật khi video có watermark ở góc trên.</small>
                 </label>
+                <label class="process-check-option">
+                    <input id="processBoostGpu" type="checkbox">
+                    Boost GPU
+                    <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
+                </label>
                 </div>
             </section>
             <section class="process-settings-card">
@@ -2821,6 +2826,20 @@ function openProcessConfig(video, card, mode) {
         set('processMusicVolume', 0.25);
         dialog.querySelector('#processMusicFile').value = '';
         dialog.querySelector('#processAutoBrandBlur').checked = false;
+        const modalBoostGpu = dialog.querySelector('#processBoostGpu');
+        if (modalBoostGpu) {
+            modalBoostGpu.checked = isBoostGpuEnabled();
+            modalBoostGpu.onchange = () => {
+                const enabled = Boolean(modalBoostGpu.checked);
+                const barBoost = document.getElementById('boostGpuToggle');
+                if (barBoost) barBoost.checked = enabled;
+                try {
+                    localStorage.setItem('reupai:boost-gpu', enabled ? '1' : '0');
+                } catch {
+                    // ignore
+                }
+            };
+        }
         dialog.querySelector('#processSourceNoSub').checked = false;
         set('processBlurPreset', '');
         ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
@@ -3093,8 +3112,8 @@ function openProcessConfig(video, card, mode) {
             logo_text: value('processLogoText') || null,
             logo_data: logoData,
             logo_filename: logoFile?.name || dialog._logoFilename || null,
-            boost_gpu: isBoostGpuEnabled(),
-            ...(isBoostGpuEnabled() ? { ocr_use_gpu: true, ocr_parallelism: 4 } : {}),
+            boost_gpu: Boolean(dialog.querySelector('#processBoostGpu')?.checked ?? isBoostGpuEnabled()),
+            ...((dialog.querySelector('#processBoostGpu')?.checked ?? isBoostGpuEnabled()) ? { ocr_use_gpu: true, ocr_parallelism: 4 } : {}),
         };
         dialog.close();
         processVideo(video, card, mode, config);
