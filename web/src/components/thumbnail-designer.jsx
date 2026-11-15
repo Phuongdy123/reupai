@@ -13,6 +13,13 @@ const LOOKS = {
   clean: { label: "Tối giản", color: "#ffffff", background: "#202024", font: "rounded" },
   cinema: { label: "Điện ảnh", color: "#f9e8c2", background: "#252326", font: "serif" },
 };
+const NANO_BANANA_STYLES = [
+  { id: "anime", label: "Anime Drama", prompt: "Dramatic anime story poster, expressive lead character, vivid rim lighting, sharp foreground and background layers" },
+  { id: "cinema", label: "Điện ảnh 16:9", prompt: "Cinematic movie key art, moody atmospheric lighting, intense expression, shallow depth of field, rich color grading" },
+  { id: "viral", label: "Viral YouTube", prompt: "High-contrast viral YouTube thumbnail artwork, dynamic pose, glowing energy accents, clean lower third space for headline" },
+  { id: "3d", label: "3D Stylized", prompt: "High-detail 3D stylized illustration, dramatic studio lighting, crisp textures, epic composition" },
+];
+const NANO_BANANA_MODELS = ["gemini-2.5-flash-image", "gemini-3.1-flash-image"];
 const DEFAULT_TONE = { brightness: 100, contrast: 100, saturation: 100 };
 
 function wrapTitle(context, text, width) {
@@ -246,32 +253,40 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
         const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
         newImage = result.image;
       } else {
-        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
-          body: JSON.stringify({
-            contents: [{ parts: [
-              { text: artworkPrompt },
-              { inlineData: { mimeType: reference[1], data: reference[2] } },
-            ] }],
-            generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } },
-          }),
-        });
-        if (response.status === 429) throw new Error("Gemini đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức của project.");
-        if ([400, 401, 403].includes(response.status)) {
-          const result = await response.json().catch(() => null);
-          const reason = String(result?.error?.message || "").toLowerCase();
-          if (/billing|paid/.test(reason)) throw new Error("Project Gemini cần bật thanh toán để tạo ảnh.");
-          if (response.status === 400 && /unknown name|invalid json|imageconfig|responseformat/.test(reason)) throw new Error("Gemini từ chối cấu hình tạo ảnh. Hãy tải lại web để dùng bản mới.");
-          const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
-          if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
+        let lastErr = null;
+        for (const modelName of NANO_BANANA_MODELS) {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+            body: JSON.stringify({
+              contents: [{ parts: [
+                { text: artworkPrompt },
+                { inlineData: { mimeType: reference[1], data: reference[2] } },
+              ] }],
+              generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } },
+            }),
+          });
+          if (response.status === 404) { lastErr = `Model ${modelName} chưa khả dụng.`; continue; }
+          if (response.status === 429) throw new Error("Nano Banana đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức.");
+          if ([400, 401, 403].includes(response.status)) {
+            const result = await response.json().catch(() => null);
+            const reason = String(result?.error?.message || "").toLowerCase();
+            if (/billing|paid/.test(reason)) throw new Error("Project Gemini cần bật thanh toán để tạo ảnh Nano Banana.");
+            if (response.status === 400 && /not found|not supported/.test(reason)) { lastErr = reason; continue; }
+            if (response.status === 400 && /unknown name|invalid json|imageconfig|responseformat/.test(reason)) throw new Error("Gemini từ chối cấu hình tạo ảnh.");
+            const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
+            if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
+          }
+          if (!response.ok) throw new Error(`Nano Banana chưa tạo được ảnh (HTTP ${response.status}).`);
+          const result = await response.json();
+          const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
+          if (artwork) {
+            newImage = `data:${artwork.mimeType};base64,${artwork.data}`;
+            break;
+          }
         }
-        if (!response.ok) throw new Error(`Gemini chưa tạo được ảnh (HTTP ${response.status}).`);
-        const result = await response.json();
-        const artwork = result.candidates?.flatMap(candidate => candidate.content?.parts || []).map(part => part.inlineData).find(part => /^image\/(jpeg|png)$/i.test(part?.mimeType) && /^[A-Za-z0-9+/=]+$/.test(part.data) && part.data.length <= 12 * 1024 * 1024);
-        if (!artwork) throw new Error("Gemini không trả về ảnh dùng được. Hãy thử mô tả khác.");
-        newImage = `data:${artwork.mimeType};base64,${artwork.data}`;
+        if (!newImage) throw new Error(lastErr || "Nano Banana không trả về ảnh dùng được. Hãy thử mô tả khác.");
       }
       if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(newImage || "")) throw new Error("Gemini không trả về ảnh dùng được.");
       if (!controller.signal.aborted && newImage !== imageSource) {
@@ -300,13 +315,19 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
   return <section className="thumbnail-designer" aria-label="Thiết kế ảnh bìa">
     <header><div><strong>Thiết kế thumbnail</strong><p>Đổi màu, thêm chữ và xem ngay trên ảnh · 1280 × 720</p></div><button type="button" className="btn secondary" onClick={onClose}>Đóng chỉnh ảnh</button></header>
     {error && <p role="alert" className="youtube-error">{error}</p>}
-    {artworkOnly && <div className="youtube-ai-draft">
-      <div className="thumbnail-reference"><img src={source} alt="Khung hình tham chiếu" /><div><strong>Ảnh tham chiếu</strong><p>Gemini dùng ảnh này để hiểu nhân vật rồi dựng cảnh mới.</p></div></div>
-      <label>Phong cách ảnh mới<input value={artDirection} maxLength={400} onChange={event => setArtDirection(event.target.value)} placeholder="Ví dụ: Poster anime, nhân vật chính nổi bật, ánh sáng xanh vàng" /></label>
-      {onGenerateArtwork && <small>Để trống key để dùng kết nối Gemini trong Cài đặt.</small>}
+    {(artworkOnly || onGenerateArtwork) && <div className="youtube-ai-draft">
+      <div className="thumbnail-reference"><img src={source} alt="Khung hình tham chiếu" /><div><strong>Nano Banana AI Thumbnail (16:9)</strong><p>Dùng Gemini Nano Banana dựng ảnh bìa mới sắc nét từ khung hình video.</p></div></div>
+      <div className="thumbnail-looks">
+        {NANO_BANANA_STYLES.map(style => (
+          <button key={style.id} type="button" className="btn secondary" onClick={() => setArtDirection(style.prompt)}>
+            {style.label}
+          </button>
+        ))}
+      </div>
+      <label>Phong cách ảnh Nano Banana<input value={artDirection} maxLength={400} onChange={event => setArtDirection(event.target.value)} placeholder="Chọn nhanh style ở trên hoặc tự mô tả cảnh mới…" /></label>
+      {onGenerateArtwork && <small>Để trống key để dùng kết nối Gemini / API key trong Cài đặt.</small>}
       <label>{onGenerateArtwork ? "Gemini API key (tùy chọn)" : "Gemini API key"}<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
-      <small>Khung hình tham chiếu được gửi trực tiếp tới Gemini. Lượt tạo ảnh dùng hạn mức của project bạn nhập.</small>
-      <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Đang dựng ảnh mới…" : generatedImage ? "Tạo phiên bản khác" : "Gemini dựng ảnh mới"}</button>
+      <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Nano Banana đang vẽ ảnh…" : generatedImage ? "Tạo phiên bản Nano Banana khác" : "Tạo ảnh AI (Nano Banana)"}</button>
     </div>}
     {imageSource && <>
     {artworkOnly && <strong>Ảnh mới · Xem trước</strong>}

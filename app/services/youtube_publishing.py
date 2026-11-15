@@ -243,53 +243,101 @@ def _thumbnail_bytes(data_url):
     return data, "image/" + matched[1]
 
 
+NANO_BANANA_IMAGE_MODELS = (
+    "gemini-2.5-flash-image",
+    "gemini-3.1-flash-image",
+)
+
+
 def generate_thumbnail_artwork(reference, prompt):
+    import os
+    import requests
     from services.gemini_oauth import authorized_request, get_project_id
 
     if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 1800:
         raise ValueError("Mô tả ảnh bìa không hợp lệ.")
-    decoded = _thumbnail_bytes(reference)
-    if not decoded:
-        raise ValueError("Hãy chọn ảnh tham chiếu.")
+    decoded = _thumbnail_bytes(reference) if reference else None
     project = get_project_id()
-    if not project:
-        raise RuntimeError("Hãy kết nối Gemini trong Cài đặt và chọn Google Cloud project trước.")
-    data, mime_type = decoded
-    try:
-        response = authorized_request(
-            "POST", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent",
-            project_id=project, timeout=(10, 105), json={
-                "contents": [{"parts": [{"text": prompt}, {"inlineData": {
-                    "mimeType": mime_type, "data": base64.b64encode(data).decode("ascii"),
-                }}]}],
-                "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {
-                    "aspectRatio": "16:9", "imageSize": "1K",
-                }},
-            },
-        )
-    except RuntimeError as error:
-        raise RuntimeError("Chưa có phiên Gemini hợp lệ. Hãy kết nối lại trong Cài đặt.") from error
-    if response.status_code == 429:
-        raise RuntimeError("Gemini đang giới hạn lượt tạo ảnh. Hãy kiểm tra hạn mức của project.")
-    if response.status_code in {401, 403}:
-        raise RuntimeError("Google từ chối tạo ảnh. Hãy kiểm tra kết nối Gemini và quyền tạo ảnh của project.")
-    if not response.ok:
+    api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
+    if not project and not api_key:
+        raise RuntimeError("Hãy kết nối Gemini hoặc nhập GEMINI_API_KEY trong Cài đặt trước.")
+
+    parts = [{"text": prompt.strip()}]
+    if decoded:
+        data, mime_type = decoded
+        parts.append({
+            "inlineData": {
+                "mimeType": mime_type,
+                "data": base64.b64encode(data).decode("ascii"),
+            }
+        })
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseModalities": ["IMAGE"],
+            "imageConfig": {"aspectRatio": "16:9", "imageSize": "1K"},
+        },
+    }
+
+    last_error = None
+    for model_name in NANO_BANANA_IMAGE_MODELS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         try:
-            reason = str(response.json().get("error", {}).get("message", "")).lower()
-        except (ValueError, AttributeError):
-            reason = ""
-        if "billing" in reason or "paid" in reason:
-            raise RuntimeError("Project Gemini cần bật thanh toán để dùng model tạo ảnh.")
-        if response.status_code == 400:
-            raise RuntimeError("Gemini từ chối dữ liệu ảnh hoặc cấu hình tạo ảnh. Hãy chọn lại ảnh tham chiếu và cập nhật Engine.")
-        raise RuntimeError(f"Gemini chưa tạo được ảnh (HTTP {response.status_code}).")
-    for candidate in response.json().get("candidates", []):
-        for part in candidate.get("content", {}).get("parts", []):
-            image = part.get("inlineData") or {}
-            kind, encoded = image.get("mimeType"), image.get("data")
-            if kind in {"image/jpeg", "image/png"} and isinstance(encoded, str) and len(encoded) <= 12 * 1024 * 1024:
-                return {"image": f"data:{kind};base64,{encoded}"}
-    raise RuntimeError("Gemini không trả về ảnh. Hãy thử mô tả khác.")
+            if project:
+                response = authorized_request(
+                    "POST",
+                    url,
+                    project_id=project,
+                    timeout=(10, 105),
+                    json=payload,
+                )
+            else:
+                response = requests.post(
+                    url,
+                    headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                    json=payload,
+                    timeout=(10, 105),
+                )
+        except RuntimeError as error:
+            if api_key:
+                response = requests.post(
+                    url,
+                    headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                    json=payload,
+                    timeout=(10, 105),
+                )
+            else:
+                raise RuntimeError("Chưa có phiên Gemini hợp lệ. Hãy kết nối lại trong Cài đặt.") from error
+
+        if response.status_code == 404:
+            last_error = f"Model {model_name} chưa khả dụng."
+            continue
+        if response.status_code == 429:
+            raise RuntimeError("Gemini Nano Banana đang giới hạn lượt tạo ảnh. Hãy thử lại sau ít phút.")
+        if response.status_code in {401, 403}:
+            raise RuntimeError("Google từ chối tạo ảnh. Hãy kiểm tra kết nối Gemini hoặc API key.")
+        if not response.ok:
+            try:
+                reason = str(response.json().get("error", {}).get("message", "")).lower()
+            except (ValueError, AttributeError):
+                reason = ""
+            if "billing" in reason or "paid" in reason:
+                raise RuntimeError("Project Gemini cần bật thanh toán để dùng Nano Banana tạo ảnh.")
+            if response.status_code == 400 and ("not found" in reason or "not supported" in reason):
+                last_error = reason
+                continue
+            if response.status_code == 400:
+                raise RuntimeError("Gemini từ chối dữ liệu ảnh hoặc cấu hình tạo ảnh. Hãy chọn lại ảnh tham chiếu.")
+            raise RuntimeError(f"Nano Banana chưa tạo được ảnh (HTTP {response.status_code}).")
+
+        for candidate in response.json().get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                image = part.get("inlineData") or {}
+                kind, encoded = image.get("mimeType"), image.get("data")
+                if kind in {"image/jpeg", "image/png"} and isinstance(encoded, str) and len(encoded) <= 12 * 1024 * 1024:
+                    return {"image": f"data:{kind};base64,{encoded}", "model": model_name}
+
+    raise RuntimeError(last_error or "Nano Banana không trả về ảnh. Hãy thử mô tả khác.")
 
 
 def thumbnail_choices(video: Path):
