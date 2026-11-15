@@ -32,7 +32,7 @@ function wrapTitle(context, text, width) {
   return lines;
 }
 
-export function ThumbnailDesigner({ source, title, onApply, onClose }) {
+export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, onClose }) {
   const canvas = useRef(null);
   const [image, setImage] = useState(null);
   const [text, setText] = useState("");
@@ -99,12 +99,16 @@ export function ThumbnailDesigner({ source, title, onApply, onClose }) {
     const look = LOOKS[key];
     setFont(look.font); setColor(look.color); setBackground(look.background);
   };
-  const autoLayout = () => {
-    setText(String(title || "").replace(/#[^\s]+/gu, "").replace(/\s+/gu, " ").trim().slice(0, 100));
+  const autoLayout = async () => {
+    const caption = /[\p{Script=Han}]/u.test(title || "") ? await onTranslateTitle?.() : title;
+    if (!caption || /[\p{Script=Han}]/u.test(caption)) { setError("Chưa có tiêu đề tiếng Việt. Hãy dịch hoặc nhập chữ tiếng Việt cho ảnh bìa."); return; }
+    setError("");
+    setText(String(caption || "").replace(/#[^\s]+/gu, "").replace(/\s+/gu, " ").trim().slice(0, 100));
     chooseLook("story"); setPosition("top");
   };
   const apply = () => {
     if (!ready || !canvas.current) return;
+    if (/[\p{Script=Han}]/u.test(text)) { setError("Chữ trên ảnh vẫn còn tiếng Trung. Bấm Tự bố trí theo tiêu đề hoặc sửa thành tiếng Việt trước khi áp dụng."); return; }
     try {
       let data;
       for (const quality of [.92, .8, .65, .5]) {
@@ -119,7 +123,7 @@ export function ThumbnailDesigner({ source, title, onApply, onClose }) {
     {error && <p role="alert" className="youtube-error">{error}</p>}
     <canvas ref={canvas} width={1280} height={720} aria-label="Ảnh bìa xem trước" />
     <div className="thumbnail-looks">{Object.entries(LOOKS).map(([key, look]) => <button type="button" className="btn secondary" key={key} onClick={()=>chooseLook(key)}>{look.label}</button>)}<button type="button" className="btn primary" onClick={autoLayout} disabled={!title}>Tự bố trí theo tiêu đề</button></div>
-    <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>setText(event.target.value)} /></label>
+    <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>{setText(event.target.value);setError("");}} /></label>
     <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={position} onChange={event=>setPosition(event.target.value)}><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
     <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("top");}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
