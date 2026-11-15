@@ -1,0 +1,206 @@
+/* ==========================================================================
+   ReupAI Controls — standard sizing for buttons, icons, inputs, nav, badges.
+   Loaded LAST. Only sizing/shape lives here; colors stay in the theme layer.
+
+   Scale (Linear-style, 4px grid)
+     Button / input height   sm 28 · md 32 (default) · lg 40 · touch 44
+     Horizontal padding      sm 10 · md 12 · lg 16
+     Font size               sm 12 · md 13 · lg 14
+     Icon in control         sm 14 · md 16 · lg 16
+     Icon ↔ label gap        sm 6  · md 8
+     Radius                  6 (controls) · 8 (lg controls)
+
+   Modifiers: .btn-sm / .sm, .btn-lg / .lg / .button-large, .btn-icon / .icon-btn
+   ========================================================================== */
+
+/* ---------- Buttons: base (md) ---------- */
+body.theme-xports :is(
+  .btn, .btn.primary, .btn.secondary, .btn.danger, .btn.green, .btn.orange,
+  .btn-primary, .btn-secondary, .action-primary, .action-secondary,
+  .button-primary, .button-secondary,
+  .local-engine-action, .dashboard-engine-actions button, .dashboard-engine-download,
+  .plans-button, .profile-save, .account-submit, .guest-empty-primary,
+  .guest-source-preview, .guest-source-sync,
+  .quick-nav-trigger, .assistant-new-chat, .assistant-history-toggle,
+  .workspace-guest-signin, .process-config-start
+) {
+  --btn-h: var(--ds-control-h);
+  --btn-px: var(--ds-control-px);
+  --btn-fs: var(--ds-text-base);
+  --btn-icon: var(--ds-icon);
+  --btn-gap: var(--ds-control-gap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--btn-gap);
+  box-sizing: border-box;
+  min-height: var(--btn-h);
+  padding-block: 0;
+  padding-inline: var(--btn-px);
+  border-radius: var(--ds-control-radius);
+  font-size: var(--btn-fs);
+  font-weight: var(--ds-weight-medium);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+/* ---------- Button sizes ---------- */
+body.theme-xports :is(.btn, .btn-primary, .btn-secondary, .plans-button):is(.btn-sm, .sm),
+body.theme-xports .guest-browse-filters button {
+  --btn-h: var(--ds-control-h-sm);
+  --btn-px: var(--ds-control-px-sm);
+  --btn-fs: var(--ds-text-sm);
+  --btn-icon: var(--ds-icon-sm);
+  --btn-gap: var(--ds-control-gap-sm);
+  min-height: var(--btn-h);
+  padding-inline: var(--btn-px);
+  font-size: var(--btn-fs);
+}
+body.theme-xports :is(.btn, .btn-primary, .btn-secondary, .plans-button, .button-primary, .button-secondary):is(.btn-lg, .lg, .button-large),
+body.theme-xports .landing-shell :is(.landing-actions, .landing-bottom) :is(.button-primary, .button-secondary),
+body.theme-xports .auth-premium .google-sign-in,
+body.theme-xports .auth-premium .auth-form .account-submit,
+body.theme-xports .guest-browse .guest-source-controls .guest-source-sync {
+  --btn-h: var(--ds-control-h-lg);
+  --btn-px: var(--ds-control-px-lg);
+  --btn-fs: var(--ds-text-md);
+  min-height: var(--btn-h);
+  border-radius: var(--ds-control-radius-lg);
+}
+body.theme-xports .auth-premium .google-sign-in svg {
+  width: var(--ds-icon);
+  height: var(--ds-icon);
+}
+body.theme-xports .guest-browse .guest-source-controls :is(.guest-source-input, select, button) {
+  height: var(--ds-control-h-lg);
+  min-height: var(--ds-control-h-lg);
+  border-radius: var(--ds-control-radius-lg);
+  box-sizing: border-box;
+}
+body.theme-xports .guest-browse .guest-source-controls .guest-source-input input {
+  height: 100%;
+  min-height: 0;
+}
+body.theme-xports .auth-premium .auth-input-wrap {
+  height: var(--ds-control-h-lg);
+  min-height: var(--ds-control-h-lg);
+  border-radius: var(--ds-control-radius-lg);
+  box-sizing: border-box;
+}
+body.theme-xports .auth-premium .auth-input-wrap input {
+  height: 100%;
+  min-height: 0;
+}
+body.theme-xports .btn.full { width: 100%; }
+
+/* Dense toolbars inside editors/cards use the small size. */
+body.theme-xports :is(
+  .process-preview-tools, .process-interval-head, .process-preset-bar,
+  .blur-interval-row, .output-library-card .library-actions, .live-job-head,
+  .output-editor-interval
+) :is(.btn, .btn.primary, .btn.secondary) {
+  --btn-h: var(--ds-control-h-sm);
+  --btn-px: var(--ds-control-px-sm);
+  --btn-fs: var(--ds-text-sm);
+  --btn-icon: var(--ds-icon-sm);
+  --btn-gap: var(--ds-control-gap-sm);
+}
+
+/* Icons inside any standard button follow the button size. */
+body.theme-xports :is(.btn, .btn-primary, .btn-secondary, .action-primary, .action-secondary, .local-engine-action, .plans-button, .button-primary, .button-secondary) :is(svg, .icon, .ui-icon) {
+  flex: none;
+  width: var(--btn-icon, var(--ds-icon));
+  height: var(--btn-icon, var(--ds-icon));
+}
+
+/* ---------- Icon-only buttons: square, same heights ---------- */
+body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close) {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--ds-control-h);
+  min-width: var(--ds-control-h);
+  height: var(--ds-control-h);
+  min-height: var(--ds-control-h);
+  padding: 0;
+  border-radius: var(--ds-control-radius);
+}
+body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close) :is(svg, .icon, .ui-icon) {
+  width: var(--ds-icon);
+  height: var(--ds-icon);
+}
+body.theme-xports :is(.icon-btn, .btn-icon).sm {
+  width: var(--ds-control-h-sm);
+  min-width: var(--ds-control-h-sm);
+  height: var(--ds-control-h-sm);
+  min-height: var(--ds-control-h-sm);
+}
+
+/* ---------- Inputs ---------- */
+body.theme-xports :is(.app-shell, .auth-premium, .guest-auth-dialog, .modal, dialog) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+  select
+) {
+  box-sizing: border-box;
+  min-height: var(--ds-control-h);
+  padding-inline: 10px;
+  border-radius: var(--ds-control-radius);
+  font-size: var(--ds-text-base);
+}
+body.theme-xports :is(.app-shell, .auth-premium, .guest-auth-dialog, .modal, dialog) textarea {
+  padding: 8px 10px;
+  border-radius: var(--ds-control-radius);
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-leading-normal);
+}
+body.theme-xports :is(input[type="checkbox"], input[type="radio"]) {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---------- Sidebar navigation ---------- */
+body.theme-xports .sidebar .nav-item {
+  min-height: var(--ds-nav-item-h);
+  gap: var(--ds-control-gap);
+  padding-inline: 10px;
+  border-radius: var(--ds-control-radius);
+  font-size: var(--ds-text-base);
+}
+body.theme-xports .sidebar .nav-item :is(svg, .icon, .ui-icon) {
+  width: var(--ds-icon);
+  height: var(--ds-icon);
+}
+
+/* ---------- Badges / chips ---------- */
+body.theme-xports :is(.badge, .status-pill, .result-chip, .tag-chip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--ds-badge-h);
+  padding-inline: 8px;
+  border-radius: var(--ds-radius-full);
+  font-size: var(--ds-text-xs);
+  font-weight: var(--ds-weight-medium);
+  line-height: 1;
+}
+body.theme-xports :is(.badge, .status-pill, .result-chip, .tag-chip) :is(svg, .icon, .ui-icon) {
+  width: var(--ds-icon-xs);
+  height: var(--ds-icon-xs);
+}
+
+/* ---------- Touch devices: 44px targets (WCAG 2.5.5) ---------- */
+@media (any-pointer: coarse) {
+  body.theme-xports :is(
+    .btn, .btn-primary, .btn-secondary, .action-primary, .action-secondary,
+    .local-engine-action, .plans-button, .button-primary, .button-secondary
+  ) {
+    min-height: var(--ds-control-h-touch) !important;
+  }
+  body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close) {
+    width: var(--ds-control-h-touch);
+    min-width: var(--ds-control-h-touch);
+    height: var(--ds-control-h-touch);
+    min-height: var(--ds-control-h-touch);
+  }
+  body.theme-xports .sidebar .nav-item { min-height: var(--ds-control-h-touch); }
+}

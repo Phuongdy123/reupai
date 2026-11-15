@@ -27,6 +27,22 @@ const paths = {
   external: <><path d="M14 3h7v7" /><path d="m10 14 11-11" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></>,
 };
 
-export function Icon({ name, size = 18, className = "" }) {
-  return <svg className={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.grid}</svg>;
+// Design-system icon scale (px). Any requested size snaps to the nearest step
+// so icons stay on the 4px grid: 12 / 14 / 16 / 20 / 24 / 32 / 40.
+function snapIconSize(size) {
+  const n = Number(size) || 16;
+  if (n <= 12) return 12;
+  if (n <= 14) return 14;
+  if (n <= 17) return 16;
+  if (n <= 21) return 20;
+  if (n <= 27) return 24;
+  if (n <= 35) return 32;
+  return 40;
+}
+
+export function Icon({ name, size = 16, className = "" }) {
+  const px = snapIconSize(size);
+  // Keep the rendered stroke close to 1.5px at every size (viewBox is 24).
+  const stroke = Math.min(2, Math.max(1.5, 36 / px)).toFixed(2);
+  return <svg className={`icon ${className}`} width={px} height={px} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name] || paths.grid}</svg>;
 }
