@@ -27,6 +27,7 @@ export function Dashboard() {
   const { status, client, connect, check, preview } = useEngine();
   const { isGuest, requestSignIn } = useGuestAccess();
   const [data, setData] = useState(null);
+  const [diagnostics, setDiagnostics] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [error, setError] = useState(null);
   const [stopping, setStopping] = useState(null);
@@ -46,8 +47,12 @@ export function Dashboard() {
     dashboardRequest.current = true;
     setError(null);
     try {
-      const result = await client.json("/api/library/dashboard", { cache: "no-store" });
-      setData(result);
+      const [dashResult, diagResult] = await Promise.allSettled([
+        client.json("/api/library/dashboard", { cache: "no-store" }),
+        client.json("/api/diagnostics", { cache: "no-store" }),
+      ]);
+      if (dashResult.status === "fulfilled") setData(dashResult.value);
+      if (diagResult.status === "fulfilled") setDiagnostics(diagResult.value);
     } catch (requestError) { setError(requestError.message || "Không thể tải Dashboard."); }
     finally { dashboardRequest.current = false; }
   }, [client, status]);
@@ -87,6 +92,9 @@ export function Dashboard() {
     finally { setStopping(null); }
   };
   const stats = !isGuest && status === "connected" ? data?.stats || {} : {};
+  const googleOAuth = diagnostics?.configuration?.gemini_oauth;
+  const apiKeyConfigured = Boolean(diagnostics?.configuration?.gemini_api_key_configured);
+  const geminiReady = apiKeyConfigured || Boolean(googleOAuth?.connected);
   const hasActiveJobs = jobs.some((job) => ACTIVE_JOBS.has(job.status));
   useEffect(() => {
     if (status !== "connected") return undefined;
@@ -113,6 +121,75 @@ export function Dashboard() {
         <div className="dashboard-engine-guide"><strong>Bước tiếp theo: cài Local Engine</strong><p>Bạn đã vào workspace. Để tải, Vietsub và lồng tiếng video, cần cài ứng dụng Windows xử lý trên máy của bạn.</p><ol><li>Tải bộ cài, cài đặt và mở ReupAI Local Engine.</li><li>Quay lại trang này và bấm “Đã cài · Kiểm tra kết nối”.</li><li>Vào <Link href="/settings#diagnostics">Cài đặt Gemini</Link>, kết nối Google và chọn project của bạn để bắt đầu.</li></ol><Link href="/local-engine">Xem hướng dẫn cài đặt →</Link></div>
         <div className="dashboard-engine-actions"><a className="dashboard-engine-download" href={REUPAI_MICROSOFT_STORE_URL} target="_blank" rel="noopener noreferrer">Tải Local Engine từ Microsoft Store</a><button type="button" disabled={status === "checking" || status === "authorizing"} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{status === "checking" || status === "authorizing" ? "Đang kiểm tra…" : status === "authorization_required" || status === "permission_denied" ? "Cấp quyền kết nối" : "Đã cài · Kiểm tra kết nối"}</button></div>
       </section>}
+      {status === "connected" && diagnostics && !geminiReady && !isGuest && (
+        <section
+          className="dashboard-overview-alert dashboard-gemini-onboarding"
+          style={{
+            border: "1px solid rgba(139, 92, 246, 0.45)",
+            background: "linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(20, 20, 28, 0.96) 100%)",
+            borderRadius: "14px",
+            padding: "18px 22px",
+            margin: "0 0 16px 0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "18px",
+            flexWrap: "wrap",
+            boxShadow: "0 8px 32px rgba(124, 58, 237, 0.2)"
+          }}
+          aria-label="Kích hoạt AI Gemini"
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", flex: "1 1 320px" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "48px",
+                height: "48px",
+                borderRadius: "12px",
+                background: "rgba(139, 92, 246, 0.25)",
+                color: "#ddd6fe",
+                flexShrink: 0,
+                border: "1px solid rgba(139, 92, 246, 0.35)"
+              }}
+            >
+              <Icon name="spark" size={26} />
+            </span>
+            <div>
+              <strong style={{ display: "block", fontSize: "15px", color: "#f9fafb", marginBottom: "4px", fontWeight: "650" }}>
+                Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu
+              </strong>
+              <p style={{ margin: 0, fontSize: "13px", color: "#d1d5db", lineHeight: 1.55 }}>
+                Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
+            <Link
+              href="/settings?reconnect=1#diagnostics"
+              className="btn primary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "11px 22px",
+                fontSize: "13.5px",
+                fontWeight: "650",
+                background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
+                color: "#fff",
+                borderRadius: "10px",
+                textDecoration: "none",
+                boxShadow: "0 4px 18px rgba(109, 40, 217, 0.5)",
+                whiteSpace: "nowrap",
+                border: "1px solid rgba(255, 255, 255, 0.2)"
+              }}
+            >
+              <Icon name="spark" size={17} /> Kết nối Google ngay
+            </Link>
+          </div>
+        </section>
+      )}
       {status === "connected" && jobs.length > 0 && <div className="dashboard-active-jobs">{jobs.slice(0, 2).map((job) => <div className="dashboard-active-job" key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}`}><div><strong>{jobVideoId(job)}</strong><small>{stageLabel(job.stage)} · {modeLabel(job.mode)}</small></div><span>{progressValue(job.progress)}%</span><div className="dashboard-active-track"><i style={{ width: `${progressValue(job.progress)}%` }} /></div>{ACTIVE_JOBS.has(job.status) && <button type="button" disabled={stopping === jobVideoId(job)} onClick={() => stopJob(job)}>{stopping === jobVideoId(job) ? "Đang dừng…" : "Dừng"}</button>}</div>)}{jobs.length > 2 && <Link href="/history">Xem thêm {jobs.length - 2} job →</Link>}</div>}
     </section>
     {!isGuest && <ChannelAnalytics />}
