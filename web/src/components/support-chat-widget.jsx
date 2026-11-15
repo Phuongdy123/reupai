@@ -317,11 +317,25 @@ export function SupportChatWidget() {
       <button
         type="button"
         className="reupai-support-launcher"
+        aria-label="Hỗ trợ & Ticket"
+        title="Hỗ trợ & Ticket"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        <Icon name={open ? "close" : "mail"} size={17} />
-        <span>Hỗ trợ &amp; Ticket</span>
+        {open ? (
+          <Icon name="close" size={22} />
+        ) : (
+          <svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true">
+            <path
+              d="M14 2.5C7.37 2.5 2 7.45 2 13.56c0 3.47 1.74 6.57 4.46 8.6V26l3.92-2.15c1.14.32 2.36.49 3.62.49 6.63 0 12-4.95 12-11.06S20.63 2.5 14 2.5Z"
+              fill="#0b0d13"
+            />
+            <path
+              d="M15.22 16.92 12.16 13.66 6.2 16.92 12.76 9.96l3.12 3.26 5.9-3.26-6.56 6.96Z"
+              fill="#ffffff"
+            />
+          </svg>
+        )}
         {pendingCount > 0 && <em className="reupai-support-count">{pendingCount}</em>}
       </button>
     </div>

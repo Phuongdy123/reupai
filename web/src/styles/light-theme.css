@@ -1,0 +1,217 @@
+/* Light mode theme overrides */
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --ds-surface: #ffffff;
+  --ds-surface-sunken: #f8fafc;
+  --ds-surface-elevated: rgba(255, 255, 255, 0.92);
+  --ds-text: #0f172a;
+  --ds-text-secondary: #334155;
+  --ds-text-muted: #64748b;
+  --ds-border: #e2e8f0;
+  --ds-border-strong: #cbd5e1;
+  --ds-accent: #dc2626;
+  --ds-accent-soft: rgba(239, 68, 68, 0.1);
+}
+
+html[data-theme="light"] body.theme-xports {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .app-shell {
+  background: radial-gradient(circle at top right, rgba(239, 68, 68, 0.06), transparent 45%), #f1f5f9;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .sidebar {
+  background: rgba(255, 255, 255, 0.88);
+  border-right-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .topbar {
+  background: rgba(255, 255, 255, 0.88);
+  border-bottom-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .main {
+  background: transparent;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .nav-item,
+html[data-theme="light"] body.theme-xports .brand-name,
+html[data-theme="light"] body.theme-xports .topbar-title {
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .nav-item {
+  color: #475569;
+}
+
+html[data-theme="light"] body.theme-xports .nav-item:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .nav-item.active {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+html[data-theme="light"] body.theme-xports .topbar-subtitle,
+html[data-theme="light"] body.theme-xports .brand-tag,
+html[data-theme="light"] body.theme-xports .nav-section-title,
+html[data-theme="light"] body.theme-xports .muted {
+  color: #64748b;
+}
+
+/* Panels, cards, studio surfaces */
+html[data-theme="light"] body.theme-xports .panel,
+html[data-theme="light"] body.theme-xports .library-card,
+html[data-theme="light"] body.theme-xports .studio-card,
+html[data-theme="light"] body.theme-xports .studio-stat,
+html[data-theme="light"] body.theme-xports .studio-preset-bar,
+html[data-theme="light"] body.theme-xports .card,
+html[data-theme="light"] body.theme-xports .metric-card,
+html[data-theme="light"] body.theme-xports .kpi-card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.05);
+}
+
+html[data-theme="light"] body.theme-xports .studio-hero {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .studio-profile-btn {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .studio-profile-btn.active {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+/* Inputs, selects, textareas, buttons */
+html[data-theme="light"] body.theme-xports input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="light"] body.theme-xports select,
+html[data-theme="light"] body.theme-xports textarea {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports input::placeholder,
+html[data-theme="light"] body.theme-xports textarea::placeholder {
+  color: #94a3b8;
+}
+
+html[data-theme="light"] body.theme-xports .btn.secondary,
+html[data-theme="light"] body.theme-xports .quick-nav-trigger,
+html[data-theme="light"] body.theme-xports .theme-toggle-btn {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+html[data-theme="light"] body.theme-xports .btn.secondary:hover,
+html[data-theme="light"] body.theme-xports .quick-nav-trigger:hover,
+html[data-theme="light"] body.theme-xports .theme-toggle-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+html[data-theme="light"] body.theme-xports .quick-nav-trigger kbd {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+/* Tables & modals */
+html[data-theme="light"] body.theme-xports table th {
+  background: #f8fafc;
+  color: #334155;
+  border-bottom-color: #e2e8f0;
+}
+
+html[data-theme="light"] body.theme-xports table td {
+  border-bottom-color: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Support widget & Cat route loader */
+html[data-theme="light"] .reupai-support-panel {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+}
+
+html[data-theme="light"] .reupai-support-header {
+  background: #f8fafc;
+  border-bottom-color: #e2e8f0;
+}
+
+html[data-theme="light"] .reupai-support-tab {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+html[data-theme="light"] .reupai-support-tab.active {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+html[data-theme="light"] .reupai-support-msg.bot {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .reupai-support-launcher {
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18), 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .reupai-cat-loader-card {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+/* Theme toggle button styling (works in both dark and light modes) */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 7px 2px 7px 2px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.theme-toggle-btn:active {
+  transform: scale(0.97);
+}
