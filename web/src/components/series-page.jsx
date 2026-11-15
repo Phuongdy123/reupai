@@ -848,18 +848,6 @@ export function SeriesPage() {
                 </select>
               </label>
 
-              <div style={{ display: "flex", alignItems: "end" }}>
-                <label className="boost-gpu-toggle" style={{ width: "100%", justifyContent: "center" }}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(seriesConfig.boost_gpu)}
-                    onChange={(e) =>
-                      setSeriesConfig((c) => ({ ...c, boost_gpu: e.target.checked }))
-                    }
-                  />
-                  <span>Boost GPU</span>
-                </label>
-              </div>
             </div>
           </div>
         )}

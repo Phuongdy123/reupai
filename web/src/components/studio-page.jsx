@@ -602,10 +602,6 @@ export function StudioPage({ mode = "youtube" }) {
             <input type="checkbox" checked={autoBrandBlur} onChange={(e) => setAutoBrandBlur(e.target.checked)} />
             <span>Che Watermark</span>
           </label>
-          <label className="boost-gpu-toggle" title="Tăng tốc GPU tối đa (CUDA / NVENC / OCR GPU / đa luồng)">
-            <input type="checkbox" checked={boostGpu} onChange={(e) => { const next = e.target.checked; setBoostGpu(next); try { localStorage.setItem("reupai:boost-gpu", next ? "1" : "0"); } catch {} }} />
-            <span>Boost GPU</span>
-          </label>
           <span className="studio-aspect-pill">Tỷ lệ: {isYoutube ? "16:9 Ngang" : "9:16 Dọc"}</span>
         </div>
       </section>

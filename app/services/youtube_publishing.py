@@ -248,6 +248,23 @@ NANO_BANANA_IMAGE_MODELS = (
     "gemini-3.1-flash-image-preview",
     "gemini-2.0-flash-exp-image-generation",
 )
+_IMAGE_MODEL_COOLDOWN_UNTIL: dict[str, float] = {}
+
+
+def _image_model_exhausted(model_name: str) -> bool:
+    import time
+
+    until = _IMAGE_MODEL_COOLDOWN_UNTIL.get(model_name, 0.0)
+    if until and time.monotonic() < until:
+        return True
+    _IMAGE_MODEL_COOLDOWN_UNTIL.pop(model_name, None)
+    return False
+
+
+def _mark_image_model_exhausted(model_name: str, ttl: int = 900) -> None:
+    import time
+
+    _IMAGE_MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
 
 
 def _format_quota_error(reason: str) -> str:
@@ -362,6 +379,8 @@ def generate_thumbnail_artwork(reference, prompt):
     last_error = None
     quota_error = None
     for model_name in NANO_BANANA_IMAGE_MODELS:
+        if _image_model_exhausted(model_name):
+            continue
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         model_payload = payload
         if model_name == "gemini-2.0-flash-exp-image-generation":
@@ -397,9 +416,11 @@ def generate_thumbnail_artwork(reference, prompt):
                 raise RuntimeError("Chưa có phiên Gemini hợp lệ. Hãy kết nối lại trong Cài đặt.") from error
 
         if response.status_code == 404:
+            _mark_image_model_exhausted(model_name)
             last_error = f"Model {model_name} chưa khả dụng."
             continue
         if response.status_code == 429:
+            _mark_image_model_exhausted(model_name)
             try:
                 reason = str(response.json().get("error", {}).get("message", ""))
             except (ValueError, AttributeError):
@@ -408,6 +429,7 @@ def generate_thumbnail_artwork(reference, prompt):
             last_error = quota_error
             continue
         if response.status_code in {401, 403}:
+            _mark_image_model_exhausted(model_name)
             last_error = "Google từ chối tạo ảnh Nano Banana."
             continue
         if not response.ok:

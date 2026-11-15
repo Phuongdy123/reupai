@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import os
 import re
+import threading
 import time
 
 from dotenv import dotenv_values, load_dotenv
@@ -295,16 +296,37 @@ PRIMARY_MODEL = (
 )
 
 DISABLED_MODELS = set()
+_MODEL_COOLDOWN_LOCK = threading.Lock()
+_MODEL_COOLDOWN_UNTIL: dict[str, float] = {}
+MODEL_EXHAUSTED_TTL_SECONDS = 900
+
+
+def _is_model_exhausted(model_name: str) -> bool:
+    if model_name in DISABLED_MODELS:
+        return True
+    with _MODEL_COOLDOWN_LOCK:
+        until = _MODEL_COOLDOWN_UNTIL.get(model_name, 0.0)
+        if until and time.monotonic() < until:
+            return True
+        if model_name in _MODEL_COOLDOWN_UNTIL:
+            _MODEL_COOLDOWN_UNTIL.pop(model_name, None)
+    return False
+
+
+def _mark_model_exhausted(model_name: str, ttl: int = MODEL_EXHAUSTED_TTL_SECONDS) -> None:
+    DISABLED_MODELS.add(model_name)
+    with _MODEL_COOLDOWN_LOCK:
+        _MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
+
 
 # 20 subtitle / request de giam so request Gemini.
 BATCH_SIZE = 20
 
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 
 WAIT_TIMES = [
+    1,
     2,
-    5,
-    10,
 ]
 
 # Local fallback uses a Chinese source model, so only enable it for explicit Chinese input.
@@ -1017,10 +1039,7 @@ def translate_batch(
 
     selected_models = list(dict.fromkeys([translation_model, "gemini-3.1-flash-lite"])) if translation_model else GEMINI_MODELS
     for model_name in selected_models:
-        if model_name in DISABLED_MODELS:
-            print(
-                f"\n[SKIP MODEL] {model_name}"
-            )
+        if _is_model_exhausted(model_name):
             continue
 
         print(
@@ -1137,51 +1156,17 @@ def translate_batch(
                     ) from error
 
                 # Model khong ton tai / project khong duoc dung model.
-                # Khong retry cung model, chuyen model tiep theo.
-                if _is_model_unavailable_error(
-                    error
-                ):
-                    DISABLED_MODELS.add(
-                        model_name
-                    )
-
-                    print(
-                        f"[MODEL OFF] {model_name} "
-                        "khong kha dung -> thu model tiep theo."
-                    )
+                # Khong retry cung model, ghi nho da het/khong kha dung -> chuyen model tiep theo ngay.
+                if _is_model_unavailable_error(error):
+                    _mark_model_exhausted(model_name)
+                    print(f"[MODEL OFF] {model_name} khong kha dung -> chuyen ngay sang model du phong.")
                     break
 
-                # Quota / 429: neu la quota ngay thi chuyen model ngay.
-                # Neu chi la rate-limit ngan han thi retry vai lan roi fallback.
-                if _is_quota_error(
-                    error
-                ):
-                    if _is_daily_quota_error(
-                        error
-                    ):
-                        DISABLED_MODELS.add(
-                            model_name
-                        )
-
-                        print(
-                            f"[QUOTA] {model_name} "
-                            "het quota ngay -> thu model tiep theo."
-                        )
-                        break
-
-                    if (
-                        attempt
-                        >= MAX_RETRIES - 1
-                    ):
-                        DISABLED_MODELS.add(
-                            model_name
-                        )
-
-                        print(
-                            f"[RATE LIMIT] {model_name} "
-                            "van bi gioi han -> thu model tiep theo."
-                        )
-                        break
+                # Quota / 429: ghi nho model da het va chuyen ngay sang model du phong (khong lap lai).
+                if _is_quota_error(error):
+                    _mark_model_exhausted(model_name)
+                    print(f"[QUOTA] {model_name} da het -> ghi nho va chuyen ngay sang model du phong.")
+                    break
 
                 # Loi 5xx / timeout: retry cung model, sau do fallback.
                 if (
