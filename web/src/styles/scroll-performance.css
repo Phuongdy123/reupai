@@ -21,10 +21,95 @@ body.theme-xports .btn:active:not(:disabled) {
   transform: scale(0.975);
 }
 
-@keyframes reupai-route-bar {
-  0% { transform: translateX(-60%); opacity: 0.7; }
-  50% { transform: translateX(0%); opacity: 1; }
-  100% { transform: translateX(60%); opacity: 0.7; }
+@keyframes reupai-cat-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes reupai-cat-gallop {
+  0%, 100% { transform: translateY(0px) rotate(-4deg); }
+  50% { transform: translateY(-3px) rotate(4deg); }
+}
+@keyframes reupai-cat-leg-a {
+  0%, 100% { transform: rotate(-18deg); }
+  50% { transform: rotate(20deg); }
+}
+@keyframes reupai-cat-leg-b {
+  0%, 100% { transform: rotate(20deg); }
+  50% { transform: rotate(-18deg); }
+}
+
+.reupai-cat-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 11, 16, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.reupai-cat-loader-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 18px 24px;
+  border-radius: 12px 4px 12px 4px;
+  background: rgba(16, 17, 23, 0.88);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+}
+.reupai-cat-stage {
+  position: relative;
+  width: 96px;
+  height: 96px;
+}
+.reupai-cat-track {
+  width: 100%;
+  height: 100%;
+}
+.reupai-cat-ring-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 4;
+}
+.reupai-cat-ring-arc {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 85 210;
+  transform-origin: 60px 60px;
+  animation: reupai-cat-orbit 0.9s linear infinite;
+}
+.reupai-cat-orbit {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+  animation: reupai-cat-orbit 1.15s linear infinite;
+}
+.reupai-cat-svg {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  animation: reupai-cat-gallop 0.28s ease-in-out infinite;
+}
+.reupai-cat-leg-a {
+  transform-origin: 50% 70%;
+  animation: reupai-cat-leg-a 0.26s ease-in-out infinite;
+}
+.reupai-cat-leg-b {
+  transform-origin: 50% 70%;
+  animation: reupai-cat-leg-b 0.26s ease-in-out infinite;
+}
+.reupai-cat-loader-text {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #e5e7eb;
 }
 
 /* Promote fixed/sticky shell chrome onto dedicated GPU layers for 120fps scrolling. */
