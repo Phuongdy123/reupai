@@ -1,16 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.47",
+    "version": "0.2.51",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.47/ReupAI-Setup-0.2.47.exe",
-    "sha256": "7286fa12f85db7e0b7c2fed5049dd83224411f5b061ad9cf2cada7ad9205b86d",
-    "size": 464978864,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.51/ReupAI-Setup-0.2.51.exe",
+    "sha256": "cb15759e3bc6ebbdf53bc66bf38401f905b0e648ab2a7b39acf1fe178e12177e",
+    "size": 464952729,
     "notes": [
-      "OCR thủ công có thể chọn vùng, quét, sửa câu và xuất SRT; bổ sung chọn khoảng tập trong Series."
+      "Sửa video xem trước ở bước duyệt, hỗ trợ tải lại vé video và chọn đúng kênh nguồn.",
+      "Dịch tiếng Việt trước khi duyệt; giữ nguyên câu và thời gian khách đã sửa khi xuất SRT, giọng đọc và video.",
+      "Hiển thị tiến độ nhận diện lời thoại và bảo vệ bản dịch đã duyệt khi dùng Engine cũ."
     ],
-    "publishedAt": "2026-11-14T12:19:42+00:00"
+    "publishedAt": "2026-11-15T08:47:15+00:00"
   },
-  "signature": "sqaxlj/deyAqQCaCL2cgauSQbeJilGZpK8DCLY8QRS4GWUDX/4/SL7sESqtTL4TKHz+zixEMs7ECFzv9gRrSCg=="
+  "signature": "cxqfiizkIYuurNuIGYti8NDQzWVoXfIU+x6PgjSlj9XpQ3wFzmPbOcfqfpMT7k/wfbir/VYLtWqe1+dwJ0kPBw=="
 }
