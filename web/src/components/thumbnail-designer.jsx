@@ -19,7 +19,7 @@ const NANO_BANANA_STYLES = [
   { id: "viral", label: "Viral YouTube", prompt: "High-contrast viral YouTube thumbnail artwork, dynamic pose, glowing energy accents, clean lower third space for headline" },
   { id: "3d", label: "3D Stylized", prompt: "High-detail 3D stylized illustration, dramatic studio lighting, crisp textures, epic composition" },
 ];
-const NANO_BANANA_MODELS = ["gemini-2.5-flash-image", "gemini-3.1-flash-image"];
+const NANO_BANANA_MODELS = ["gemini-2.5-flash-image", "gemini-3.1-flash-image-preview", "gemini-2.0-flash-exp-image-generation"];
 const DEFAULT_TONE = { brightness: 100, contrast: 100, saturation: 100 };
 
 function wrapTitle(context, text, width) {
@@ -254,7 +254,11 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
         newImage = result.image;
       } else {
         let lastErr = null;
+        let quotaErr = null;
         for (const modelName of NANO_BANANA_MODELS) {
+          const generationConfig = modelName === "gemini-2.0-flash-exp-image-generation"
+            ? { responseModalities: ["TEXT", "IMAGE"] }
+            : { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } };
           const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
@@ -264,11 +268,19 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
                 { text: artworkPrompt },
                 { inlineData: { mimeType: reference[1], data: reference[2] } },
               ] }],
-              generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } },
+              generationConfig,
             }),
           });
           if (response.status === 404) { lastErr = `Model ${modelName} chưa khả dụng.`; continue; }
-          if (response.status === 429) throw new Error("Nano Banana đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức.");
+          if (response.status === 429) {
+            const result = await response.json().catch(() => null);
+            const reason = String(result?.error?.message || "").toLowerCase();
+            quotaErr = /limit:\s*0|free[_\s]tier/.test(reason)
+              ? "Project Gemini (Free Tier) đang có hạn mức tạo ảnh = 0 cho Nano Banana. Hãy bật Billing (Pay-as-you-go) trong Google AI Studio / Cloud Console hoặc dùng API key khác."
+              : "Nano Banana đang giới hạn lượt tạo ảnh tạm thời (429). Hãy đợi 30–60 giây rồi thử lại hoặc kiểm tra hạn mức của project.";
+            lastErr = quotaErr;
+            continue;
+          }
           if ([400, 401, 403].includes(response.status)) {
             const result = await response.json().catch(() => null);
             const reason = String(result?.error?.message || "").toLowerCase();
@@ -286,7 +298,7 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
             break;
           }
         }
-        if (!newImage) throw new Error(lastErr || "Nano Banana không trả về ảnh dùng được. Hãy thử mô tả khác.");
+        if (!newImage) throw new Error(quotaErr || lastErr || "Nano Banana không trả về ảnh dùng được. Hãy thử mô tả khác.");
       }
       if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(newImage || "")) throw new Error("Gemini không trả về ảnh dùng được.");
       if (!controller.signal.aborted && newImage !== imageSource) {

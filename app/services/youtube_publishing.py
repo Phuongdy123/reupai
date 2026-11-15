@@ -245,8 +245,19 @@ def _thumbnail_bytes(data_url):
 
 NANO_BANANA_IMAGE_MODELS = (
     "gemini-2.5-flash-image",
-    "gemini-3.1-flash-image",
+    "gemini-3.1-flash-image-preview",
+    "gemini-2.0-flash-exp-image-generation",
 )
+
+
+def _format_quota_error(reason: str) -> str:
+    lower = (reason or "").lower()
+    if "limit: 0" in lower or "free_tier" in lower or "free tier" in lower:
+        return (
+            "Project Gemini (Free Tier) đang có hạn mức tạo ảnh = 0 cho Nano Banana. "
+            "Hãy bật Billing (Pay-as-you-go) cho project trong Google AI Studio / Cloud Console hoặc dùng API key khác."
+        )
+    return "Gemini Nano Banana đang giới hạn lượt tạo ảnh (429). Hãy đợi 30–60 giây rồi thử lại hoặc kiểm tra quota của project."
 
 
 def generate_thumbnail_artwork(reference, prompt):
@@ -280,8 +291,15 @@ def generate_thumbnail_artwork(reference, prompt):
     }
 
     last_error = None
+    quota_error = None
     for model_name in NANO_BANANA_IMAGE_MODELS:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        model_payload = payload
+        if model_name == "gemini-2.0-flash-exp-image-generation":
+            model_payload = {
+                "contents": [{"parts": parts}],
+                "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
+            }
         try:
             if project:
                 response = authorized_request(
@@ -289,13 +307,13 @@ def generate_thumbnail_artwork(reference, prompt):
                     url,
                     project_id=project,
                     timeout=(10, 105),
-                    json=payload,
+                    json=model_payload,
                 )
             else:
                 response = requests.post(
                     url,
                     headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-                    json=payload,
+                    json=model_payload,
                     timeout=(10, 105),
                 )
         except RuntimeError as error:
@@ -303,7 +321,7 @@ def generate_thumbnail_artwork(reference, prompt):
                 response = requests.post(
                     url,
                     headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-                    json=payload,
+                    json=model_payload,
                     timeout=(10, 105),
                 )
             else:
@@ -313,7 +331,13 @@ def generate_thumbnail_artwork(reference, prompt):
             last_error = f"Model {model_name} chưa khả dụng."
             continue
         if response.status_code == 429:
-            raise RuntimeError("Gemini Nano Banana đang giới hạn lượt tạo ảnh. Hãy thử lại sau ít phút.")
+            try:
+                reason = str(response.json().get("error", {}).get("message", ""))
+            except (ValueError, AttributeError):
+                reason = ""
+            quota_error = _format_quota_error(reason)
+            last_error = quota_error
+            continue
         if response.status_code in {401, 403}:
             raise RuntimeError("Google từ chối tạo ảnh. Hãy kiểm tra kết nối Gemini hoặc API key.")
         if not response.ok:
@@ -337,7 +361,7 @@ def generate_thumbnail_artwork(reference, prompt):
                 if kind in {"image/jpeg", "image/png"} and isinstance(encoded, str) and len(encoded) <= 12 * 1024 * 1024:
                     return {"image": f"data:{kind};base64,{encoded}", "model": model_name}
 
-    raise RuntimeError(last_error or "Nano Banana không trả về ảnh. Hãy thử mô tả khác.")
+    raise RuntimeError(quota_error or last_error or "Nano Banana không trả về ảnh. Hãy thử mô tả khác.")
 
 
 def thumbnail_choices(video: Path):
