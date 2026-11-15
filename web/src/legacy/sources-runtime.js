@@ -3321,13 +3321,17 @@ async function openPlayer(
         layout.appendChild(stage);
         actions = document.createElement('aside');
         actions.className = 'result-preview-actions';
-        actions.innerHTML = '<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh của bạn.</p><div class="result-action-card"><strong>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output">Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong>Đăng YouTube</strong><p>AI gợi ý nội dung, chọn ảnh bìa và lên lịch đăng.</p><button type="button" class="btn primary player-publish-output">Đăng YouTube</button></div>';
+        actions.innerHTML = '<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh của bạn.</p><div class="result-action-card"><strong>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output">Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong>Đăng YouTube</strong><p>AI gợi ý nội dung, chọn ảnh bìa và lên lịch đăng.</p><button type="button" class="btn primary player-publish-output">Đăng YouTube</button></div><div class="result-action-card"><strong>Facebook &amp; TikTok</strong><p>Đăng lên Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn secondary player-social-output">Facebook / TikTok</button></div>';
         layout.appendChild(actions);
     }
     const output = { ...video, channel: channel || video.channel || '2d_animation', mode };
     actions.querySelector('.player-edit-output').onclick = () => {
         closePlayer();
         window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: output }));
+    };
+    actions.querySelector('.player-social-output').onclick = () => {
+        closePlayer();
+        window.dispatchEvent(new CustomEvent('reupai:social-output', { detail: output }));
     };
     actions.querySelector('.player-publish-output').onclick = () => {
         closePlayer();

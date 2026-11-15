@@ -114,7 +114,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.52"
+ENGINE_VERSION = "0.2.53"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -138,6 +138,7 @@ ENGINE_CAPABILITIES = {
     "subtitle_srt_export": True,
     "youtube_publishing": True,
     "gemini_thumbnail_artwork": True,
+    "social_publish": True,
     "subtitle_styles": True,
 }
 LOCAL_TOKEN_PATH = get_local_token_path()
@@ -674,6 +675,25 @@ def youtube_suggest(payload: dict, owner: str = Depends(youtube_owner)):
         raise HTTPException(status_code=400, detail="Chỉ chọn tối đa 3 ảnh để gợi ý nội dung.")
     return _youtube_call(suggest_metadata, _youtube_video(payload, owner), str(payload.get("title", "")),
                          str(payload.get("instructions", "")), images)
+
+
+@app.post("/api/youtube/social/{provider}/destination")
+def social_destination(provider: str, payload: dict, owner: str = Depends(youtube_owner)):
+    from services.social_publishing import destination
+    return _youtube_call(destination, provider, payload.get("token"))
+
+
+@app.post("/api/youtube/social/{provider}/publish")
+def social_publish(provider: str, payload: dict, owner: str = Depends(youtube_owner)):
+    from services.social_publishing import start
+    video = _youtube_video(payload, owner) if provider == "tiktok" or payload.get("include_video") is True else None
+    return _youtube_call(start, owner, provider, payload, video)
+
+
+@app.get("/api/youtube/social/{provider}/publish/{request_id}")
+def social_publish_status(provider: str, request_id: str, owner: str = Depends(youtube_owner)):
+    from services.social_publishing import status
+    return _youtube_call(status, owner, provider, request_id)
 
 
 @app.post("/api/youtube/uploads")

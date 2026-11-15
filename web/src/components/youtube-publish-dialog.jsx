@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { youtubeRequest } from "../lib/youtube-client";
 import { Icon } from "./icon";
+import { recordChannelActivity } from "../lib/channel-activity";
 import { ThumbnailDesigner } from "./thumbnail-designer";
 
 export function YoutubePublishDialog({ client, item, connection, onClose }) {
@@ -48,6 +49,9 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const identity = { video_id: item.video_id, channel: item.channel || "2d_animation", mode: item.mode || "subtitle", account_id: connection.account_id, channel_id: connection.channel.id };
   const storageKey = `reupai:youtube-upload:${connection.account_id}:${connection.channel.id}:${item.video_id}:${item.mode}`;
   const uploading = job && ["queued", "uploading"].includes(job.state);
+  useEffect(() => {
+    if (job?.state === "completed") recordChannelActivity(connection.account_id, "youtube", connection.channel, job.id);
+  }, [connection.account_id, connection.channel, job?.id, job?.state]);
   const locked = Boolean(busy || uploading || job?.state === "completed");
 
   useEffect(() => {

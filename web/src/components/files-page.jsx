@@ -7,6 +7,7 @@ import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, Loading, Notice, Pager, PreviewDialog, VideoCover, dateText, outputPath, sourceHref, sourcePath } from "./library-ui";
 import { OutputEditor } from "./output-editor";
 import { useYoutubeConnection } from "./youtube-connection";
+import { SocialPublishDialog } from "./social-publish-dialog";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
 
 const PAGE_SIZE = 12;
@@ -25,6 +26,7 @@ export function FilesPage({ kind }) {
   const [editor, setEditor] = useState(null);
   const isOutputs = kind === "outputs";
   const youtube = useYoutubeConnection(isOutputs);
+  const [socialItem, setSocialItem] = useState(null);
   const [publishing, setPublishing] = useState(null);
   const title = isOutputs ? "Thành phẩm" : "Video đã tải";
   const load = useCallback(async (refresh = false) => {
@@ -67,8 +69,9 @@ export function FilesPage({ kind }) {
       {!loading && filtered.length > 0 && <div className={`library-grid${isOutputs ? " outputs-grid" : ""}`}>{filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => <article className={`library-card${isOutputs ? " output-library-card" : ""}`} key={`${item.video_id}-${item.mode || "source"}`}><VideoCover client={client} video={item} previewPath={isSubtitleFile(item) ? undefined : normalized(item).file_path}>{isOutputs && <span className="mode-badge">{item.mode_label || (item.mode === "voiceover" ? "Vietsub + Voice" : "Vietsub")}</span>}</VideoCover><div className="library-body"><h3>{item.title || item.video_id}</h3><div className="library-meta"><span>{item.video_id}</span>{item.channel && <span>{item.channel}</span>}{item.size_text && <span>{item.size_text}</span>}{item.updated_at && <span>{dateText(item.updated_at)}</span>}</div><div className="library-actions">{!isSubtitleFile(item) && <button className="btn primary" onClick={() => openPreview(item)}><Icon name="play" size={16} />Xem</button>}<button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}`} onClick={() => download(item)}><Icon name="download" size={16} />{busy === `${item.video_id}-${item.mode || "source"}` ? "Đang tải…" : isSubtitleFile(item) ? "Tải SRT" : "Tải"}</button>{isOutputs && !isSubtitleFile(item) && item.srt_file_path && <button className="btn secondary" disabled={busy === `${item.video_id}-${item.mode || "source"}-srt`} onClick={() => downloadSrt(item)}><Icon name="captions" size={16} />{busy === `${item.video_id}-${item.mode || "source"}-srt` ? "Đang tải SRT…" : "Tải SRT"}</button>}{isOutputs && !isSubtitleFile(item) && youtube.connection?.connected && <button className="btn secondary" onClick={() => setPublishing(item)}><Icon name="upload" size={15} />Đăng YouTube</button>}{isOutputs && !isSubtitleFile(item) && <button className="btn secondary output-edit-result" onClick={() => setEditor(item)}><Icon name="settings" size={15} />Chỉnh sửa kết quả</button>}{!isOutputs && <Link className="btn secondary" href={sourceHref(item)}><Icon name="spark" size={16} />Xử lý AI</Link>}</div></div></article>)}</div>}
       {!loading && <Pager page={page} total={filtered.length} pageSize={PAGE_SIZE} onChange={setPage} />}
     </section>
-    {preview && <PreviewDialog client={client} item={preview} onClose={() => setPreview(null)} onError={setError} onPublish={isOutputs && youtube.connection?.connected ? item => { setPreview(null); setPublishing(item); } : undefined} onEdit={isOutputs ? item => { setPreview(null); setEditor(item); } : undefined} />}
+    {preview && <PreviewDialog client={client} item={preview} onSocial={isOutputs ? item => { setPreview(null); setSocialItem(item); } : undefined} onClose={() => setPreview(null)} onError={setError} onPublish={isOutputs && youtube.connection?.connected ? item => { setPreview(null); setPublishing(item); } : undefined} onEdit={isOutputs ? item => { setPreview(null); setEditor(item); } : undefined} />}
     {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setNotice("Đã vào hàng đợi xuất lại. Theo dõi tiến độ ở Dashboard hoặc Lịch sử."); setEditor(null); }} />}
+    {socialItem && <SocialPublishDialog client={client} item={socialItem} onClose={() => setSocialItem(null)} />}
     {publishing && youtube.connection?.connected && <YoutubePublishDialog client={client} item={publishing} connection={youtube.connection} onClose={() => setPublishing(null)} />}
   </>;
 }

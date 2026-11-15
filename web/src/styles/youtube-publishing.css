@@ -114,3 +114,23 @@
 .thumbnail-reference { display: flex; gap: 14px; align-items: center; }
 .thumbnail-reference img { width: 100px; height: 66px; object-fit: contain; border-radius: 8px; background: #09090a; }
 .thumbnail-reference p { margin: 4px 0 0; color: #aaaab2; font-size: 12px; }
+
+.channel-analytics { margin: 24px 0; padding: 22px; border: 1px solid #303035; border-radius: 22px; background: #121214; }
+.channel-analytics > header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.channel-analytics h2,.channel-analytics h3,.channel-analytics p { margin: 0; }
+.channel-analytics header p { margin-top: 6px; color: #a5a5ae; font-size: 12px; }
+.channel-analytics header label { display: grid; gap: 6px; color: #bdbdc5; font-size: 11px; }
+.channel-analytics header select { background: #18181b; color: #eee; border: 1px solid #414147; border-radius: 9px; padding: 6px 10px; }
+.channel-analytics-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.channel-analytics-card { min-width: 0; padding: 16px; background: #19191b; border: 1px solid #333338; border-radius: 16px; }
+.channel-analytics-total { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.channel-analytics-total h3 { font-size: 15px; }
+.channel-analytics-total > strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.channel-analytics-bar { height: 5px; border-radius: 9px; background: #323238; overflow: hidden; margin: 10px 0; }
+.channel-analytics-bar i { display: block; height: 100%; background: var(--channel-color); border-radius: inherit; }
+.channel-analytics-card p,.channel-analytics-card small { color: #b0b0b8; font-size: 11px; line-height: 1.5; }
+.channel-analytics-card p { margin-bottom: 12px; }
+.channel-analytics-card ul { margin: 0; padding: 0; list-style: none; }
+.channel-analytics-card li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #333338; font-size: 12px; overflow-wrap: anywhere; }
+.channel-analytics-card li small { display: block; margin-top: 3px; }
+@media(max-width:760px) { .channel-analytics-grid { grid-template-columns: 1fr; } .channel-analytics { padding: 16px; } }

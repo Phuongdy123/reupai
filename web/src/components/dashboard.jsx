@@ -7,6 +7,7 @@ import { useGuestAccess } from "./guest-access";
 import { BillingNotice, useBilling } from "./billing-provider";
 import { Icon } from "./icon";
 import { WorkspaceAssistant } from "./workspace-assistant";
+import { ChannelAnalytics } from "./channel-analytics";
 import { planName, quotaText } from "../lib/plan-display";
 import { REUPAI_MICROSOFT_STORE_URL } from "../lib/store-links";
 import { ACTIVE_JOBS, ErrorMessage, JOB_LABELS, VideoCover, jobVideoId, modeLabel, numberText, outputPath, progressValue, sourcePath, stageLabel } from "./library-ui";
@@ -114,6 +115,7 @@ export function Dashboard() {
       </section>}
       {status === "connected" && jobs.length > 0 && <div className="dashboard-active-jobs">{jobs.slice(0, 2).map((job) => <div className="dashboard-active-job" key={job.id || job.job_key || `${jobVideoId(job)}-${job.mode}`}><div><strong>{jobVideoId(job)}</strong><small>{stageLabel(job.stage)} · {modeLabel(job.mode)}</small></div><span>{progressValue(job.progress)}%</span><div className="dashboard-active-track"><i style={{ width: `${progressValue(job.progress)}%` }} /></div>{ACTIVE_JOBS.has(job.status) && <button type="button" disabled={stopping === jobVideoId(job)} onClick={() => stopJob(job)}>{stopping === jobVideoId(job) ? "Đang dừng…" : "Dừng"}</button>}</div>)}{jobs.length > 2 && <Link href="/history">Xem thêm {jobs.length - 2} job →</Link>}</div>}
     </section>
+    {!isGuest && <ChannelAnalytics />}
     <WorkspaceAssistant client={client} connected={status === "connected"} check={check} />
     <DashboardRecentJobs client={client} items={!isGuest && status === "connected" ? data?.recent_jobs || [] : []} media={recentMedia} loading={!isGuest && status === "connected" && !data && !error} guest={isGuest} />
     <DashboardSuggestions />

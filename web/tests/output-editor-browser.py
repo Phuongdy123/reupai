@@ -18,7 +18,9 @@ spec.loader.exec_module(fixture)
 
 async def main():
     bundle = "\n".join(re.sub(r"^import .*?;\s*$", "", (ROOT / "web/src/components" / name).read_text(encoding="utf-8"), flags=re.M).replace("export function", "function")
-                       for name in ["output-transcript-editor.jsx", "thumbnail-designer.jsx", "youtube-publish-dialog.jsx", "output-youtube-actions.jsx", "output-editor.jsx"])
+                       for name in ["output-transcript-editor.jsx", "thumbnail-designer.jsx", "youtube-publish-dialog.jsx", "output-youtube-actions.jsx", "output-editor.jsx", "social-publish-dialog.jsx"])
+    activity = (ROOT / "web/src/lib/channel-activity.js").read_text(encoding="utf-8").replace("export ", "")
+    bundle = activity + "\n" + bundle
     node = "const b=require('./web/node_modules/next/dist/compiled/babel/core');const p=require('./web/node_modules/next/dist/compiled/babel/preset-react');let s='';process.stdin.setEncoding('utf8');process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>process.stdout.write(b.transformSync(s,{presets:[[p,{runtime:'classic'}]],configFile:false,babelrc:false}).code));"
     js = subprocess.check_output(["node", "-e", node], input=bundle.encode(), cwd=ROOT).decode()
     with tempfile.TemporaryDirectory() as folder:
@@ -31,17 +33,25 @@ async def main():
                 if self.path == "/sample.mp4": return self.send(media.read_bytes(), "video/mp4")
                 super().do_GET()
         styles = "".join(f'<link rel="stylesheet" href="/src/styles/{name}">' for name in re.findall(r'@import "../src/styles/([^"]+)"', (ROOT / "web/app/globals.css").read_text()))
-        fixture.FIXTURE = '<!doctype html><html class="theme-xports"><head><meta charset="utf-8">' + styles + '''</head><body class="theme-xports"><div id="app"></div><script src="/react.js"></script><script src="/react-dom.js"></script><script>
+        fixture.FIXTURE = '<!doctype html><html class="theme-xports"><head><meta charset="utf-8">' + styles + '''</head><body class="theme-xports"><div id="app"></div><div id="social"></div><script src="/react.js"></script><script src="/react-dom.js"></script><script>
 const {useCallback,useEffect,useRef,useState}=React;const createPortal=ReactDOM.createPortal;
 const Icon=()=>null,Loading=()=>null,Notice=({children})=>React.createElement('div',null,children),ErrorMessage=({error})=>React.createElement('div',null,error),modeLabel=()=> 'Voice';
 const googleConsentUrl=()=>null;
-const youtubeRequest=(_client,path)=>{if(path==='thumbnails') return {images:[window.coverImage]}; if(path==='suggest') return {title:'Bí mật cuốn nhật ký'}; throw Error('Unexpected external API call');};
+const createClient=()=>({auth:{getSession:async()=>({data:{session:{user:{id:"fixture-account"}}}})}});
+const youtubeRequest=(_client,path, options)=>{
+  if(path==='thumbnails') return {images:[window.coverImage]};
+  if(path==='suggest') return {title:'Bí mật cuốn nhật ký'};
+  if(path==='social/tiktok/destination') return {id:'fixture-tiktok',name:'Kênh TikTok thử'};
+  if(path==='social/tiktok/publish') {window.socialPayload=JSON.parse(options.body); return {id:'fixture-job',state:'sent'};}
+  throw Error('Unexpected external API call');
+};
 const useYoutubeConnection=()=>({supported:true,connection:{connected:true,account_id:'fixture-account',channel:{id:'channel',title:'Kênh kiểm thử'}},connect:()=>{},refresh:()=>{},client});
-const client={mediaUrl:async()=>'/sample.mp4',json:async(path,options)=>{
+const client={health:{capabilities:{social_publish:true}},mediaUrl:async()=>'/sample.mp4',json:async(path,options)=>{
  if(path.includes('/rerender')){window.payload=JSON.parse(options.body);return {job_id:1};}
  return {subtitles:[{start:0,end:1,text:'Xin chào'},{start:1,end:2,text:'Cảm ơn'}],subtitle_edit_supported:true,voice:'Trúc Ly',tts_speed:1.1,source_ready:true,can_rerender:true,blur_intervals:[],blur_region:null};
 }};
 ''' + js + '''
+window.openSocial=()=>ReactDOM.createRoot(document.getElementById('social')).render(React.createElement(SocialPublishDialog,{client,item:{video_id:'fixture',channel:'test',mode:'voiceover'},onClose:()=>{}}));
 ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(OutputEditor,{client,item:{video_id:'fixture',channel:'test',mode:'voiceover'},onClose:()=>{},onQueued:()=>{window.queued=true;}}));
 </script>'''
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -110,6 +120,19 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 await page.set_viewport_size({"width": 390, "height": 844})
                 await page.screenshot(path=str(ROOT / "artifacts/output-editor-0.2.52-mobile.png"), full_page=True)
                 assert await page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+                await page.evaluate("openSocial()")
+                social = page.get_by_role("dialog", name="Đăng lên mạng xã hội")
+                await social.get_by_role("button", name="TikTok", exact=True).click()
+                await social.get_by_label("TikTok access token").fill("test-token-only")
+                await social.get_by_role("button", name="Kiểm tra tài khoản đích").click()
+                await expect(social.get_by_text("Kênh TikTok thử", exact=True)).to_be_visible()
+                await expect(social.get_by_role("button", name="Gửi bản nháp TikTok")).to_be_disabled()
+                await social.get_by_role("checkbox").check()
+                await social.get_by_role("button", name="Gửi bản nháp TikTok").click()
+                await expect(social.get_by_text("TikTok đã nhận video")).to_be_visible()
+                assert await page.evaluate("socialPayload.account_id") == "fixture-account"
+                await page.wait_for_function("readChannelActivity('fixture-account')[0]?.activity.length === 1")
+                assert not await page.evaluate("JSON.stringify(readChannelActivity('fixture-account')).includes('test-token-only')")
                 assert not errors, errors
                 await browser.close()
                 print("PASS: edit translated cues/timings and voice; no blur required; block publishing unsaved revisions; YouTube opens its confirmation dialog; mobile has no page overflow.")
