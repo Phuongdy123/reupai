@@ -2,6 +2,7 @@
 // All API and media transport is supplied by the shared LocalEngineClient.
 import { prepareSourceInput, isDirectVideoInput, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
+import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
 
 export function startSourcesRuntime(environment) {
 const { document, window, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, fetch, history, signal } = environment;
@@ -1634,6 +1635,7 @@ function buildCard(
     `;
 
     card.innerHTML = `
+        ${PROCESSING_STAR_BORDER}
 
         <label
             class="select-control"
@@ -2277,6 +2279,7 @@ function ensureProcessDetailsPopup() {
             aria-modal="true"
             aria-labelledby="processDetailsTitle"
         >
+            ${PROCESSING_STAR_BORDER}
             <header class="process-details-header">
                 <div>
                     <span class="process-details-eyebrow">

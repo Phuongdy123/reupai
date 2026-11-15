@@ -1,0 +1,74 @@
+/* White constellations around active jobs; keep the red progress treatment. */
+body.theme-xports #videos .compact-video-card.is-processing {
+  border-color: rgba(255, 255, 255, .28) !important;
+}
+
+body.theme-xports .process-details-panel {
+  border-color: rgba(255, 255, 255, .28);
+}
+
+.processing-star-frame {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  user-select: none;
+  contain: layout paint;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1);
+}
+
+#videos .compact-video-card.is-processing > .processing-star-frame,
+.process-details-panel > .processing-star-frame {
+  display: block;
+}
+
+.processing-star-frame > i {
+  --star-size: 7px;
+  --star-position: 2%;
+  --star-delay: 0s;
+  --star-x: 14%;
+  --star-y: 5px;
+  position: absolute;
+  left: var(--star-x);
+  top: var(--star-y);
+  width: var(--star-size);
+  height: var(--star-size);
+  background: #fff;
+  clip-path: polygon(50% 0, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 38%);
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, .75));
+  opacity: .8;
+  animation: processing-star-twinkle 3s ease-in-out var(--star-delay) infinite;
+}
+
+.processing-star-frame > i:nth-child(2) { --star-size: 5px; --star-position: 19%; --star-delay: -3s; --star-x: 42%; }
+.processing-star-frame > i:nth-child(3) { --star-size: 9px; --star-position: 36%; --star-delay: -6s; --star-x: 84%; }
+.processing-star-frame > i:nth-child(4) { --star-size: 6px; --star-position: 53%; --star-delay: -9s; --star-x: 82%; --star-y: calc(100% - 10px); }
+.processing-star-frame > i:nth-child(5) { --star-size: 5px; --star-position: 70%; --star-delay: -12s; --star-x: 46%; --star-y: calc(100% - 9px); }
+.processing-star-frame > i:nth-child(6) { --star-size: 8px; --star-position: 87%; --star-delay: -15s; --star-x: 15%; --star-y: calc(100% - 12px); }
+
+@supports (offset-path: inset(5px round 11px)) {
+  .processing-star-frame > i {
+    left: 0;
+    top: 0;
+    offset-path: inset(5px round 11px);
+    offset-distance: var(--star-position);
+    offset-rotate: 0deg;
+    animation: processing-star-orbit 18s linear var(--star-delay) infinite,
+               processing-star-twinkle 3.7s ease-in-out var(--star-delay) infinite;
+  }
+}
+
+@keyframes processing-star-orbit { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@keyframes processing-star-twinkle { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+.process-details-popup:is(.has-error, .is-complete) .processing-star-frame > i {
+  animation-play-state: paused;
+  opacity: .45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .processing-star-frame > i { animation: none; opacity: .7; }
+}
