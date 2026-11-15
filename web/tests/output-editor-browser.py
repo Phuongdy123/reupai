@@ -87,7 +87,7 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 async def image_response(route):
                     request = route.request
                     assert request.headers["x-goog-api-key"] == "fixture-key"
-                    assert request.post_data_json["generationConfig"]["responseFormat"]["image"]["aspectRatio"] == "16:9"
+                    assert request.post_data_json["generationConfig"]["imageConfig"]["aspectRatio"] == "16:9"
                     png = await page.evaluate("""() => { const c = document.createElement('canvas'); c.width=320; c.height=180; return c.toDataURL().split(',')[1]; }""")
                     await route.fulfill(json={"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"image/png","data":png}}]}}]})
                 await page.route("https://generativelanguage.googleapis.com/**", image_response)

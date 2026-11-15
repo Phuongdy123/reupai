@@ -257,13 +257,13 @@ def generate_thumbnail_artwork(reference, prompt):
     data, mime_type = decoded
     try:
         response = authorized_request(
-            "POST", "https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent",
+            "POST", "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent",
             project_id=project, timeout=(10, 105), json={
                 "contents": [{"parts": [{"text": prompt}, {"inlineData": {
                     "mimeType": mime_type, "data": base64.b64encode(data).decode("ascii"),
                 }}]}],
-                "generationConfig": {"responseModalities": ["IMAGE"], "responseFormat": {
-                    "image": {"aspectRatio": "16:9", "imageSize": "1K"},
+                "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {
+                    "aspectRatio": "16:9", "imageSize": "1K",
                 }},
             },
         )
@@ -274,6 +274,14 @@ def generate_thumbnail_artwork(reference, prompt):
     if response.status_code in {401, 403}:
         raise RuntimeError("Google từ chối tạo ảnh. Hãy kiểm tra kết nối Gemini và quyền tạo ảnh của project.")
     if not response.ok:
+        try:
+            reason = str(response.json().get("error", {}).get("message", "")).lower()
+        except (ValueError, AttributeError):
+            reason = ""
+        if "billing" in reason or "paid" in reason:
+            raise RuntimeError("Project Gemini cần bật thanh toán để dùng model tạo ảnh.")
+        if response.status_code == 400:
+            raise RuntimeError("Gemini từ chối dữ liệu ảnh hoặc cấu hình tạo ảnh. Hãy chọn lại ảnh tham chiếu và cập nhật Engine.")
         raise RuntimeError(f"Gemini chưa tạo được ảnh (HTTP {response.status_code}).")
     for candidate in response.json().get("candidates", []):
         for part in candidate.get("content", {}).get("parts", []):

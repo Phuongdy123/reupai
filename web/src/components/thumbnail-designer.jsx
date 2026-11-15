@@ -246,7 +246,7 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
         const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
         newImage = result.image;
       } else {
-        const response = await fetch("https://generativelanguage.googleapis.com/v1/models/gemini-3.1-flash-image:generateContent", {
+        const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-goog-api-key": imageKey.trim() },
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
@@ -255,12 +255,15 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
               { text: artworkPrompt },
               { inlineData: { mimeType: reference[1], data: reference[2] } },
             ] }],
-            generationConfig: { responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "16:9", imageSize: "1K" } } },
+            generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio: "16:9", imageSize: "1K" } },
           }),
         });
         if (response.status === 429) throw new Error("Gemini đang giới hạn lượt tạo ảnh. Thử lại sau hoặc kiểm tra hạn mức của project.");
         if ([400, 401, 403].includes(response.status)) {
           const result = await response.json().catch(() => null);
+          const reason = String(result?.error?.message || "").toLowerCase();
+          if (/billing|paid/.test(reason)) throw new Error("Project Gemini cần bật thanh toán để tạo ảnh.");
+          if (response.status === 400 && /unknown name|invalid json|imageconfig|responseformat/.test(reason)) throw new Error("Gemini từ chối cấu hình tạo ảnh. Hãy tải lại web để dùng bản mới.");
           const invalidKey = result?.error?.details?.some(detail => detail.reason === "API_KEY_INVALID");
           if (invalidKey || response.status !== 400) throw new Error("Gemini từ chối API key. Kiểm tra quyền tạo ảnh của project.");
         }

@@ -19,6 +19,24 @@ class ImmediateThread:
 
 
 class YoutubePublishingTests(unittest.TestCase):
+    def test_artwork_uses_image_config_and_explains_billing_errors(self):
+        response = Mock(ok=True, status_code=200)
+        response.json.return_value = {"candidates": [{"content": {"parts": [{"inlineData": {
+            "mimeType": "image/png", "data": "YWJj",
+        }}]}}]}
+        with patch.object(youtube, "_thumbnail_bytes", return_value=(b"frame", "image/png")), \
+             patch("services.gemini_oauth.get_project_id", return_value="fixture-project"), \
+             patch("services.gemini_oauth.authorized_request", return_value=response) as request:
+            self.assertTrue(youtube.generate_thumbnail_artwork("reference", "Poster")["image"].startswith("data:image/png"))
+            config = request.call_args.kwargs["json"]["generationConfig"]
+            self.assertEqual(config["imageConfig"], {"aspectRatio": "16:9", "imageSize": "1K"})
+            self.assertNotIn("responseFormat", config)
+            self.assertIn("/v1beta/", request.call_args.args[1])
+            response.ok, response.status_code = False, 400
+            response.json.return_value = {"error": {"message": "Billing must be enabled"}}
+            with self.assertRaisesRegex(RuntimeError, "thanh toán"):
+                youtube.generate_thumbnail_artwork("reference", "Poster")
+
     def payload(self, **values):
         return {"request_id": str(uuid.uuid4()), "confirmed": True, "title": "Video thử",
                 "description": "Nội dung thử", "tags": ["vietsub"], "made_for_kids": False,
