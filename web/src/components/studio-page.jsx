@@ -38,6 +38,131 @@ function formatDuration(sec) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const YOUTUBE_PROFILES = [
+  {
+    id: "yt_cinema",
+    name: "Phim / Review Dài",
+    tag: "CINEMA",
+    desc: "Giọng trầm 1.00x · Sub sạch · Giữ 15% nhạc nền",
+    mode: "voiceover",
+    voice: "Hải Đăng",
+    ttsSpeed: 1.0,
+    subtitleStyle: "minimal",
+    originalVolume: 0.15,
+    autoBlur: true,
+    boostGpu: true,
+  },
+  {
+    id: "yt_story",
+    name: "Series / Kể Chuyện",
+    tag: "STORY",
+    desc: "Giọng Trúc Ly 1.05x · Nhịp cuốn hút",
+    mode: "voiceover",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.05,
+    subtitleStyle: "minimal",
+    originalVolume: 0.12,
+    autoBlur: true,
+    boostGpu: true,
+  },
+  {
+    id: "yt_sub_only",
+    name: "Vietsub Chuẩn Gốc",
+    tag: "PURE SUB",
+    desc: "Giữ 100% âm thanh gốc · Phụ đề nét",
+    mode: "subtitle",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.0,
+    subtitleStyle: "minimal",
+    originalVolume: 1.0,
+    autoBlur: false,
+    boostGpu: true,
+  },
+  {
+    id: "yt_master_gpu",
+    name: "Master Turbo GPU",
+    tag: "MAX SPEED",
+    desc: "Tối đa CUDA/NVENC · Tắt âm gốc 0% · Lồng tiếng 1.05x",
+    mode: "voiceover",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.05,
+    subtitleStyle: "bold",
+    originalVolume: 0,
+    autoBlur: true,
+    boostGpu: true,
+  },
+];
+
+const SHORTS_PROFILES = [
+  {
+    id: "sh_viral_hook",
+    name: "Hook 3s Bùng Nổ",
+    tag: "VIRAL",
+    desc: "Nhịp nhanh 1.15x · Chữ to nổi bật · Dọc 9:16",
+    mode: "voiceover",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.15,
+    subtitleStyle: "bold",
+    originalVolume: 0.1,
+    autoBlur: true,
+    boostGpu: true,
+  },
+  {
+    id: "sh_tiktok_fast",
+    name: "TikTok / Reels Nhanh",
+    tag: "1.20X",
+    desc: "Tốc độ 1.20x · Hải Đăng · Che logo tự động",
+    mode: "voiceover",
+    voice: "Hải Đăng",
+    ttsSpeed: 1.2,
+    subtitleStyle: "bold",
+    originalVolume: 0.08,
+    autoBlur: true,
+    boostGpu: true,
+  },
+  {
+    id: "sh_movie_recap",
+    name: "Tóm Tắt Phim Ngắn",
+    tag: "RECAP",
+    desc: "1.10x · Giữ 15% nhạc phim · Sub đậm rõ nét",
+    mode: "voiceover",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.1,
+    subtitleStyle: "bold",
+    originalVolume: 0.15,
+    autoBlur: true,
+    boostGpu: true,
+  },
+  {
+    id: "sh_sub_viral",
+    name: "Shorts Sub Gốc",
+    tag: "ORIGINAL",
+    desc: "Chỉ Vietsub đậm · Giữ nguyên âm thanh viral",
+    mode: "subtitle",
+    voice: "Trúc Ly",
+    ttsSpeed: 1.0,
+    subtitleStyle: "bold",
+    originalVolume: 1.0,
+    autoBlur: false,
+    boostGpu: true,
+  },
+];
+
+function buildSmartHook(video, isYoutube) {
+  const raw = String(video?.title || "Video nổi bật").replace(/[#@]+/g, "").trim();
+  const shortTitle = raw.length > 68 ? `${raw.slice(0, 65)}...` : raw;
+  if (isYoutube) {
+    return {
+      hook: `[Vietsub + Thuyết Minh] ${shortTitle} | Bản Full Đầy Đủ`,
+      tags: "#ReupAI #Vietsub #ThuyetMinh #ReviewPhim #YouTube16x9",
+    };
+  }
+  return {
+    hook: `Đừng lướt qua! ${shortTitle} (Xem hết 3s cuối 🔥)`,
+    tags: "#Shorts #YouTubeShorts #TikTokViral #Reels #ReupAI",
+  };
+}
+
 function detectOrientation(video) {
   const w = Number(video?.width || video?.video_width || 0);
   const h = Number(video?.height || video?.video_height || 0);
@@ -116,16 +241,42 @@ export function StudioPage({ mode = "youtube" }) {
   const [sortBy, setSortBy] = useState("score");
   const [query, setQuery] = useState("");
 
-  // Streamlined Studio Preset
+  // Streamlined Pro Studio Preset
+  const profiles = isYoutube ? YOUTUBE_PROFILES : SHORTS_PROFILES;
+  const [activeProfileId, setActiveProfileId] = useState(isYoutube ? "yt_cinema" : "sh_viral_hook");
   const [processMode, setProcessMode] = useState("voiceover");
-  const [voiceName, setVoiceName] = useState("Trúc Ly");
-  const [ttsSpeed, setTtsSpeed] = useState(isYoutube ? 1.0 : 1.05);
-  const [boostGpu, setBoostGpu] = useState(false);
+  const [voiceName, setVoiceName] = useState(isYoutube ? "Hải Đăng" : "Trúc Ly");
+  const [ttsSpeed, setTtsSpeed] = useState(isYoutube ? 1.0 : 1.15);
+  const [subtitleStyle, setSubtitleStyle] = useState(isYoutube ? "minimal" : "bold");
+  const [originalVolume, setOriginalVolume] = useState(0.15);
+  const [autoBrandBlur, setAutoBrandBlur] = useState(true);
+  const [boostGpu, setBoostGpu] = useState(true);
   const [submittingIds, setSubmittingIds] = useState({});
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [hookPreviewId, setHookPreviewId] = useState(null);
 
   useEffect(() => {
-    try { setBoostGpu(localStorage.getItem("reupai:boost-gpu") === "1"); } catch {}
+    try {
+      const saved = localStorage.getItem("reupai:boost-gpu");
+      if (saved !== null) setBoostGpu(saved === "1");
+    } catch {}
   }, []);
+
+  const applyProfile = (profile) => {
+    setActiveProfileId(profile.id);
+    setProcessMode(profile.mode);
+    setVoiceName(profile.voice);
+    setTtsSpeed(profile.ttsSpeed);
+    setSubtitleStyle(profile.subtitleStyle);
+    setOriginalVolume(profile.originalVolume);
+    setAutoBrandBlur(profile.autoBlur);
+    setBoostGpu(profile.boostGpu);
+    try {
+      localStorage.setItem("reupai:boost-gpu", profile.boostGpu ? "1" : "0");
+    } catch {}
+    setNotice(`Đã kích hoạt cấu hình Pro "${profile.name}".`);
+  };
 
   // Modals
   const [preview, setPreview] = useState(null);
@@ -268,7 +419,9 @@ export function StudioPage({ mode = "youtube" }) {
         channel: "default",
         mode: processMode,
         aspect_ratio: isYoutube ? "16:9" : "9:16",
-        subtitle_style: isYoutube ? "minimal" : "bold",
+        subtitle_style: subtitleStyle,
+        original_volume: Number(originalVolume),
+        auto_brand_blur: Boolean(autoBrandBlur),
         voice: voiceName,
         tts_speed: Number(ttsSpeed) || 1.0,
         source_language: "auto",
@@ -292,6 +445,44 @@ export function StudioPage({ mode = "youtube" }) {
     }
   };
 
+  const activeStudioJobs = useMemo(
+    () =>
+      Object.values(jobsByVideo).filter((job) => ACTIVE_JOBS.has(job?.state || job?.status)),
+    [jobsByVideo]
+  );
+
+  const toggleSelectCard = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const startBatchStudioProcess = async () => {
+    const targets = candidates
+      .map((entry) => entry.video)
+      .filter((video) => selectedIds.has(video.video_id || video.platform_video_id));
+    if (!targets.length) return;
+    setBatchSubmitting(true);
+    setError(null);
+    let queued = 0;
+    for (const video of targets) {
+      try {
+        await startStudioProcess(video);
+        queued += 1;
+      } catch {
+        // continue batch
+      }
+    }
+    setBatchSubmitting(false);
+    setSelectedIds(new Set());
+    if (queued > 0) {
+      setNotice(`Đã xếp ${queued} video vào hàng chờ Pro Studio (${isYoutube ? "16:9" : "9:16"}).`);
+    }
+  };
+
   if (engineStatus !== "connected") {
     return (
       <section className="panel studio-disconnected">
@@ -310,18 +501,39 @@ export function StudioPage({ mode = "youtube" }) {
       <section className="panel studio-hero">
         <div className="studio-hero-head">
           <div>
-            <span className="studio-eyebrow">{isYoutube ? "YOUTUBE LONG-FORM STUDIO · 16:9" : "SHORTS VERTICAL STUDIO · 9:16"}</span>
-            <h2>{isYoutube ? "Chọn lọc video chuẩn YouTube ngang" : "Chọn lọc video chuẩn YouTube Shorts"}</h2>
+            <div className="studio-eyebrow-row">
+              <span className="studio-eyebrow">{isYoutube ? "YOUTUBE LONG-FORM STUDIO · 16:9" : "SHORTS VERTICAL STUDIO · 9:16"}</span>
+              <span className="studio-pro-badge">PRO STUDIO ENGINE</span>
+            </div>
+            <h2>{isYoutube ? "Studio sản xuất YouTube chuyên nghiệp" : "Shorts & TikTok Viral Studio"}</h2>
             <p>
               {isYoutube
-                ? "Tự động lọc video có thời lượng dài, khung ngang 16:9 hoặc theo Series để dựng video YouTube chất lượng cao."
-                : "Tự động bắt các video ngắn ≤ 90s hoặc khung dọc 9:16 từ nguồn để làm Shorts nhịp nhanh, chữ nổi bật."}
+                ? "Bộ lọc thông minh cho video dài 16:9 & Series, Mastering âm thanh/phụ đề chuẩn Cinema và xuất hàng loạt GPU."
+                : "Tự động săn clip dọc 9:16 & video ngắn ≤ 90s, nhịp voice nhanh 1.15x–1.20x, sub nổi bật và tạo Hook 3s."}
             </p>
           </div>
           <div className="studio-stats">
             <div className="studio-stat"><strong>{candidates.length}</strong><span>Video phù hợp</span></div>
+            <div className="studio-stat"><strong>{activeStudioJobs.length}</strong><span>Đang render</span></div>
             <div className="studio-stat"><strong>{isYoutube ? "16:9" : "9:16"}</strong><span>Khung xuất</span></div>
           </div>
+        </div>
+
+        <div className="studio-profiles-grid" role="group" aria-label="Cấu hình Pro 1 chạm">
+          {profiles.map((profile) => (
+            <button
+              key={profile.id}
+              type="button"
+              className={`studio-profile-btn ${activeProfileId === profile.id ? "is-active" : ""}`}
+              onClick={() => applyProfile(profile)}
+            >
+              <strong>
+                <span>{profile.name}</span>
+                <span className="studio-profile-tag">{profile.tag}</span>
+              </strong>
+              <small>{profile.desc}</small>
+            </button>
+          ))}
         </div>
 
         <form className="studio-source-bar" onSubmit={handleScanUrl}>
@@ -342,7 +554,7 @@ export function StudioPage({ mode = "youtube" }) {
         </form>
 
         <div className="studio-preset-bar">
-          <span className="studio-preset-title"><Icon name="settings" size={14} />Cấu hình xuất nhanh:</span>
+          <span className="studio-preset-title"><Icon name="settings" size={14} />Mastering Pro:</span>
           <label>
             Chế độ
             <select value={processMode} onChange={(e) => setProcessMode(e.target.value)}>
@@ -362,11 +574,34 @@ export function StudioPage({ mode = "youtube" }) {
               Tốc độ
               <select value={String(ttsSpeed)} onChange={(e) => setTtsSpeed(Number(e.target.value))}>
                 <option value="1">1.00x (Chuẩn)</option>
-                <option value="1.05">1.05x (Hơi nhanh)</option>
-                <option value="1.1">1.10x (Nhịp Shorts)</option>
+                <option value="1.05">1.05x (Cuốn hút)</option>
+                <option value="1.1">1.10x (Nhanh)</option>
+                <option value="1.15">1.15x (Shorts)</option>
+                <option value="1.2">1.20x (TikTok)</option>
               </select>
             </label>
           </>}
+          <label>
+            Kiểu Sub
+            <select value={subtitleStyle} onChange={(e) => setSubtitleStyle(e.target.value)}>
+              <option value="minimal">Cinema Clean</option>
+              <option value="bold">Viral Bold</option>
+            </select>
+          </label>
+          <label>
+            Âm gốc
+            <select value={String(originalVolume)} onChange={(e) => setOriginalVolume(Number(e.target.value))}>
+              <option value="0">0% Tắt gốc</option>
+              <option value="0.12">12% Nhạc nhẹ</option>
+              <option value="0.15">15% Cân bằng</option>
+              <option value="0.25">25% Rõ nền</option>
+              <option value="1">100% Gốc</option>
+            </select>
+          </label>
+          <label className="studio-check-pill">
+            <input type="checkbox" checked={autoBrandBlur} onChange={(e) => setAutoBrandBlur(e.target.checked)} />
+            <span>Che Watermark</span>
+          </label>
           <label className="boost-gpu-toggle" title="Tăng tốc GPU tối đa (CUDA / NVENC / OCR GPU / đa luồng)">
             <input type="checkbox" checked={boostGpu} onChange={(e) => { const next = e.target.checked; setBoostGpu(next); try { localStorage.setItem("reupai:boost-gpu", next ? "1" : "0"); } catch {} }} />
             <span>Boost GPU</span>
@@ -374,6 +609,18 @@ export function StudioPage({ mode = "youtube" }) {
           <span className="studio-aspect-pill">Tỷ lệ: {isYoutube ? "16:9 Ngang" : "9:16 Dọc"}</span>
         </div>
       </section>
+
+      {activeStudioJobs.length > 0 && (
+        <div className="studio-live-strip" role="status">
+          <span className="studio-preset-title"><Icon name="spark" size={14} />Đang render ({activeStudioJobs.length}):</span>
+          {activeStudioJobs.slice(0, 5).map((job) => (
+            <span className="studio-live-chip" key={job.video_id}>
+              <span>{job.title || job.video_id}</span>
+              <strong>{job.progress ? `${Math.round(job.progress)}%` : JOB_LABELS[job.state || job.status] || "Đang chạy"}</strong>
+            </span>
+          ))}
+        </div>
+      )}
 
       <section className="panel studio-filter-panel">
         <div className="studio-filter-bar">
@@ -408,6 +655,44 @@ export function StudioPage({ mode = "youtube" }) {
         <ErrorMessage error={error} />
         <Notice>{notice}</Notice>
 
+        {!loading && !scanning && candidates.length > 0 && (
+          <div className="studio-batch-bar">
+            <div className="studio-batch-actions">
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  const visibleIds = candidates.slice(0, 60).map((c) => c.video.video_id || c.video.platform_video_id);
+                  setSelectedIds(selectedIds.size === visibleIds.length ? new Set() : new Set(visibleIds));
+                }}
+              >
+                {selectedIds.size > 0 && selectedIds.size === Math.min(60, candidates.length) ? "Bỏ chọn" : "Chọn tất cả"}
+              </button>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => {
+                  const top5 = candidates.slice(0, 5).map((c) => c.video.video_id || c.video.platform_video_id);
+                  setSelectedIds(new Set(top5));
+                  setNotice("Đã chọn Top 5 video phù hợp nhất.");
+                }}
+              >
+                Chọn Top 5
+              </button>
+              <span className="status">{selectedIds.size} đã chọn</span>
+            </div>
+            <button
+              type="button"
+              className="btn primary"
+              disabled={batchSubmitting || selectedIds.size === 0}
+              onClick={startBatchStudioProcess}
+            >
+              <Icon name={isYoutube ? "play" : "spark"} size={14} />
+              {batchSubmitting ? "Đang xếp hàng chờ…" : `Xuất hàng loạt (${selectedIds.size} video)`}
+            </button>
+          </div>
+        )}
+
         {loading || scanning ? <Loading label={scanning ? "Đang quét video từ nguồn…" : "Đang phân tích video phù hợp…"} /> : !candidates.length ? (
           <div className="empty-state">Không có video nào khớp bộ lọc hiện tại. Hãy chọn nguồn khác hoặc chuyển sang tab <strong>Tất cả</strong>.</div>
         ) : (
@@ -418,9 +703,14 @@ export function StudioPage({ mode = "youtube" }) {
               const jobState = job?.state || job?.status;
               const isRunning = ACTIVE_JOBS.has(jobState);
               const isDone = Boolean(video.output_exists || video.file_path || jobState === "completed");
+              const isSelected = selectedIds.has(id);
+              const smartHook = hookPreviewId === id ? buildSmartHook(video, isYoutube) : null;
               return (
-                <article className="studio-card" key={id}>
+                <article className={`studio-card ${isSelected ? "is-selected" : ""}`} key={id}>
                   <VideoCover client={client} video={video}>
+                    <label className="studio-select-box" title="Chọn xử lý hàng loạt">
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelectCard(id)} />
+                    </label>
                     <span className={`studio-fit-badge ${meta.score >= 55 ? "is-high" : ""}`}>
                       {meta.reasons[0] || (isYoutube ? "YouTube 16:9" : "Shorts 9:16")}
                     </span>
@@ -439,6 +729,12 @@ export function StudioPage({ mode = "youtube" }) {
                         {meta.reasons.slice(0, 3).map((reason) => <span key={reason}>{reason}</span>)}
                       </div>
                     )}
+                    {smartHook && (
+                      <div className="studio-hook-box">
+                        <strong>{smartHook.hook}</strong>
+                        <span>{smartHook.tags}</span>
+                      </div>
+                    )}
                     {isRunning && (
                       <div className="studio-job-progress">
                         <span>{JOB_LABELS[jobState] || "Đang xử lý"} {job?.progress ? `${Math.round(job.progress)}%` : ""}</span>
@@ -453,6 +749,14 @@ export function StudioPage({ mode = "youtube" }) {
                       >
                         <Icon name={isYoutube ? "play" : "spark"} size={14} />
                         {isRunning ? "Đang xử lý…" : submittingIds[id] ? "Đang gửi…" : isYoutube ? "Xuất YouTube 16:9" : "Xuất Shorts 9:16"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        title="Gợi ý Hook & Hashtag"
+                        onClick={() => setHookPreviewId(hookPreviewId === id ? null : id)}
+                      >
+                        Hook
                       </button>
                       {isDone && (
                         <button type="button" className="btn secondary" onClick={() => setPreview({ ...video, channel: "default", mode: processMode })}>
