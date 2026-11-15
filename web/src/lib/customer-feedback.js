@@ -129,10 +129,31 @@ export async function listCustomerFeedback(storage, offset = 0) {
     nextOffset, unavailableCount: results.filter(result => result.status === 'rejected').length };
 }
 
-export async function updateCustomerFeedback(storage, id, status) {
+export async function listUserCustomerFeedback(storage, userId) {
+  if (!UUID.test(userId || '')) throw new FeedbackError('Hãy đăng nhập để xem ticket.', 401);
+  await ensureFeedbackBucket(storage);
+  const { data, error } = await storage.from(FEEDBACK_BUCKET).list('', { limit: 100, offset: 0, sortBy: { column: 'name', order: 'desc' } });
+  if (error) throw new FeedbackError('Chưa tải được danh sách ticket.');
+  const entries = Array.isArray(data) ? data : [];
+  const mine = entries
+    .map((file) => file.name?.replace(/\.json$/, '') || '')
+    .filter((id) => feedbackIdValid(id) && id.slice(14) === userId)
+    .slice(0, 20);
+  const results = await Promise.allSettled(mine.map((id) => readRecord(storage, id)));
+  return { items: results.filter((r) => r.status === 'fulfilled').map((r) => r.value) };
+}
+
+export async function updateCustomerFeedback(storage, id, status, adminReply = undefined) {
   if (!Object.hasOwn(FEEDBACK_STATUSES, status)) throw new FeedbackError('Trạng thái phản hồi không hợp lệ.', 400);
   const record = await readRecord(storage, id);
-  const updated = { ...record, status, updatedAt: new Date().toISOString() };
+  const updated = {
+    ...record,
+    status,
+    ...(typeof adminReply === 'string' && adminReply.trim()
+      ? { adminReply: adminReply.trim().slice(0, 2000), repliedAt: new Date().toISOString() }
+      : {}),
+    updatedAt: new Date().toISOString(),
+  };
   const { error } = await storage.from(FEEDBACK_BUCKET).update(`${id}.json`, JSON.stringify(updated), { contentType: 'application/json', cacheControl: '0' });
   if (error) throw new FeedbackError('Chưa lưu được trạng thái phản hồi.');
   return updated;

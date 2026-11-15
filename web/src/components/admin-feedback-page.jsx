@@ -8,6 +8,7 @@ export function AdminFeedbackPage() {
   const [items, setItems] = useState([]), [page, setPage] = useState(0), [hasMore, setHasMore] = useState(false);
   const offsets = useRef([0]);
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [busy, setBusy] = useState('');
+  const [replyDrafts, setReplyDrafts] = useState({});
   const sequence = useRef(0);
   const load = useCallback(async () => {
     const current = ++sequence.current; setLoading(true); setError('');
@@ -22,15 +23,16 @@ export function AdminFeedbackPage() {
     finally { if (current === sequence.current) setLoading(false); }
   }, [page]);
   useEffect(() => { load(); return () => { sequence.current += 1; }; }, [load]);
-  async function mark(id, status) {
+  async function mark(id, status, adminReply) {
     const current = ++sequence.current;
     setBusy(id); setError('');
     try {
-      const response = await fetch('/api/admin/feedback', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) });
+      const response = await fetch('/api/admin/feedback', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status, adminReply }) });
       const data = await response.json();
       if (current !== sequence.current) return;
       if (!response.ok) throw new Error(data.error || 'Không cập nhật được phản hồi.');
       setItems(values => values.map(item => item.id === id ? data.item : item));
+      if (adminReply) setReplyDrafts(prev => ({ ...prev, [id]: '' }));
     } catch (caught) { if (current === sequence.current) setError(caught.message); }
     finally { setBusy(''); }
   }
@@ -41,6 +43,26 @@ export function AdminFeedbackPage() {
       <h3>{item.subject}</h3><p className="admin-feedback-sender">{item.displayName || 'Khách hàng'} · {item.email}</p><p className="admin-feedback-message">{item.message}</p>
       {item.link && /^https?:\/\//i.test(item.link) && <a className="admin-feedback-video-link" href={item.link} target="_blank" rel="noopener noreferrer nofollow">Mở link video <Icon name="external" size={14} /></a>}
       {item.details && <details className="customer-feedback-details"><summary>Chi tiết kỹ thuật</summary><pre>{item.details}</pre></details>}
+      {item.adminReply && <p className="admin-feedback-message" style={{ borderLeft: '2px solid #ef4444', paddingLeft: 10, marginTop: 8 }}><strong>Phản hồi Admin:</strong> {item.adminReply}</p>}
+      {!item.unavailable && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <input
+            aria-label={`Trả lời ticket ${item.subject}`}
+            placeholder="Nhập phản hồi cho khách…"
+            value={replyDrafts[item.id] ?? ''}
+            onChange={e => setReplyDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+            style={{ flex: '1 1 200px' }}
+          />
+          <button
+            type="button"
+            className="btn primary"
+            disabled={Boolean(busy) || !(replyDrafts[item.id] || '').trim()}
+            onClick={() => mark(item.id, 'resolved', replyDrafts[item.id])}
+          >
+            Trả lời &amp; Đã xử lý
+          </button>
+        </div>
+      )}
       <footer><small>Mã: {item.id}</small>{!item.unavailable && <label>Trạng thái<select aria-label={`Trạng thái phản hồi ${item.subject}`} value={item.status} onChange={event => mark(item.id, event.target.value)} disabled={Boolean(busy)}>{Object.entries(FEEDBACK_STATUSES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}</footer>
     </article>)}</div>}
     <nav className="customer-feedback-pagination" aria-label="Trang phản hồi"><button className="btn" disabled={!page || loading || Boolean(busy)} onClick={() => setPage(value => value - 1)}>Trang trước</button><span>Trang {page + 1}</span><button className="btn" disabled={!hasMore || loading || Boolean(busy)} onClick={() => setPage(value => value + 1)}>Trang sau</button></nav>

@@ -14,6 +14,6 @@ export async function PATCH(request) {
   try {
     const { storage } = await requireFeedbackAccount(true);
     const body = await feedbackRequestBody(request);
-    return Response.json({ item: await updateCustomerFeedback(storage, body?.id, body?.status) }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ item: await updateCustomerFeedback(storage, body?.id, body?.status, body?.adminReply) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) { return feedbackErrorResponse(error); }
 }

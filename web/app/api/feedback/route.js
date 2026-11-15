@@ -1,7 +1,13 @@
-import { submitCustomerFeedback } from '../../../src/lib/customer-feedback';
+import { listUserCustomerFeedback, submitCustomerFeedback } from '../../../src/lib/customer-feedback';
 import { requireFeedbackAccount, feedbackRequestBody, feedbackErrorResponse } from '../../../src/lib/customer-feedback-server';
 
 export const dynamic = 'force-dynamic';
+export async function GET() {
+  try {
+    const account = await requireFeedbackAccount();
+    return Response.json(await listUserCustomerFeedback(account.storage, account.user.id), { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) { return feedbackErrorResponse(error); }
+}
 export async function POST(request) {
   try {
     const account = await requireFeedbackAccount();
