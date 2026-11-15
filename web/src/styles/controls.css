@@ -1154,6 +1154,39 @@ body.theme-xports.is-tracked-view .source-panel,
 body.theme-xports:has(#videos.tracked-sources-view) .source-panel {
   padding: 14px 16px;
 }
+body.theme-xports #videos.tracked-sources-view {
+  display: flex !important;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+body.theme-xports #videos.tracked-sources-view .tracked-view-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 2px 12px;
+  border-bottom: 1px solid var(--ds-border);
+}
+body.theme-xports #videos.tracked-sources-view .tracked-view-header p,
+body.theme-xports #videos.tracked-sources-view .tracked-add-source {
+  display: none !important;
+}
+body.theme-xports #videos.tracked-sources-view .tracked-channel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+body.theme-xports #followCurrentSource.is-following,
+body.theme-xports #followCurrentSource.btn.green {
+  border-color: rgb(239 68 68 / 45%) !important;
+  background: rgb(220 38 38 / 15%) !important;
+  color: #fca5a5 !important;
+  box-shadow: none !important;
+}
 
 
 
