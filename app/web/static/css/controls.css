@@ -1107,6 +1107,28 @@ body.theme-xports .result-action-card .btn {
   min-height: 36px;
 }
 
+/* Output library card actions: override fixed 76px/69px grid so Row 2 buttons never overflow. */
+body.theme-xports .output-library-card .library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+body.theme-xports .output-library-card .library-actions .btn {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 12px;
+}
+body.theme-xports .output-library-card .library-actions .output-edit-result {
+  flex: 1 1 100%;
+  overflow: hidden;
+  padding: 0 12px;
+  font-size: var(--ds-text-sm);
+  letter-spacing: normal;
+}
+
 
 
 
