@@ -776,6 +776,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         reviewDialog.oncancel = pauseReviewForEditing;
         reviewDialog.querySelector('#processTranscriptReviewClose').onclick = () => { pauseReviewForEditing(); reviewDialog.close(); };
         reviewSkip.onclick = () => {
+            reviewPaused = false;
+            if (reviewPause) reviewPause.hidden = false;
+            if (reviewConfirm) reviewConfirm.hidden = true;
+            if (reviewFootnote) reviewFootnote.textContent = 'Đã bật tiếp tục tự động. AI sẽ hoàn tất nhận diện, dịch và xuất; không cần xác nhận thêm.';
+            // Reuse the scan already running instead of starting another job.
+            if (submitting || translatingReview) return;
+            if (translationReady) { maybeAutoContinueReview(); return; }
+            if (recognitionComplete) { void translateReviewRows(); return; }
+            // Recognition failed: let the normal pipeline retry without review.
             transcriptConfirmed = true;
             manualOcrRows = [];
             reviewDialog.close();
@@ -1281,7 +1290,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     ? 'Đang đọc chữ phụ đề trong vùng đã chọn…'
                     : 'Đang nhận diện lời thoại từ âm thanh. Video dài có thể mất vài phút…';
                 if (reviewConfirm) reviewConfirm.disabled = true;
-                if (reviewSkip) reviewSkip.hidden = true;
+                if (reviewSkip) reviewSkip.hidden = false;
                 setReviewStage(0);
                 translationReady = false;
                 renderManualOcrRows('Đang nhận diện. Bản dịch tiếng Việt sẽ xuất hiện sau bước này.');

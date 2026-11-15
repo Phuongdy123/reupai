@@ -55,8 +55,8 @@ window.reupEngineClient={
  mediaUrl:async path=>{window.mediaPaths.push(path); return MEDIA_URL;},
  json:async(path,options)=>{
    if(path==='/api/preview/transcript/fixture') return {task_id:'test',status:'processing',lines:[]};
-   if(path==='/api/preview/transcript/fixture/test') return {status:'complete',progress:100,lines:[
-     {id:1,start:0,end:1,text:'你好'},{id:2,start:1,end:2,text:'谢谢'}]};
+   if(path==='/api/preview/transcript/fixture/test') { if(window.recognitionGate) await window.recognitionGate; return {status:'complete',progress:100,lines:[
+     {id:1,start:0,end:1,text:'你好'},{id:2,start:1,end:2,text:'谢谢'}]}; }
    if(path==='/api/preview/subtitle-translation'){
      window.translationCalls++;
      const lines=JSON.parse(options.body).lines;
@@ -103,7 +103,7 @@ window.fixtureReady=true;
                 assert await page.evaluate("processCount") == 0
                 await page.evaluate("window.reupEngineClient.health.capabilities.reviewed_translations=true")
                 await page.locator(".ocr-line-end").first.fill("0.95")
-                await page.locator("#processTranscriptReviewConfirm").click()
+                await page.locator("#processTranscriptReviewSkip").click()
                 await page.wait_for_function("window.processCount === 1")
                 cues = await page.evaluate("lastProcess.config.manual_transcript")
                 assert cues[0]["text"] == "你好"
@@ -123,8 +123,20 @@ window.fixtureReady=true;
                     raise
                 assert await page.evaluate("lastProcess.config.manual_transcript[0].translated_text") == "Xin chào"
                 assert not await page.locator("#processTranscriptReviewDialog").is_visible()
+                await page.reload()
+                await page.wait_for_function("window.fixtureReady")
+                await page.evaluate("translationCalls=1; window.recognitionGate=new Promise(resolve=>window.finishRecognition=resolve); void 0")
+                await page.locator("#runProcessConfig").click()
+                await page.locator("#processTranscriptReviewPause").click()
+                await page.locator("#processTranscriptReviewSkip").click()
+                assert await page.evaluate("processCount") == 0
+                await page.evaluate("window.finishRecognition()")
+                await page.wait_for_function("window.processCount === 1")
+                assert await page.evaluate("lastProcess.config.manual_transcript[0].translated_text") == "Xin chào"
+                assert await page.evaluate("translationCalls") == 2
+                assert not errors, errors
                 await browser.close()
-                print("PASS: protected video plays; edits pause automatic export; retry preserves edits; old engines cannot discard edits; untouched translations auto-export exactly once.")
+                print("PASS: protected video plays; edits pause automatic export; retry preserves edits; old engines cannot discard edits; continue works during recognition and after editing; auto-export runs exactly once.")
         finally:
             server.shutdown()
             media_server.shutdown()
