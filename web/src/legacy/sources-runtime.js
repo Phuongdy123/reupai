@@ -1720,12 +1720,14 @@ function buildCard(
                 <button
                     class="sub-btn action-primary"
                 >
+                    ${PROCESSING_STAR_BORDER}
                     Vietsub
                 </button>
 
                 <button
                     class="voice-btn action-secondary"
                 >
+                    ${PROCESSING_STAR_BORDER}
                     Voice
                 </button>
 

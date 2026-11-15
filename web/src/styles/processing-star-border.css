@@ -25,6 +25,38 @@ body.theme-xports .process-details-panel {
   display: block;
 }
 
+#videos .compact-video-card:focus-within > .processing-star-frame {
+  display: block;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #videos .compact-video-card:hover > .processing-star-frame { display: block; }
+}
+
+body.theme-xports .app-shell #videos .compact-video-card:is(:hover, :focus-within) {
+  border-color: rgba(255, 255, 255, .34) !important;
+}
+
+#videos .compact-video-card :is(.sub-btn, .voice-btn) {
+  position: relative;
+  isolation: isolate;
+}
+
+body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn):is(:hover, :focus-visible):not(:disabled) {
+  border-color: rgba(255, 255, 255, .42) !important;
+  background: #242427 !important;
+  color: #f5f5f6 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+#videos :is(.sub-btn, .voice-btn):is(:hover, :focus-visible):not(:disabled) > .processing-star-frame {
+  display: block;
+}
+
+#videos :is(.sub-btn, .voice-btn) > .processing-star-frame > i { --star-size: 5px; }
+#videos :is(.sub-btn, .voice-btn) > .processing-star-frame > i:nth-child(n + 3) { display: none; }
+
 .processing-star-frame > i {
   --star-size: 7px;
   --star-position: 2%;
