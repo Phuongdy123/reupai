@@ -9020,12 +9020,12 @@ body.theme-xports .source-youtube-banner.is-youtube .btn.primary:hover:not(:disa
   color: var(--ds-white);
 }
 body.theme-xports .source-youtube-banner.is-youtube.is-connected {
-  border-color: rgb(76 183 130 / 35%);
-  background: linear-gradient(135deg, rgb(76 183 130 / 10%), var(--ds-surface));
-  box-shadow: inset 3px 0 0 var(--ds-success);
+  border-color: rgb(239 68 68 / 38%);
+  background: linear-gradient(135deg, rgb(220 38 38 / 14%), var(--ds-surface));
+  box-shadow: inset 3px 0 0 #ef4444;
 }
 body.theme-xports .source-youtube-banner.is-youtube.is-connected small {
-  color: #86efac;
+  color: #fca5a5;
 }
 body.theme-xports .source-youtube-banner small {
   display: block;
@@ -9363,9 +9363,9 @@ body.theme-xports .compact-video-card .compact-badges .badge {
   color: var(--ds-text-secondary) !important;
 }
 body.theme-xports .compact-video-card .compact-badges .badge.ok {
-  border-color: rgb(76 183 130 / 28%) !important;
-  background: rgb(76 183 130 / 12%) !important;
-  color: #86efac !important;
+  border-color: rgb(239 68 68 / 32%) !important;
+  background: rgb(220 38 38 / 14%) !important;
+  color: #fca5a5 !important;
 }
 body.theme-xports .compact-video-card .favorite-btn {
   border: 1px solid var(--ds-border-strong) !important;
@@ -9404,12 +9404,12 @@ body.theme-xports .compact-video-card .mini-result {
   border: 1px solid var(--ds-border-strong) !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text-secondary) !important;
-  box-shadow: inset 2px 0 0 var(--ds-success) !important;
+  box-shadow: inset 2px 0 0 #ef4444 !important;
 }
 body.theme-xports .compact-video-card .mini-result:hover {
-  border-color: rgb(76 183 130 / 45%) !important;
-  background: rgb(76 183 130 / 12%) !important;
-  color: #a7f3d0 !important;
+  border-color: rgb(239 68 68 / 45%) !important;
+  background: rgb(220 38 38 / 14%) !important;
+  color: #fca5a5 !important;
 }
 body.theme-xports .compact-video-card .more-menu > summary.more-trigger {
   width: var(--ds-control-h-sm) !important;
@@ -9682,6 +9682,17 @@ body.theme-xports .feedback-modal p {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* ---------- 8. Replace Remaining Green Accents With Red ---------- */
+body.theme-xports :is(.badge.ok, .status.completed, .status-chip.completed, .notice-banner, .btn.green, .green, .follow-source-btn) {
+  border-color: rgb(239 68 68 / 34%) !important;
+  background: rgb(220 38 38 / 13%) !important;
+  color: #fca5a5 !important;
+}
+body.theme-xports .gemini-project-picker {
+  box-shadow: inset 3px 0 0 #ef4444 !important;
+}
+
 
 
 
