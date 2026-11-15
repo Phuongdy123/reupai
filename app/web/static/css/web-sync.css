@@ -8875,12 +8875,47 @@ body.theme-xports :is(input[type="checkbox"], input[type="radio"]) {
 }
 
 /* ---------- Sidebar navigation ---------- */
+body.theme-xports .sidebar .nav {
+  gap: var(--ds-space-4);
+  padding-top: var(--ds-space-2);
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 12%) transparent;
+}
+body.theme-xports .sidebar .nav::-webkit-scrollbar {
+  width: 4px;
+}
+body.theme-xports .sidebar .nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+body.theme-xports .sidebar .nav::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(255 255 255 / 12%);
+}
+body.theme-xports .sidebar .nav:hover::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 22%);
+}
+body.theme-xports .sidebar .nav-group {
+  display: grid;
+  gap: var(--ds-space-1);
+}
+body.theme-xports .sidebar .nav-label {
+  padding: 2px 12px 6px;
+}
 body.theme-xports .sidebar .nav-item {
-  min-height: var(--ds-nav-item-h);
-  gap: var(--ds-control-gap);
-  padding-inline: 10px;
+  min-height: 36px;
+  gap: 10px;
+  padding-inline: 12px;
   border-radius: var(--ds-control-radius);
   font-size: var(--ds-text-base);
+}
+body.theme-xports .sidebar .nav-item > .nav-icon,
+body.theme-xports .sidebar .nav-item > span:first-child {
+  width: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 body.theme-xports .sidebar .nav-item :is(svg, .icon, .ui-icon) {
   width: var(--ds-icon);
