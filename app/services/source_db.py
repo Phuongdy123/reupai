@@ -279,6 +279,22 @@ def init_db():
                 f"ALTER TABLE source_sync_cache ADD COLUMN {column} {definition}"
             )
 
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO channels (
+            channel_key,
+            name,
+            created_at
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            "2d_animation",
+            "2D Animation",
+            now(),
+        )
+    )
+
     conn.commit()
 
     conn.close()
