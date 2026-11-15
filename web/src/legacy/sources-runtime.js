@@ -1798,52 +1798,6 @@ function buildCard(
 
                         </div>
 
-                        <div class="menu-section">
-
-                            <div class="menu-section-title">
-                                Kênh xử lý
-                            </div>
-
-                            <select class="channel">
-                                <option
-                                    value="2d_animation"
-                                    ${
-                                        channel
-                                        === '2d_animation'
-                                        ? 'selected'
-                                        : ''
-                                    }
-                                >
-                                    2D Animation
-                                </option>
-
-                                <option
-                                    value="3d_animation"
-                                    ${
-                                        channel
-                                        === '3d_animation'
-                                        ? 'selected'
-                                        : ''
-                                    }
-                                >
-                                    3D Animation
-                                </option>
-
-                                <option
-                                    value="comedy"
-                                    ${
-                                        channel
-                                        === 'comedy'
-                                        ? 'selected'
-                                        : ''
-                                    }
-                                >
-                                    Comedy
-                                </option>
-                            </select>
-
-                        </div>
-
                     </div>
 
                 </details>
@@ -5269,18 +5223,7 @@ function ensureManagerPanel() {
                             type="text"
                             placeholder="Tên nguồn"
                         >
-
-                        <select id="saveSourceChannel">
-                            <option value="2d_animation">
-                                2D Animation
-                            </option>
-                            <option value="3d_animation">
-                                3D Animation
-                            </option>
-                            <option value="comedy">
-                                Comedy
-                            </option>
-                        </select>
+                        <input type="hidden" id="saveSourceChannel" value="2d_animation">
                     </div>
 
                     <div class="compact-row source-manage-actions">
@@ -5346,17 +5289,7 @@ function ensureManagerPanel() {
                     </div>
 
                     <div class="compact-row">
-                        <select id="directVideoChannel">
-                            <option value="2d_animation">
-                                2D Animation
-                            </option>
-                            <option value="3d_animation">
-                                3D Animation
-                            </option>
-                            <option value="comedy">
-                                Comedy
-                            </option>
-                        </select>
+                        <input type="hidden" id="directVideoChannel" value="2d_animation">
 
                         <button
                             type="button"
