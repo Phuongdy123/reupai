@@ -244,6 +244,16 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     </select>
                     <small>Để tự động nếu bạn chưa biết ngôn ngữ của video.</small>
                 </label>
+                <label>Model dịch
+                    <select id="processTranslationModel">
+                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite · Mặc định</option>
+                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                        <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                    </select>
+                    <small>Hết quota hoặc bị giới hạn sẽ tự chuyển về Gemini 3.1 Flash Lite.</small>
+                </label>
                 <label>Cỡ chữ phụ đề
                     <select id="processFontSize" title="Tự động: cỡ chữ được điều chỉnh theo vùng phụ đề">
                         <option value="">Tự động</option>

@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, urlsplit, parse_qs, unquote
 from types import SimpleNamespace
-from typing import Annotated
+from typing import Annotated, Literal
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -138,6 +138,7 @@ ENGINE_CAPABILITIES = {
     "subtitle_srt_export": True,
     "youtube_publishing": True,
     "gemini_thumbnail_artwork": True,
+    "translation_model_selection": True,
     "social_publish": True,
     "subtitle_styles": True,
 }
@@ -1060,6 +1061,7 @@ class ManualSubtitleTranslationLine(BaseModel):
 class ManualSubtitleTranslationRequest(BaseModel):
     lines: list[ManualSubtitleTranslationLine] = Field(min_length=1, max_length=20)
     source_language: str = "auto"
+    translation_model: Literal["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.8-flash"] = "gemini-3.1-flash-lite"
 
 
 @app.post("/api/preview/subtitles/{video_id}")
@@ -1198,7 +1200,7 @@ async def translate_manual_subtitle_lines(body: ManualSubtitleTranslationRequest
         if any(not line["text"] for line in batch):
             raise HTTPException(status_code=422, detail="Có câu phụ đề đang để trống.")
         translations = await run_in_threadpool(
-            translate_batch, batch, "", source_language=body.source_language,
+            translate_batch, batch, "", source_language=body.source_language, translation_model=body.translation_model,
         )
         translated_by_id = {int(item["id"]): str(item["text"]).strip() for item in translations}
         return {"translations": [{"id": line.id, "text": translated_by_id[line.id]} for line in body.lines]}

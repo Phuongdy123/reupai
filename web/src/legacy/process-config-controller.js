@@ -96,6 +96,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processPreviewSeconds', defaults.preview_seconds || '');
     set('processFontSize', defaults.subtitle_font_size || '');
     set('processSourceLanguage', defaults.source_language || 'auto');
+    set('processTranslationModel', defaults.translation_model || 'gemini-3.1-flash-lite');
+    const modelPicker = dialog.querySelector('#processTranslationModel');
+    if (modelPicker) {
+        modelPicker.disabled = !window.reupEngineClient.health?.capabilities?.translation_model_selection;
+        modelPicker.title = modelPicker.disabled ? 'Cập nhật Engine 0.2.54 để chọn model dịch.' : '';
+    }
     set('processTranscriptSource', defaults.transcript_source || 'audio');
     set('processOutputFormat', defaults.output_format || 'video');
     set('processOcrLanguage', defaults.ocr_language || 'auto');
@@ -602,6 +608,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         };
     }
     const currentTranscriptSignature = () => JSON.stringify({
+        model: dialog.querySelector('#processTranslationModel')?.value || 'gemini-3.1-flash-lite',
         source: transcriptSource?.value || 'audio',
         language: transcriptSource?.value === 'video_subtitles'
             ? dialog.querySelector('#processOcrLanguage')?.value || 'auto'
@@ -754,7 +761,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     : await requestJson('/api/preview/subtitle-translation', {
                         method: 'POST', timeoutMs: 180000, headers: { 'Content-Type': 'application/json' },
                         signal: previewAbortController?.signal,
-                        body: JSON.stringify({ source_language: sourceLanguage, lines: batch.map(line => ({ id: line.id, text: line.text })) }),
+                        body: JSON.stringify({ source_language: sourceLanguage, translation_model: dialog.querySelector('#processTranslationModel')?.value || 'gemini-3.1-flash-lite', lines: batch.map(line => ({ id: line.id, text: line.text })) }),
                     });
                 if (!isCurrent() || skipReviewRequested) return;
                 const translated = new Map((result.translations || []).map(item => [String(item.id), String(item.text || '').trim()]));
@@ -936,6 +943,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         set('processPreviewSeconds', '');
         set('processFontSize', '');
         set('processSourceLanguage', 'auto');
+        set('processTranslationModel', 'gemini-3.1-flash-lite');
         set('processTranscriptSource', 'audio');
         set('processOcrLanguage', 'auto');
         set('processOcrFps', 2);
@@ -1004,7 +1012,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
-            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranscriptSource', 'processOutputFormat',
+            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranslationModel', 'processTranscriptSource', 'processOutputFormat',
             'processOcrLanguage', 'processOcrFps', 'processOcrConfidence', 'processOcrParallelism', 'processOcrSimilarity', 'processSubtitleStyle', 'processOriginalVolume',
             'processVoiceVolume', 'processTtsSpeed', 'processVoice',
             'processAspectRatio', 'processMusicUrl', 'processMusicVolume',
@@ -1486,6 +1494,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
             source_language: value('processSourceLanguage') || 'auto',
+            translation_model: value('processTranslationModel') || 'gemini-3.1-flash-lite',
             transcript_source: value('processTranscriptSource') || 'audio',
             manual_transcript: reviewedTranscript.length ? reviewedTranscript : null,
             output_format: value('processOutputFormat') || 'video',

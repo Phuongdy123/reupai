@@ -508,6 +508,7 @@ class ProcessRequest(BaseModel):
     ] = "subtitle"
     preview_seconds: Optional[float] = None
     source_subtitle_mode: Literal["auto", "none"] = "auto"
+    translation_model: Literal["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.8-flash"] = "gemini-3.1-flash-lite"
     source_language: Literal[
         "auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de",
         "ru", "it", "hi", "ar", "tr", "ms", "vi",

@@ -1005,6 +1005,7 @@ def translate_batch(
     batch,
     previous_context="",
     source_language=None,
+    translation_model=None,
 ):
     prompt = build_prompt(
         batch,
@@ -1014,7 +1015,8 @@ def translate_batch(
 
     last_error = None
 
-    for model_name in GEMINI_MODELS:
+    selected_models = list(dict.fromkeys([translation_model, "gemini-3.1-flash-lite"])) if translation_model else GEMINI_MODELS
+    for model_name in selected_models:
         if model_name in DISABLED_MODELS:
             print(
                 f"\n[SKIP MODEL] {model_name}"
@@ -1371,7 +1373,8 @@ def save_checkpoint(
 
 def translate_all(
     subtitles,
-    source_hash=None
+    source_hash=None,
+    translation_model=None,
 ):
     if source_hash is None:
         if os.path.exists(
@@ -1503,7 +1506,8 @@ def translate_all(
             translations = (
                 translate_batch(
                     batch,
-                    context
+                    context,
+                    translation_model=translation_model,
                 )
             )
 

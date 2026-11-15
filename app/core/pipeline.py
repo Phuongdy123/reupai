@@ -1743,10 +1743,15 @@ def translate_srt(
 
 
 
+    translation_model="gemini-3.1-flash-lite",
+
 ):
 
 
 
+    model_path = vietnamese_srt.with_suffix(".model.txt")
+    previous_model = model_path.read_text(encoding="utf-8").strip() if model_path.is_file() else ""
+    force = force or previous_model != translation_model
     if file_ok(vietnamese_srt) and not force:
 
 
@@ -1904,7 +1909,7 @@ def translate_srt(
 
 
 
-        translated = translator.translate_all(subtitles, source_hash)
+        translated = translator.translate_all(subtitles, source_hash, translation_model=translation_model)
 
 
 
@@ -1912,7 +1917,7 @@ def translate_srt(
 
 
 
-        translated = translator.translate_all(subtitles)
+        translated = translator.translate_all(subtitles, translation_model=translation_model)
 
 
 
@@ -1987,6 +1992,8 @@ def translate_srt(
 
 
 
+
+    model_path.write_text(translation_model, encoding="utf-8")
 
 def create_voice(
 
@@ -3862,6 +3869,7 @@ def pipeline(
             force=translation_force,
 
             source_language=config.get("source_language", "auto"),
+            translation_model=config.get("translation_model", "gemini-3.1-flash-lite"),
 
             )
             source_language_path.write_text(source_language, encoding="utf-8")

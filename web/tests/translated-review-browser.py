@@ -51,7 +51,7 @@ import {createProcessConfigDialog} from '/src/legacy/process-config-dialog.js';
 window.translationCalls=0; window.mediaPaths=[]; window.processCount=0;
 const video={video_id:'fixture',channel:'selected_channel',downloaded:true};
 window.reupEngineClient={
- health:{capabilities:{reviewed_translations:true}},
+ health:{capabilities:{reviewed_translations:true,translation_model_selection:true}},
  mediaUrl:async path=>{window.mediaPaths.push(path); return MEDIA_URL;},
  json:async(path,options)=>{
    if(path==='/api/preview/transcript/fixture') return {task_id:'test',status:'processing',lines:[]};
@@ -59,7 +59,7 @@ window.reupEngineClient={
      {id:1,start:0,end:1,text:'你好'},{id:2,start:1,end:2,text:'谢谢'}]}; }
    if(path==='/api/preview/subtitle-translation'){
      window.translationCalls++;
-     const lines=JSON.parse(options.body).lines;
+     const payload=JSON.parse(options.body); window.selectedModel=payload.translation_model; const lines=payload.lines;
      return {translations:lines.filter(line=>window.translationCalls>1 || line.id===1)
        .map(line=>({id:line.id,text:line.id===1?'Xin chào':'Cảm ơn'}))};
    }
@@ -85,6 +85,7 @@ window.fixtureReady=true;
                 await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith((base + "/", media_url)) else route.abort())
                 await page.goto(base + "/fixture")
                 await page.wait_for_function("window.fixtureReady")
+                await page.locator("#processTranslationModel").select_option("gemini-3.8-flash", force=True)
                 await page.locator("#runProcessConfig").click()
                 await expect(page.locator("#processTranscriptTranslationRetry")).to_be_visible()
                 first = page.locator(".ocr-line-translation").first
@@ -103,8 +104,10 @@ window.fixtureReady=true;
                 assert await page.evaluate("processCount") == 0
                 await page.evaluate("window.reupEngineClient.health.capabilities.reviewed_translations=true")
                 await page.locator(".ocr-line-end").first.fill("0.95")
-                await page.locator("#processTranscriptReviewSkip").click()
+                await page.locator("#processTranscriptReviewConfirm").click()
                 await page.wait_for_function("window.processCount === 1")
+                assert await page.evaluate("selectedModel") == "gemini-3.8-flash"
+                assert await page.evaluate("lastProcess.config.translation_model") == "gemini-3.8-flash"
                 cues = await page.evaluate("lastProcess.config.manual_transcript")
                 assert cues[0]["text"] == "你好"
                 assert cues[0]["translated_text"] == "Xin chào, bản dịch tôi tự sửa."
@@ -129,11 +132,10 @@ window.fixtureReady=true;
                 await page.locator("#runProcessConfig").click()
                 await page.locator("#processTranscriptReviewPause").click()
                 await page.locator("#processTranscriptReviewSkip").click()
-                assert await page.evaluate("processCount") == 0
-                await page.evaluate("window.finishRecognition()")
                 await page.wait_for_function("window.processCount === 1")
-                assert await page.evaluate("lastProcess.config.manual_transcript[0].translated_text") == "Xin chào"
-                assert await page.evaluate("translationCalls") == 2
+                await page.evaluate("window.finishRecognition()")
+                assert not await page.evaluate("lastProcess.config.manual_transcript")
+                assert await page.evaluate("lastProcess.config.translation_model") == "gemini-3.1-flash-lite"
                 assert not errors, errors
                 await browser.close()
                 print("PASS: protected video plays; edits pause automatic export; retry preserves edits; old engines cannot discard edits; continue works during recognition and after editing; auto-export runs exactly once.")
