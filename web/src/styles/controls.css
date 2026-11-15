@@ -192,6 +192,10 @@ body.theme-xports .sidebar .nav-group {
   display: grid;
   gap: var(--ds-space-1);
 }
+body.theme-xports .sidebar .nav-group + .nav-group {
+  padding-top: var(--ds-space-3);
+  border-top: 1px solid var(--ds-border-subtle);
+}
 body.theme-xports .sidebar .nav-label {
   padding: 2px 12px 6px;
 }
