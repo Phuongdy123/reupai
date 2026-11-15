@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.51",
+    "version": "0.2.52",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.51/ReupAI-Setup-0.2.51.exe",
-    "sha256": "cb15759e3bc6ebbdf53bc66bf38401f905b0e648ab2a7b39acf1fe178e12177e",
-    "size": 464952729,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.52/ReupAI-Setup-0.2.52.exe",
+    "sha256": "2a5219ab23d49d7d0b1e004b0e0c81fc2319d76edbbed57d2f2d0db8bc841ee4",
+    "size": 464980291,
     "notes": [
-      "Sửa video xem trước ở bước duyệt, hỗ trợ tải lại vé video và chọn đúng kênh nguồn.",
-      "Dịch tiếng Việt trước khi duyệt; giữ nguyên câu và thời gian khách đã sửa khi xuất SRT, giọng đọc và video.",
-      "Hiển thị tiến độ nhận diện lời thoại và bảo vệ bản dịch đã duyệt khi dùng Engine cũ."
+      "Chỉnh câu tiếng Việt, thời gian và giọng đọc ngay trong thành phẩm; xuất lại bằng nội dung đã sửa.",
+      "Tự tiếp tục sau khi dịch; có thể tạm dừng để chỉnh sửa.",
+      "Tích hợp kết nối và đăng YouTube trong màn hình chỉnh thành phẩm; đồng bộ giao diện trắng đen."
     ],
-    "publishedAt": "2026-11-15T08:47:15+00:00"
+    "publishedAt": "2026-11-15T09:48:34+00:00"
   },
-  "signature": "cxqfiizkIYuurNuIGYti8NDQzWVoXfIU+x6PgjSlj9XpQ3wFzmPbOcfqfpMT7k/wfbir/VYLtWqe1+dwJ0kPBw=="
+  "signature": "+18LOOG0aXmzxixZIZVRyXqlg9wfZzjDIqFa3ZCT4/sHGd5kJAGc17olcxAj0KSw8JFXt4uQhrcNlXKFbGsQBg=="
 }
