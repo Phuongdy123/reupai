@@ -34,12 +34,15 @@ function wrapTitle(context, text, width) {
 
 export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, onClose }) {
   const canvas = useRef(null);
+  const captionBounds = useRef(null);
+  const drag = useRef(null);
   const [image, setImage] = useState(null);
   const [text, setText] = useState("");
   const [font, setFont] = useState("bold");
   const [color, setColor] = useState("#ffe066");
   const [background, setBackground] = useState("#ac142b");
   const [position, setPosition] = useState("auto");
+  const [captionOffset, setCaptionOffset] = useState(null);
   const [portraitSide, setPortraitSide] = useState("right");
   const [showBackground, setShowBackground] = useState(false);
   const [tone, setTone] = useState(DEFAULT_TONE);
@@ -59,6 +62,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
   useEffect(() => {
     if (!image || !canvas.current) return;
     const context = canvas.current.getContext("2d");
+    captionBounds.current = null;
     context.clearRect(0, 0, 1280, 720);
     context.fillStyle = "#101012";
     context.fillRect(0, 0, 1280, 720);
@@ -94,8 +98,14 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
       } while (true);
       const lineHeight = size * 1.24;
       const boxHeight = lines.length * lineHeight;
-      const x = portrait ? (imageOnRight ? 56 : imageX + width + 64) : 640;
-      const y = textPosition === "center" ? (720 - boxHeight) / 2 : textPosition === "top" ? 60 : 642 - boxHeight;
+      const baseX = portrait ? (imageOnRight ? 56 : imageX + width + 64) : 640;
+      const baseY = textPosition === "center" ? (720 - boxHeight) / 2 : textPosition === "top" ? 60 : 642 - boxHeight;
+      const captionWidth = Math.max(...lines.map(line => context.measureText(line).width));
+      const baseLeft = portrait ? baseX : baseX - captionWidth / 2;
+      const left = Math.max(16, Math.min(1264 - captionWidth, baseLeft + (captionOffset?.x || 0)));
+      const y = Math.max(16, Math.min(704 - boxHeight, baseY + (captionOffset?.y || 0)));
+      const x = portrait ? left : left + captionWidth / 2;
+      captionBounds.current = { left, top: y, width: captionWidth, height: boxHeight, baseLeft, baseY };
       context.textBaseline = "top";
       context.textAlign = portrait ? "left" : "center";
       context.lineJoin = "round";
@@ -120,7 +130,39 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
       });
     }
     setReady(true);
-  }, [image, text, font, color, background, position, tone, showBackground, portraitSide]);
+  }, [image, text, font, color, background, position, tone, showBackground, portraitSide, captionOffset]);
+
+  const pointerPosition = event => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return { x: (event.clientX - rect.left) * 1280 / rect.width, y: (event.clientY - rect.top) * 720 / rect.height };
+  };
+  const startDrag = event => {
+    const bounds = captionBounds.current;
+    if (!bounds || !event.isPrimary || event.button !== 0) return;
+    const point = pointerPosition(event);
+    const padding = 14;
+    if (point.x < bounds.left - padding || point.x > bounds.left + bounds.width + padding ||
+        point.y < bounds.top - padding || point.y > bounds.top + bounds.height + padding) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { id: event.pointerId, x: point.x - bounds.left, y: point.y - bounds.top };
+  };
+  const moveDrag = event => {
+    const bounds = captionBounds.current;
+    if (!bounds || drag.current?.id !== event.pointerId) return;
+    const point = pointerPosition(event);
+    setCaptionOffset({ x: point.x - drag.current.x - bounds.baseLeft, y: point.y - drag.current.y - bounds.baseY });
+  };
+  const endDrag = event => {
+    if (drag.current?.id === event.pointerId) drag.current = null;
+  };
+  const moveWithKeys = event => {
+    const bounds = captionBounds.current;
+    const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (!bounds || !direction) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 20 : 5;
+    setCaptionOffset({ x: bounds.left - bounds.baseLeft + direction[0] * step, y: bounds.top - bounds.baseY + direction[1] * step });
+  };
 
   const chooseLook = key => {
     const look = LOOKS[key];
@@ -133,6 +175,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
     const cleanTitle = caption.replace(/#[^\s]+/gu, "").replace(/\s*(?:【[^】]+】|\[[^\]]+\])\s*$/u, "").replace(/\s+/gu, " ").trim();
     setText((cleanTitle || caption).slice(0, 100));
     setPosition("auto");
+    setCaptionOffset(null);
   };
   const apply = () => {
     if (!ready || !canvas.current) return;
@@ -149,14 +192,15 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
   return <section className="thumbnail-designer" aria-label="Thiết kế ảnh bìa">
     <header><div><strong>Thiết kế thumbnail</strong><p>Đổi màu, thêm chữ và xem ngay trên ảnh · 1280 × 720</p></div><button type="button" className="btn secondary" onClick={onClose}>Đóng chỉnh ảnh</button></header>
     {error && <p role="alert" className="youtube-error">{error}</p>}
-    <canvas ref={canvas} width={1280} height={720} aria-label="Ảnh bìa xem trước" />
+    <canvas ref={canvas} width={1280} height={720} tabIndex={text.trim() ? 0 : undefined} aria-label="Ảnh bìa xem trước. Kéo chữ hoặc dùng phím mũi tên để di chuyển." className={text.trim() ? "thumbnail-draggable" : undefined} onPointerDown={startDrag} onPointerMove={moveDrag} onLostPointerCapture={endDrag} onPointerCancel={endDrag} onKeyDown={moveWithKeys} />
+    {text.trim() && <small>Kéo chữ trên ảnh để đổi vị trí. Dùng phím mũi tên để chỉnh từng bước.</small>}
     <div className="thumbnail-looks">{Object.entries(LOOKS).map(([key, look]) => <button type="button" className="btn secondary" key={key} onClick={()=>chooseLook(key)}>{look.label}</button>)}<button type="button" className="btn primary" onClick={autoLayout} disabled={!title}>Tự bố trí theo tiêu đề</button></div>
     <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>{setText(event.target.value);setError("");}} /></label>
     <label className="thumbnail-background-toggle"><input type="checkbox" checked={!showBackground} onChange={event=>setShowBackground(!event.target.checked)} />Không nền chữ · chỉ giữ chữ và viền</label>
-    <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={position} onChange={event=>setPosition(event.target.value)}><option value="auto">Tự căn</option><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
-    {image && image.naturalWidth < image.naturalHeight && <label>Vị trí ảnh dọc<select value={portraitSide} onChange={event => setPortraitSide(event.target.value)}><option value="right">Ảnh phải · Chữ trái</option><option value="left">Ảnh trái · Chữ phải</option></select></label>}
+    <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={captionOffset ? "free" : position} onChange={event=>{setPosition(event.target.value);setCaptionOffset(null);}}><option value="free" disabled>Kéo tự do</option><option value="auto">Tự căn</option><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
+    {image && image.naturalWidth < image.naturalHeight && <label>Vị trí ảnh dọc<select value={portraitSide} onChange={event => {setPortraitSide(event.target.value);setCaptionOffset(null);}}><option value="right">Ảnh phải · Chữ trái</option><option value="left">Ảnh trái · Chữ phải</option></select></label>}
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
-    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("auto");setPortraitSide("right");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
+    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("auto");setCaptionOffset(null);setPortraitSide("right");setShowBackground(false);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
     <small>Chỉnh ảnh trong trình duyệt. Bấm “Dùng ảnh bìa này” để áp dụng vào lượt đăng. Font hiển thị tùy theo thiết bị.</small>
   </section>;
 }

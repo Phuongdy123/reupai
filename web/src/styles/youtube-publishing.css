@@ -107,3 +107,6 @@
 
 .thumbnail-designer > .thumbnail-background-toggle { display: flex; align-items: center; gap: 10px; line-height: 1.6; }
 .thumbnail-background-toggle input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: #eeeeef; }
+
+.thumbnail-designer canvas.thumbnail-draggable { touch-action: none; cursor: grab; }
+.thumbnail-designer canvas.thumbnail-draggable:active { cursor: grabbing; }
