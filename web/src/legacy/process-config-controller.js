@@ -528,6 +528,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const reviewPreviewLoading = reviewDialog?.querySelector('#processTranscriptPreviewLoading');
     const reviewPreviewRetry = reviewDialog?.querySelector('#processTranscriptPreviewRetry');
     const translationRetry = reviewDialog?.querySelector('#processTranscriptTranslationRetry');
+    if (translationRetry) translationRetry.hidden = true;
     const reviewEngineUpdate = reviewDialog?.querySelector('#processTranscriptEngineUpdate');
     if (reviewEngineUpdate) reviewEngineUpdate.hidden = true;
     const reviewStages = [

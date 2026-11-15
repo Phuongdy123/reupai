@@ -452,7 +452,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <div class="process-transcript-review-footnote">Dùng đúng bản dịch bạn duyệt để xuất phụ đề, giọng đọc và video.</div>
                     <div class="process-transcript-review-buttons"><button type="button" class="btn secondary" id="processTranscriptReviewSkip" hidden>Bỏ qua kiểm tra</button>
                     <button type="button" class="btn secondary" id="processTranscriptTranslationRetry" hidden>Thử dịch lại</button>
-                    <a class="btn secondary" id="processTranscriptEngineUpdate" href="/local-engine" target="_blank" rel="noopener" hidden>Cập nhật Local Engine</a>
+                    <a class="btn secondary" id="processTranscriptEngineUpdate" href="/api/engine/download" target="_blank" rel="noopener" hidden>Tải bản cập nhật Engine</a>
                     <button type="button" class="btn primary" id="processTranscriptReviewConfirm" disabled>Đúng rồi · Tiếp tục</button></div>
                 </footer>
             </div>`;
