@@ -260,6 +260,75 @@ def _format_quota_error(reason: str) -> str:
     return "Gemini Nano Banana đang giới hạn lượt tạo ảnh (429). Hãy đợi 30–60 giây rồi thử lại hoặc kiểm tra quota của project."
 
 
+def _describe_scene_for_free_image(decoded, prompt: str, project: str | None, api_key: str) -> str:
+    """Use free Gemini text/vision model to turn the reference frame + direction into a crisp Flux prompt."""
+    import requests
+    from services.gemini_oauth import authorized_request
+
+    parts = [
+        {
+            "text": (
+                "Write a single concise English image-generation prompt (max 320 chars, no quotes, no markdown, no text-in-image) "
+                "for a dramatic 16:9 YouTube thumbnail based on the reference character/style and this direction: "
+                f"{prompt[:500]}"
+            )
+        }
+    ]
+    if decoded:
+        data, mime_type = decoded
+        parts.append({
+            "inlineData": {
+                "mimeType": mime_type,
+                "data": base64.b64encode(data).decode("ascii"),
+            }
+        })
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    body = {"contents": [{"parts": parts}]}
+    try:
+        if project:
+            resp = authorized_request("POST", url, project_id=project, timeout=(8, 25), json=body)
+        elif api_key:
+            resp = requests.post(
+                url,
+                headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+                json=body,
+                timeout=(8, 25),
+            )
+        else:
+            resp = None
+        if resp and resp.ok:
+            for cand in resp.json().get("candidates", []):
+                for part in cand.get("content", {}).get("parts", []):
+                    txt = (part.get("text") or "").strip()
+                    if txt:
+                        return txt[:380]
+    except Exception:
+        pass
+    return prompt.strip()[:380]
+
+
+def _generate_free_pollinations_thumbnail(scene_prompt: str) -> dict:
+    """100% free fallback image generation using Pollinations Flux (1280x720, no API key required)."""
+    import random
+    import urllib.parse
+    import requests
+
+    seed = random.randint(1, 999999)
+    encoded = urllib.parse.quote(scene_prompt, safe="")
+    url = (
+        f"https://image.pollinations.ai/prompt/{encoded}"
+        f"?width=1280&height=720&model=flux&nologo=true&seed={seed}"
+    )
+    resp = requests.get(url, timeout=(10, 60))
+    if not resp.ok or not resp.content or len(resp.content) < 2048:
+        raise RuntimeError(f"Dịch vụ tạo ảnh miễn phí tạm bận (HTTP {resp.status_code}). Hãy thử lại sau.")
+    content_type = (resp.headers.get("content-type") or "image/jpeg").split(";")[0].strip().lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        content_type = "image/jpeg"
+    encoded_img = base64.b64encode(resp.content).decode("ascii")
+    return {"image": f"data:{content_type};base64,{encoded_img}", "model": "pollinations-flux-free"}
+
+
 def generate_thumbnail_artwork(reference, prompt):
     import os
     import requests
@@ -271,7 +340,7 @@ def generate_thumbnail_artwork(reference, prompt):
     project = get_project_id()
     api_key = (os.getenv("GEMINI_API_KEY") or "").strip()
     if not project and not api_key:
-        raise RuntimeError("Hãy kết nối Gemini hoặc nhập GEMINI_API_KEY trong Cài đặt trước.")
+        return _generate_free_pollinations_thumbnail(prompt.strip()[:380])
 
     parts = [{"text": prompt.strip()}]
     if decoded:
@@ -339,20 +408,23 @@ def generate_thumbnail_artwork(reference, prompt):
             last_error = quota_error
             continue
         if response.status_code in {401, 403}:
-            raise RuntimeError("Google từ chối tạo ảnh. Hãy kiểm tra kết nối Gemini hoặc API key.")
+            last_error = "Google từ chối tạo ảnh Nano Banana."
+            continue
         if not response.ok:
             try:
                 reason = str(response.json().get("error", {}).get("message", "")).lower()
             except (ValueError, AttributeError):
                 reason = ""
             if "billing" in reason or "paid" in reason:
-                raise RuntimeError("Project Gemini cần bật thanh toán để dùng Nano Banana tạo ảnh.")
+                last_error = "Project Gemini cần bật thanh toán để dùng Nano Banana."
+                continue
             if response.status_code == 400 and ("not found" in reason or "not supported" in reason):
                 last_error = reason
                 continue
             if response.status_code == 400:
                 raise RuntimeError("Gemini từ chối dữ liệu ảnh hoặc cấu hình tạo ảnh. Hãy chọn lại ảnh tham chiếu.")
-            raise RuntimeError(f"Nano Banana chưa tạo được ảnh (HTTP {response.status_code}).")
+            last_error = f"Nano Banana chưa tạo được ảnh (HTTP {response.status_code})."
+            continue
 
         for candidate in response.json().get("candidates", []):
             for part in candidate.get("content", {}).get("parts", []):
@@ -361,7 +433,11 @@ def generate_thumbnail_artwork(reference, prompt):
                 if kind in {"image/jpeg", "image/png"} and isinstance(encoded, str) and len(encoded) <= 12 * 1024 * 1024:
                     return {"image": f"data:{kind};base64,{encoded}", "model": model_name}
 
-    raise RuntimeError(quota_error or last_error or "Nano Banana không trả về ảnh. Hãy thử mô tả khác.")
+    try:
+        scene_prompt = _describe_scene_for_free_image(decoded, prompt, project, api_key)
+        return _generate_free_pollinations_thumbnail(scene_prompt)
+    except Exception:
+        raise RuntimeError(quota_error or last_error or "Nano Banana không trả về ảnh. Hãy thử mô tả khác.")
 
 
 def thumbnail_choices(video: Path):

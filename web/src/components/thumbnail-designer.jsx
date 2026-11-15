@@ -312,6 +312,38 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
       if (!controller.signal.aborted) setGeneratingImage(false);
     }
   };
+  const generateFreeArtwork = async () => {
+    if (imageRequest.current) return;
+    const controller = new AbortController();
+    imageRequest.current = controller;
+    setGeneratingImage(true);
+    setError("");
+    const scenePrompt = `${artDirection.trim() || "Dramatic anime story poster, expressive lead character, vivid rim lighting"}, ${title ? `context: ${title}, ` : ""}16:9 YouTube thumbnail artwork, no text, no watermark`.slice(0, 380);
+    try {
+      const seed = Math.floor(Math.random() * 999999) + 1;
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(scenePrompt)}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
+      const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]) });
+      if (!response.ok) throw new Error(`Dịch vụ tạo ảnh miễn phí tạm bận (HTTP ${response.status}). Hãy thử lại sau.`);
+      const blob = await response.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Không đọc được ảnh tải về."));
+        reader.readAsDataURL(blob);
+      });
+      if (!/^data:image\/(jpeg|png|webp);base64,/i.test(dataUrl)) throw new Error("Ảnh miễn phí trả về không hợp lệ.");
+      if (!controller.signal.aborted) {
+        setReady(false);
+        setGeneratedImage(dataUrl);
+      }
+    } catch (requestError) {
+      if (!controller.signal.aborted) setError(requestError.name === "TimeoutError" ? "Tạo ảnh miễn phí quá lâu. Hãy thử lại." : requestError.message);
+    } finally {
+      imageRequest.current = null;
+      if (!controller.signal.aborted) setGeneratingImage(false);
+    }
+  };
+
   const apply = () => {
     if (!ready || !canvas.current || (artworkOnly && !generatedImage)) return;
     if (/[\p{Script=Han}]/u.test(text)) { setError("Chữ trên ảnh vẫn còn tiếng Trung. Bấm Tự bố trí theo tiêu đề hoặc sửa thành tiếng Việt trước khi áp dụng."); return; }
@@ -339,7 +371,10 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
       <label>Phong cách ảnh Nano Banana<input value={artDirection} maxLength={400} onChange={event => setArtDirection(event.target.value)} placeholder="Chọn nhanh style ở trên hoặc tự mô tả cảnh mới…" /></label>
       {onGenerateArtwork && <small>Để trống key để dùng kết nối Gemini / API key trong Cài đặt.</small>}
       <label>{onGenerateArtwork ? "Gemini API key (tùy chọn)" : "Gemini API key"}<input type="password" value={imageKey} autoComplete="off" spellCheck={false} onChange={event => setImageKey(event.target.value)} placeholder="API key của project Gemini" /></label>
-      <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Nano Banana đang vẽ ảnh…" : generatedImage ? "Tạo phiên bản Nano Banana khác" : "Tạo ảnh AI (Nano Banana)"}</button>
+      <div className="thumbnail-looks">
+        <button type="button" className="btn primary" disabled={generatingImage || (!onGenerateArtwork && !imageKey.trim())} onClick={generateArtwork}>{generatingImage ? "Đang vẽ ảnh AI…" : generatedImage ? "Tạo lại bằng Nano Banana" : "Tạo ảnh AI (Nano Banana)"}</button>
+        <button type="button" className="btn secondary" disabled={generatingImage} onClick={generateFreeArtwork}>{generatingImage ? "Đang vẽ…" : "Tạo ảnh AI Free (Flux · không cần key)"}</button>
+      </div>
     </div>}
     {imageSource && <>
     {artworkOnly && <strong>Ảnh mới · Xem trước</strong>}
