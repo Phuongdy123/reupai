@@ -7252,6 +7252,110 @@ async function loadSeries() {
 }
 
 
+function cleanClientSeriesBase(value) {
+    return String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/^[\s\-–—:：#|｜/\\]+|[\s\-–—:：#|｜/\\]+$/g, '')
+        .trim();
+}
+
+function clientSeriesKeyFromName(name) {
+    return String(name || '')
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\u4e00-\u9fff]+/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function detectClientSeriesFromTitle(rawTitle) {
+    const original = String(rawTitle || '').replace(/\s+/g, ' ').trim();
+    if (!original) return null;
+
+    const seasonMatch = original.match(/(《[^》]{2,80}》)\s*第?\s*([\d一二三四五六七八九十]{1,3})\s*季\s*(?:第\s*)?(\d{1,4})(?=\D|$)/);
+    if (seasonMatch) {
+        const name = cleanClientSeriesBase(`${seasonMatch[1]} 第${seasonMatch[2]}季`);
+        return { series_name: name, series_key: clientSeriesKeyFromName(name), episode_number: Number(seasonMatch[3]) };
+    }
+
+    const patterns = [
+        /\bs\d{1,2}\s*[-.]?\s*e(?:p)?\s*(\d{1,4})\b/i,
+        /(?:^|[\s\-–—:：|(\[【])(?:phần|phan|part|episode|ep|tập|tap|p)\s*[-:#.]?\s*(\d{1,4})(?=\D|$)/i,
+        /第\s*(\d{1,4})\s*[集话話期部章回篇]/,
+        /(?<!\d)(\d{1,4})\s*\/\s*\d{1,4}(?!\d)/,
+        /(?:[\[【(]\s*(\d{1,3})\s*[\]】)]|#(\d{1,3})(?=\D|$))/,
+        /(?<=[^\d\s])\s+(\d{1,3})$/,
+    ];
+    for (const pattern of patterns) {
+        const match = pattern.exec(original);
+        if (!match) continue;
+        const epNum = Number(match[1] || match[2]);
+        if (!Number.isFinite(epNum) || epNum <= 0 || epNum > 5000) continue;
+        const before = cleanClientSeriesBase(original.slice(0, match.index));
+        const after = cleanClientSeriesBase(original.slice(match.index + match[0].length));
+        const tail = original.slice(match.index + match[0].length).trimStart();
+        const name = (before.length >= 3 && (!tail || /^[:：\-–—|｜]/.test(tail) || after.length <= 40))
+            ? before
+            : cleanClientSeriesBase(`${before} ${after}`);
+        if (name.length >= 2) {
+            return { series_name: name, series_key: clientSeriesKeyFromName(name), episode_number: epNum };
+        }
+    }
+
+    const quoted = original.match(/《([^》]{2,60})》|【([^】]{2,50})】/);
+    if (quoted) {
+        const name = cleanClientSeriesBase(quoted[1] || quoted[2]);
+        if (name.length >= 2) {
+            return { series_name: name, series_key: clientSeriesKeyFromName(name), episode_number: null };
+        }
+    }
+    return null;
+}
+
+function clusterUnmatchedSeries(videos) {
+    const unmatched = videos.filter(v => !String(v.series_key || '').trim() && String(v.title || '').trim());
+    if (unmatched.length < 2) return;
+    const entries = unmatched
+        .map(v => ({ video: v, clean: cleanClientSeriesBase(String(v.title || '').replace(/\s*\d{1,4}\s*$/, '')) }))
+        .filter(e => e.clean.length >= 4)
+        .sort((a, b) => a.clean.localeCompare(b.clean));
+
+    const commonPrefix = (a, b) => {
+        const len = Math.min(a.length, b.length);
+        let i = 0;
+        while (i < len && a[i].toLowerCase() === b[i].toLowerCase()) i++;
+        return cleanClientSeriesBase(a.slice(0, i));
+    };
+
+    const prefixCounts = new Map();
+    for (let i = 0; i < entries.length - 1; i++) {
+        const pref = commonPrefix(entries[i].clean, entries[i + 1].clean);
+        const cjk = (pref.match(/[\u4e00-\u9fff]/g) || []).length;
+        if (pref.length >= 6 || cjk >= 4) {
+            const key = clientSeriesKeyFromName(pref);
+            if (key.length >= 3) {
+                prefixCounts.set(key, { name: pref, key });
+            }
+        }
+    }
+    for (const { video, clean } of entries) {
+        let best = null;
+        for (const candidate of prefixCounts.values()) {
+            if (clean.toLowerCase().startsWith(candidate.name.toLowerCase())) {
+                if (!best || candidate.name.length > best.name.length) best = candidate;
+            }
+        }
+        if (best) {
+            const matchCount = entries.filter(e => e.clean.toLowerCase().startsWith(best.name.toLowerCase())).length;
+            if (matchCount >= 2) {
+                video.series_key = best.key;
+                video.series_name = best.name;
+            }
+        }
+    }
+}
+
 function mergeCurrentVideoSeries() {
 
     const localGroups = new Map();
@@ -7281,6 +7385,26 @@ function mergeCurrentVideoSeries() {
             ? Object.values(pageCache).flat()
             : currentVideos
     );
+
+    for (const video of seriesCandidates) {
+        const playlistName = cleanClientSeriesBase(
+            video.playlist_title || video.season_title || video.collection_title || video.mix_name || ''
+        );
+        if (playlistName.length >= 2) {
+            video.series_name = playlistName;
+            video.series_key = clientSeriesKeyFromName(playlistName);
+        } else if (!String(video.series_key || '').trim() || !String(video.series_name || '').trim()) {
+            const detected = detectClientSeriesFromTitle(video.title);
+            if (detected?.series_key && detected?.series_name) {
+                video.series_key = detected.series_key;
+                video.series_name = detected.series_name;
+                if (detected.episode_number != null && video.episode_number == null) {
+                    video.episode_number = detected.episode_number;
+                }
+            }
+        }
+    }
+    clusterUnmatchedSeries(seriesCandidates);
 
     for (const video of seriesCandidates) {
 

@@ -659,26 +659,75 @@ SERIES_PATTERNS = [
         r"(?P<episode>\d{1,4})(?=\D|$)"
     ),
 
+    # S01E02 / S1 E2
     re.compile(
-        r"(?i)\b(?:phần|phan|part|episode|ep|tập|tap)"
-        r"\s*[-:#.]?\s*(\d{1,4})\b"
+        r"(?i)\bs\d{1,2}\s*[-.]?\s*e(?:p)?\s*(\d{1,4})\b"
     ),
 
+    # Vietnamese / English episode markers: Tập 1, Phần 2, Part 3, EP01, P1, E02
     re.compile(
-        r"第\s*(\d{1,4})\s*[集话話期部]"
+        r"(?i)(?:^|[\s\-–—:：|(\[【])(?:phần|phan|part|episode|ep|tập|tap|p)\s*[-:#.]?\s*(\d{1,4})(?=\D|$)"
     ),
 
+    # Chinese episode markers: 第1集, 第12话, 第3期
+    re.compile(
+        r"第\s*(\d{1,4})\s*[集话話期部章回篇]"
+    ),
+
+    # Fraction style: 1/10, 02/12
     re.compile(
         r"(?<!\d)(\d{1,4})\s*/\s*\d{1,4}(?!\d)"
     ),
 
-    # Chinese titles often encode a playlist as “系列之…”, without an
-    # explicit episode number. Keep the shared series name for grouping.
+    # Bracketed / hash episode number: 【01】, [12], (3), #04
+    re.compile(
+        r"(?:[\[【(]\s*(\d{1,3})\s*[\]】)]|#(\d{1,3})(?=\D|$))"
+    ),
+
+    # Trailing episode number at the end of title: "Tên series 01"
+    re.compile(
+        r"(?<=[^\d\s])\s+(\d{1,3})$"
+    ),
+
+    # Chinese playlist prefix: “系列之…”
     re.compile(
         r"(?P<series>[\u4e00-\u9fffA-Za-z0-9]{2,40}系列)"
         r"(?:之|：|:|\s|《)"
     ),
 ]
+
+_CN_EPISODE_RE = re.compile(r"第\s*([一二三四五六七八九十百]{1,4})\s*[集话話期部章回篇]")
+_CN_NUMERALS = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
+_QUOTED_SERIES_RE = re.compile(r"(?:《([^》]{2,60})》|【([^】]{2,50})】)")
+
+
+def _parse_cn_numeral(token):
+    if token in _CN_NUMERALS:
+        return _CN_NUMERALS[token]
+    if len(token) == 2 and token[0] == "十" and token[1] in _CN_NUMERALS:
+        return 10 + _CN_NUMERALS[token[1]]
+    if len(token) == 2 and token[1] == "十" and token[0] in _CN_NUMERALS:
+        return _CN_NUMERALS[token[0]] * 10
+    if len(token) == 3 and token[1] == "十" and token[0] in _CN_NUMERALS and token[2] in _CN_NUMERALS:
+        return _CN_NUMERALS[token[0]] * 10 + _CN_NUMERALS[token[2]]
+    return None
+
+
+def _series_key_from_base(base):
+    key = unicodedata.normalize("NFKC", base).casefold()
+    key = re.sub(r"[^\w\u4e00-\u9fff]+", " ", key)
+    return normalize_spaces(key)
+
+
+def _strip_episode_subtitle(original, match_start, match_end):
+    before = clean_series_base(original[:match_start])
+    after = clean_series_base(original[match_end:])
+    # If the series name is clearly before the episode marker and what follows looks like a per-episode subtitle, drop the subtitle so episodes group together.
+    if len(before) >= 3:
+        tail = original[match_end:].lstrip()
+        if not tail or tail[0] in ":：-–—|｜" or len(after) <= 40:
+            return before
+    return clean_series_base(f"{before} {after}")
 
 
 def normalize_spaces(
@@ -783,58 +832,53 @@ def detect_series(
                 "episode_label": None,
             }
 
-        episode = int(match.group(1))
+        ep_raw = next((g for g in match.groups() if g and g.isdigit()), None)
+        if not ep_raw:
+            continue
+        episode = int(ep_raw)
+        if episode <= 0 or episode > 5000:
+            continue
 
-        base = (
-            original[
-                :match.start()
-            ]
-            + " "
-            + original[
-                match.end():
-            ]
-        )
-
-        base = clean_series_base(
-            base
+        base = _strip_episode_subtitle(
+            original,
+            match.start(),
+            match.end(),
         )
 
         if len(base) < 2:
             continue
 
-        key = (
-            unicodedata.normalize(
-                "NFKC",
-                base,
-            )
-            .casefold()
-        )
-
-        key = re.sub(
-            r"[^\w\u4e00-\u9fff]+",
-            " ",
-            key,
-        )
-
-        key = normalize_spaces(
-            key
-        )
+        key = _series_key_from_base(base)
 
         return {
-            "series_name":
-                base,
-
-            "series_key":
-                key,
-
-            "episode_number":
-                episode,
-
-            "episode_label":
-                str(
-                    episode
-                ),
+            "series_name": base,
+            "series_key": key,
+            "episode_number": episode,
+            "episode_label": str(episode),
         }
+
+    cn_match = _CN_EPISODE_RE.search(original)
+    if cn_match:
+        cn_ep = _parse_cn_numeral(cn_match.group(1))
+        base = _strip_episode_subtitle(original, cn_match.start(), cn_match.end())
+        if cn_ep and len(base) >= 2:
+            return {
+                "series_name": base,
+                "series_key": _series_key_from_base(base),
+                "episode_number": cn_ep,
+                "episode_label": str(cn_ep),
+            }
+
+    quoted = _QUOTED_SERIES_RE.search(original)
+    if quoted:
+        base = clean_series_base(quoted.group(1) or quoted.group(2))
+        if len(base) >= 2:
+            return {
+                "series_name": base,
+                "series_key": _series_key_from_base(base),
+                "episode_number": None,
+                "episode_label": None,
+            }
 
     # Trung: 上集 / 下集.
     for token, number in (
