@@ -1129,6 +1129,32 @@ body.theme-xports .output-library-card .library-actions .output-edit-result {
   letter-spacing: normal;
 }
 
+/* Tracked-channels view: show ONLY the source search + follow bar and tracked channels grid. */
+body.theme-xports.is-tracked-view :is(
+  .source-workspace-intro,
+  .source-filter-row,
+  .v13-manager,
+  .source-status-strip,
+  #info,
+  #bottomPages,
+  #pageInfo
+),
+body.theme-xports:has(#videos.tracked-sources-view) :is(
+  .source-workspace-intro,
+  .source-filter-row,
+  .v13-manager,
+  .source-status-strip,
+  #info,
+  #bottomPages,
+  #pageInfo
+) {
+  display: none !important;
+}
+body.theme-xports.is-tracked-view .source-panel,
+body.theme-xports:has(#videos.tracked-sources-view) .source-panel {
+  padding: 14px 16px;
+}
+
 
 
 

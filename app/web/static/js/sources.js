@@ -9215,6 +9215,10 @@ function trackedSourcesIcon() {
 function setTrackedSidebarActive(
     active
 ) {
+    document.body.classList.toggle(
+        'is-tracked-view',
+        !!active
+    );
 
     const nav = (
         document.getElementById(
@@ -9797,6 +9801,11 @@ function renderTrackedSourcesView() {
     root.classList.add(
         'tracked-sources-view'
     );
+
+    const bottomPages = document.getElementById('bottomPages');
+    if (bottomPages) bottomPages.innerHTML = '';
+    const pageInfo = document.getElementById('pageInfo');
+    if (pageInfo) pageInfo.textContent = '';
 
     updateViewLabel(
         'Nguồn theo dõi'

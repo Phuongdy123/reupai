@@ -398,9 +398,39 @@ def add_source(
     ).fetchone()
 
     if not channel:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO channels (
+                channel_key,
+                name,
+                created_at
+            )
+            VALUES (?, ?, ?)
+            """,
+            (
+                channel_key,
+                channel_key,
+                now(),
+            )
+        )
+        conn.commit()
+        (CHANNELS_DIR / channel_key / "jobs").mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        channel = conn.execute(
+            """
+            SELECT id
+            FROM channels
+            WHERE channel_key = ?
+            """,
+            (
+                channel_key,
+            )
+        ).fetchone()
 
+    if not channel:
         conn.close()
-
         raise ValueError(
             f"Channel khong ton tai: "
             f"{channel_key}"
