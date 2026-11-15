@@ -199,7 +199,7 @@ export function VideoCover({ client, video, children, previewPath }) {
     loadCover();
     return () => { alive = false; controller.abort(); if (blobUrl) URL.revokeObjectURL(blobUrl); };
   }, [client, shouldLoad, video.cover_url, previewPath]);
-  return <div className="library-cover" ref={coverRef}>{url ? <img src={url} alt={video.title || video.video_id} loading="lazy" /> : previewUrl ? <video className="library-preview" crossOrigin="anonymous" src={previewUrl} muted playsInline preload="metadata" aria-label={`Xem trước ${video.title || video.video_id}`} onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(.1, event.currentTarget.duration || 0); }} /> : <div className="no-cover"><Icon name="play" size={30} /></div>}{children}</div>;
+  return <div className="library-cover" ref={coverRef}>{url ? <img src={url} alt={video.title || video.video_id} loading="lazy" decoding="async" /> : previewUrl ? <video className="library-preview" crossOrigin="anonymous" src={previewUrl} muted playsInline preload="metadata" aria-label={`Xem trước ${video.title || video.video_id}`} onLoadedMetadata={(event) => { event.currentTarget.currentTime = Math.min(.1, event.currentTarget.duration || 0); }} /> : <div className="no-cover"><Icon name="play" size={30} /></div>}{children}</div>;
 }
 export function PreviewDialog({ client, item, onClose, onError, onEdit, onPublish, onSocial }) {
   const [url, setUrl] = useState(null);

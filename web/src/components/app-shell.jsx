@@ -98,7 +98,15 @@ export function AppShell({ children }) {
   const { isGuest, promptOpen, requestSignIn } = useGuestAccess();
   const { preview } = useEngine();
   const [title, subtitle] = pages[pathname] || ["ReupAI", "Video workspace"];
-  const [identity, setIdentity] = useState(null);
+  const [identity, setIdentity] = useState(() => {
+    try {
+      const raw = window.sessionStorage.getItem("reupai:identity-cache-v1");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && Date.now() - (parsed.ts || 0) < 5 * 60 * 1000) return parsed.data || null;
+    } catch {}
+    return null;
+  });
   const { account: billing } = useBilling();
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickQuery, setQuickQuery] = useState("");
@@ -145,18 +153,24 @@ export function AppShell({ children }) {
     };
   }, [mobileNavOpen, quickOpen, promptOpen]);
   useEffect(() => {
-    if (isGuest || !isSupabaseConfigured()) return;
+    if (isGuest || !isSupabaseConfigured() || identity) return;
     let active = true;
     const supabase = createClient();
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user || !active) return;
       const { data: profile } = await supabase.from("profiles").select("display_name,role").eq("id", user.id).maybeSingle();
-      if (active) setIdentity({
+      const nextIdentity = {
         email: user.email,
         name: profile?.display_name || user.user_metadata?.full_name || user.user_metadata?.name || user.email,
         role: profile?.role,
         avatarUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture || "",
-      });
+      };
+      if (active) {
+        setIdentity(nextIdentity);
+        try {
+          window.sessionStorage.setItem("reupai:identity-cache-v1", JSON.stringify({ ts: Date.now(), data: nextIdentity }));
+        } catch {}
+      }
     }).catch(() => {});
     return () => { active = false; };
   }, [isGuest]);

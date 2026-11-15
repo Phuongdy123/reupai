@@ -41,7 +41,11 @@ export function EngineProvider({ children }) {
       manager.check();
       timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 5000);
     };
-    poll();
+    if (localEngineClient.status === "connected") {
+      timer = window.setTimeout(poll, 10000);
+    } else {
+      poll();
+    }
     window.addEventListener("online", reconnect);
     document.addEventListener("visibilitychange", reconnect);
     return () => { active = false; unsubscribe(); window.clearTimeout(timer); window.removeEventListener("online", reconnect); document.removeEventListener("visibilitychange", reconnect); manager.destroy(); };

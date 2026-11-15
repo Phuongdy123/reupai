@@ -59,7 +59,7 @@ export function ClickBurst() {
     let rings = [];
 
     function resize() {
-      pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1 : 1.25);
+      pixelRatio = 1;
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.round(width * pixelRatio);
@@ -113,7 +113,7 @@ export function ClickBurst() {
 
     function createBurst(event) {
       if (reducedMotion.matches || !event.isPrimary || event.button !== 0) return;
-      if (event.target instanceof Element && event.target.closest("input, textarea, select, video, audio, [contenteditable='true'], canvas")) return;
+      if (event.target instanceof Element && event.target.closest("a[href], input, textarea, select, video, audio, [contenteditable='true'], canvas")) return;
 
       const x = event.clientX;
       const y = event.clientY;
