@@ -25,12 +25,15 @@ from services.library_db import (
     add_videos_to_collection,
     create_collection,
     delete_collection,
+    delete_saved_series,
     library_meta,
     list_collections,
     list_library_videos,
+    list_saved_series,
     list_series,
     load_ui_state,
     remove_video_from_collection,
+    save_series_entry,
     save_ui_state,
     toggle_favorite,
     upsert_video_dict,
@@ -1376,3 +1379,43 @@ def api_put_ui_state(
         "ok":
             True,
     }
+
+
+class SavedSeriesBody(BaseModel):
+    series_key: str
+    name: str
+    source_key: Optional[str] = ""
+    source_label: Optional[str] = ""
+    sort_mode: Optional[str] = "episode_asc"
+    config: Optional[dict] = None
+    video_ids: Optional[list[str]] = None
+
+
+@router.get("/series/saved")
+def api_list_saved_series(request: Request):
+    user_id = user_id_from_request(request)
+    items = list_saved_series(user_id)
+    return {"count": len(items), "series": items}
+
+
+@router.post("/series/saved")
+def api_save_series(body: SavedSeriesBody, request: Request):
+    user_id = user_id_from_request(request)
+    item = save_series_entry(
+        user_id=user_id,
+        series_key=body.series_key,
+        name=body.name,
+        source_key=body.source_key or "",
+        source_label=body.source_label or "",
+        sort_mode=body.sort_mode or "episode_asc",
+        config=body.config or {},
+        video_ids=body.video_ids or [],
+    )
+    return {"ok": True, "series": item}
+
+
+@router.delete("/series/saved/{series_key}")
+def api_delete_saved_series(series_key: str, request: Request):
+    user_id = user_id_from_request(request)
+    deleted = delete_saved_series(user_id, series_key)
+    return {"ok": True, "deleted": deleted}

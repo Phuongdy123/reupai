@@ -160,6 +160,25 @@ def ensure_schema():
 
         cursor.execute(
             """
+            CREATE TABLE IF NOT EXISTS saved_series (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                series_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                source_key TEXT DEFAULT '',
+                source_label TEXT DEFAULT '',
+                sort_mode TEXT NOT NULL DEFAULT 'episode_asc',
+                config_json TEXT NOT NULL DEFAULT '{}',
+                video_ids_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, series_key)
+            )
+            """
+        )
+
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS
             idx_library_videos_source
             ON library_videos(source_id)
@@ -2261,6 +2280,190 @@ def load_ui_state(
         except Exception:
             return None
 
+    finally:
+        conn.close()
+
+
+def _episode_sort_key(video, sort_mode="episode_asc"):
+    ep = video.get("episode_number")
+    ep_val = int(ep) if ep is not None else 999999
+    pub = str(video.get("published_at") or video.get("upload_date") or "").strip()
+    title = str(video.get("title") or "").lower()
+    if sort_mode == "oldest_first":
+        return (pub or "9999-99-99", ep_val, title)
+    return (ep_val, pub or "9999-99-99", title)
+
+
+def list_saved_series(user_id):
+    ensure_schema()
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT series_key, name, source_key, source_label, sort_mode,
+                   config_json, video_ids_json, created_at, updated_at
+            FROM saved_series
+            WHERE user_id = ?
+            ORDER BY updated_at DESC
+            """,
+            (int(user_id),),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return []
+
+    videos = list_library_videos(
+        user_id,
+        limit=2000,
+        include_local_state=True,
+        include_favorite=False,
+    )
+    by_series = {}
+    by_video_id = {}
+    for video in videos:
+        vid = str(video.get("video_id") or "")
+        if vid:
+            by_video_id[vid] = video
+        sk = str(video.get("series_key") or "")
+        if sk:
+            by_series.setdefault(sk, []).append(video)
+
+    result = []
+    for row in rows:
+        series_key = str(row["series_key"])
+        sort_mode = str(row["sort_mode"] or "episode_asc")
+        try:
+            config = json.loads(row["config_json"] or "{}")
+            if not isinstance(config, dict):
+                config = {}
+        except Exception:
+            config = {}
+        try:
+            video_ids = json.loads(row["video_ids_json"] or "[]")
+            if not isinstance(video_ids, list):
+                video_ids = []
+        except Exception:
+            video_ids = []
+
+        matched = []
+        if video_ids:
+            seen_ids = set()
+            for vid in video_ids:
+                v = by_video_id.get(str(vid))
+                if v and str(vid) not in seen_ids:
+                    seen_ids.add(str(vid))
+                    matched.append(v)
+        if not matched:
+            matched = list(by_series.get(series_key, []))
+
+        matched.sort(key=lambda v: _episode_sort_key(v, sort_mode))
+
+        processed_count = 0
+        processing_count = 0
+        for v in matched:
+            has_output = bool(
+                v.get("has_subtitle_result")
+                or v.get("has_voice_result")
+                or (v.get("output_files") or [])
+            )
+            if has_output:
+                processed_count += 1
+            elif v.get("processing"):
+                processing_count += 1
+
+        total_count = len(matched)
+        pending_count = max(0, total_count - processed_count - processing_count)
+
+        result.append({
+            "series_key": series_key,
+            "name": row["name"],
+            "source_key": row["source_key"] or "",
+            "source_label": row["source_label"] or "",
+            "sort_mode": sort_mode,
+            "config": config,
+            "video_ids": video_ids,
+            "total_count": total_count,
+            "processed_count": processed_count,
+            "processing_count": processing_count,
+            "pending_count": pending_count,
+            "progress_label": f"{processed_count}/{total_count}",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        })
+
+    return result
+
+
+def save_series_entry(
+    user_id,
+    series_key,
+    name,
+    source_key="",
+    source_label="",
+    sort_mode="episode_asc",
+    config=None,
+    video_ids=None,
+):
+    ensure_schema()
+    timestamp = now()
+    safe_sort = sort_mode if sort_mode in {"episode_asc", "oldest_first"} else "episode_asc"
+    config_json = json.dumps(config or {}, ensure_ascii=False)
+    video_ids_json = json.dumps(list(video_ids or []), ensure_ascii=False)
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO saved_series (
+                user_id, series_key, name, source_key, source_label,
+                sort_mode, config_json, video_ids_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, series_key)
+            DO UPDATE SET
+                name = excluded.name,
+                source_key = excluded.source_key,
+                source_label = excluded.source_label,
+                sort_mode = excluded.sort_mode,
+                config_json = excluded.config_json,
+                video_ids_json = excluded.video_ids_json,
+                updated_at = excluded.updated_at
+            """,
+            (
+                int(user_id),
+                str(series_key),
+                str(name),
+                str(source_key or ""),
+                str(source_label or ""),
+                safe_sort,
+                config_json,
+                video_ids_json,
+                timestamp,
+                timestamp,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    for item in list_saved_series(user_id):
+        if item["series_key"] == str(series_key):
+            return item
+    return None
+
+
+def delete_saved_series(user_id, series_key):
+    ensure_schema()
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "DELETE FROM saved_series WHERE user_id = ? AND series_key = ?",
+            (int(user_id), str(series_key)),
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 
