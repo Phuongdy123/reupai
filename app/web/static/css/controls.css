@@ -37,7 +37,7 @@ body.theme-xports :is(
   min-height: var(--btn-h);
   padding-block: 0;
   padding-inline: var(--btn-px);
-  border-radius: var(--ds-control-radius);
+  border-radius: 7px 2px 7px 2px;
   font-size: var(--btn-fs);
   font-weight: var(--ds-weight-medium);
   line-height: 1.2;
@@ -65,7 +65,7 @@ body.theme-xports .guest-browse .guest-source-controls .guest-source-sync {
   --btn-px: var(--ds-control-px-lg);
   --btn-fs: var(--ds-text-md);
   min-height: var(--btn-h);
-  border-radius: var(--ds-control-radius-lg);
+  border-radius: 8px 2px 8px 2px;
 }
 body.theme-xports .auth-premium .google-sign-in svg {
   width: var(--ds-icon);
@@ -123,7 +123,7 @@ body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .gu
   height: var(--ds-control-h);
   min-height: var(--ds-control-h);
   padding: 0;
-  border-radius: var(--ds-control-radius);
+  border-radius: 6px 2px 6px 2px;
 }
 body.theme-xports :is(.sidebar-mobile-toggle, .sidebar-mobile-close) {
   box-sizing: border-box;
@@ -132,7 +132,7 @@ body.theme-xports :is(.sidebar-mobile-toggle, .sidebar-mobile-close) {
   height: var(--ds-control-h);
   min-height: var(--ds-control-h);
   padding: 0;
-  border-radius: var(--ds-control-radius);
+  border-radius: 6px 2px 6px 2px;
 }
 body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close) :is(svg, .icon, .ui-icon) {
   width: var(--ds-icon);
@@ -406,7 +406,7 @@ body.theme-xports :is(#openSavedSource, #selectVisibleBtn, #seriesQuickBtn, .v13
   min-height: var(--ds-control-h) !important;
   padding: 0 12px !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: var(--ds-control-radius) !important;
+  border-radius: 7px 2px 7px 2px !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text) !important;
   font-size: var(--ds-text-sm) !important;
@@ -489,8 +489,11 @@ body.theme-xports .source-bar :is(input, select, button) {
   border-radius: var(--ds-control-radius-lg) !important;
   font-size: var(--ds-text-base) !important;
 }
+body.theme-xports .source-bar button {
+  border-radius: 8px 2px 8px 2px !important;
+}
 body.theme-xports .source-bar #syncSourceBtn {
-  border-radius: 10px 3px 10px 3px !important;
+  border-radius: 8px 2px 8px 2px !important;
   border: 1px solid rgb(255 255 255 / 85%) !important;
   background: linear-gradient(135deg, #ffffff 0%, #dcdce4 100%) !important;
   color: #09090a !important;
@@ -557,6 +560,9 @@ body.theme-xports .toolbar button {
   min-height: var(--ds-control-h) !important;
   border-radius: var(--ds-control-radius) !important;
   font-size: var(--ds-text-sm) !important;
+}
+body.theme-xports .toolbar button {
+  border-radius: 7px 2px 7px 2px !important;
 }
 body.theme-xports .source-filter-row .toolbar button {
   display: inline-flex !important;
@@ -656,7 +662,7 @@ body.theme-xports .compact-video-card .compact-badges .badge.ok {
 }
 body.theme-xports .compact-video-card .favorite-btn {
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: var(--ds-control-radius) !important;
+  border-radius: 7px 2px 7px 2px !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text-secondary) !important;
 }
@@ -682,7 +688,7 @@ body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary,
   min-height: var(--ds-control-h-sm) !important;
   height: var(--ds-control-h-sm) !important;
   padding-inline: var(--ds-control-px-sm) !important;
-  border-radius: var(--ds-control-radius) !important;
+  border-radius: 6px 2px 6px 2px !important;
   font-size: var(--ds-text-sm) !important;
   font-weight: var(--ds-weight-medium) !important;
   line-height: 1 !important;
@@ -705,7 +711,7 @@ body.theme-xports .compact-video-card .more-menu > summary.more-trigger {
   min-height: var(--ds-control-h-sm) !important;
   padding: 0 !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: var(--ds-control-radius) !important;
+  border-radius: 7px 2px 7px 2px !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text-secondary) !important;
 }
@@ -740,7 +746,7 @@ body.theme-xports .workspace-account-actions :is(.quick-nav-trigger, .workspace-
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 8px !important;
+  border-radius: 7px 2px 7px 2px !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -817,7 +823,7 @@ body.theme-xports .workspace-account-actions .local-engine-action {
   min-height: 28px !important;
   margin: 0 !important;
   padding: 0 10px !important;
-  border-radius: 6px !important;
+  border-radius: 5px 2px 5px 2px !important;
   font-size: 12px !important;
   box-sizing: border-box !important;
 }
@@ -829,7 +835,7 @@ body.theme-xports .workspace-account-actions .local-engine-action.engine-retry {
   min-height: 28px !important;
   padding: 0 !important;
   margin: 0 !important;
-  border-radius: 6px !important;
+  border-radius: 5px 2px 5px 2px !important;
   display: inline-grid !important;
   place-items: center !important;
 }
@@ -842,7 +848,7 @@ body.theme-xports .workspace-account-actions .plan-status-badge {
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 8px !important;
+  border-radius: 7px 2px 7px 2px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.06em !important;
@@ -864,5 +870,23 @@ body.theme-xports .workspace-account-actions .topbar-avatar {
   border-radius: 50% !important;
   box-sizing: border-box !important;
 }
+
+/* ---------- 6. Signature Cut-Corner Style Across All Web Buttons ---------- */
+body.theme-xports :is(
+  .btn, .btn.primary, .btn.secondary, .btn.danger, .btn.green, .btn.orange,
+  .btn-primary, .btn-secondary, .action-primary, .action-secondary,
+  .button, .button-primary, .button-secondary,
+  .plans-button, .profile-save, .account-submit,
+  .dashboard-create, .dashboard-engine-download, .dashboard-billing-card a,
+  .tracked-channel-open, .tracked-channel-edit, .tracked-channel-delete,
+  .assistant-send, .assistant-new-chat, .assistant-history-toggle,
+  .process-config-start, .bottom-page-btn, .batch-bar button
+):not(.topbar-avatar) {
+  border-radius: 7px 2px 7px 2px !important;
+}
+body.theme-xports :is(.btn.btn-lg, .btn.lg, .btn.button-large, .button-primary.button-large, .button-secondary.button-large, .dashboard-create) {
+  border-radius: 8px 2px 8px 2px !important;
+}
+
 
 
