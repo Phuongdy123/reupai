@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.52",
+    "version": "0.2.53",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.52/ReupAI-Setup-0.2.52.exe",
-    "sha256": "2a5219ab23d49d7d0b1e004b0e0c81fc2319d76edbbed57d2f2d0db8bc841ee4",
-    "size": 464980291,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.53/ReupAI-Setup-0.2.53.exe",
+    "sha256": "65ce98a4aa31c3179292f0e589b9ff906baf078caf36fdd6fb201cfe1dfd8af0",
+    "size": 464989573,
     "notes": [
-      "Chỉnh câu tiếng Việt, thời gian và giọng đọc ngay trong thành phẩm; xuất lại bằng nội dung đã sửa.",
-      "Tự tiếp tục sau khi dịch; có thể tạm dừng để chỉnh sửa.",
-      "Tích hợp kết nối và đăng YouTube trong màn hình chỉnh thành phẩm; đồng bộ giao diện trắng đen."
+      "Tạo ảnh Nano Banana bằng phiên Gemini và Google Cloud project đã kết nối.",
+      "Đăng bài chữ hoặc video lên Facebook Page với Page access token; gửi video TikTok vào bản nháp bằng access token có quyền phù hợp.",
+      "Trang chủ có biểu đồ hoạt động các kênh được ghi nhận qua ReupAI trên trình duyệt."
     ],
-    "publishedAt": "2026-11-15T09:48:34+00:00"
+    "publishedAt": "2026-11-15T14:59:41+00:00"
   },
-  "signature": "+18LOOG0aXmzxixZIZVRyXqlg9wfZzjDIqFa3ZCT4/sHGd5kJAGc17olcxAj0KSw8JFXt4uQhrcNlXKFbGsQBg=="
+  "signature": "YbQ8G88xM5UYdduRLkvliI6Kt1PmS7kzuXTzQ4La5C+tJt5T07IUbv6WDnCHFhP3k3b9X9Bjqd5PY+dDGwoaDQ=="
 }
