@@ -7962,7 +7962,15 @@ body.theme-xports :is(.main, .sidebar-nav) {
   html { scrollbar-gutter: stable; }
 }
 
-/* Fixed and sticky chrome should not re-blur the whole page during a scroll. */
+/* Fixed and sticky chrome + dialogs should not re-blur the whole page (keep video blur boxes intact). */
+body.theme-xports *:not([class*="blur"]),
+body.theme-xports *::before,
+body.theme-xports *::after,
+body.theme-xports dialog::backdrop {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 body.theme-xports :is(.topbar, .sidebar, .account-menu, .sidebar-backdrop) {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
