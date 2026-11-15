@@ -48,69 +48,72 @@ Tìm video nguồn, tải xuống và chạy Vietsub / Voice AI
     </div>
 
 
-    <div class="control-bar">
+    <div class="source-filter-row">
 
-        <label class="search-field">
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-search"></use></svg>
-            <input
-                id="searchInput"
-                placeholder="Tìm trong trang hiện tại..."
-                oninput="resetAndRender()"
+        <div class="control-bar">
+
+            <label class="search-field">
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-search"></use></svg>
+                <input
+                    id="searchInput"
+                    placeholder="Tìm trong trang hiện tại..."
+                    oninput="resetAndRender()"
+                >
+            </label>
+
+            <select
+                id="statusFilter"
+                onchange="resetAndRender()"
             >
-        </label>
+                <option value="all">Tất cả trạng thái</option>
+                <option value="not_downloaded">Chưa tải</option>
+                <option value="downloaded">Đã tải</option>
+                <option value="processing">Đang xử lý</option>
+                <option value="subtitle">Đã Vietsub</option>
+                <option value="voiceover">Đã lồng tiếng</option>
+                <option value="failed">Bị lỗi</option>
+            </select>
 
-        <select
-            id="statusFilter"
-            onchange="resetAndRender()"
-        >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="not_downloaded">Chưa tải</option>
-            <option value="downloaded">Đã tải</option>
-            <option value="processing">Đang xử lý</option>
-            <option value="subtitle">Đã Vietsub</option>
-            <option value="voiceover">Đã lồng tiếng</option>
-            <option value="failed">Bị lỗi</option>
-        </select>
+        </div>
 
-        <button
-            class="btn secondary"
-            onclick="refreshDisplay()"
-        >
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-refresh"></use></svg>
-            Làm mới
-        </button>
+        <div class="toolbar">
 
-    </div>
+            <button
+                class="btn secondary"
+                onclick="setSort('new')"
+            >
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-calendar"></use></svg>
+                Mới nhất
+            </button>
 
+            <button
+                class="btn secondary"
+                onclick="setSort('view')"
+            >
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-trending"></use></svg>
+                Top view
+            </button>
 
-    <div class="toolbar">
+            <button
+                type="button"
+                class="btn secondary source-series-btn"
+                id="sourceSeriesBtn"
+                onclick="focusSeriesPicker()"
+                title="Xem Series của nguồn hiện tại"
+            >
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-folder"></use></svg>
+                Series
+            </button>
 
-        <button
-            class="btn secondary"
-            onclick="setSort('new')"
-        >
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-calendar"></use></svg>
-            Mới nhất
-        </button>
+            <button
+                class="btn secondary"
+                onclick="refreshDisplay()"
+            >
+                <svg class="ui-icon" aria-hidden="true"><use href="#ui-refresh"></use></svg>
+                Làm mới
+            </button>
 
-        <button
-            class="btn secondary"
-            onclick="setSort('view')"
-        >
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-trending"></use></svg>
-            Top view
-        </button>
-
-        <button
-            type="button"
-            class="btn secondary source-series-btn"
-            id="sourceSeriesBtn"
-            onclick="focusSeriesPicker()"
-            title="Xem Series của nguồn hiện tại"
-        >
-            <svg class="ui-icon" aria-hidden="true"><use href="#ui-folder"></use></svg>
-            Series
-        </button>
+        </div>
 
     </div>
 

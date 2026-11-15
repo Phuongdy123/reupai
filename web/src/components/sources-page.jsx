@@ -164,39 +164,24 @@ export function SourcesPage() {
     `}</style>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button className="btn secondary" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div>}
     {!ready && !error && <p className="info-line" aria-live="polite">Đang đọc thư viện local…</p>}
-    {status === "connected" && diagnostics && !geminiReady && (
-      <section
-        className="source-youtube-banner"
-        style={{
-          border: "1px solid rgba(139, 92, 246, 0.45)",
-          background: "linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(20, 20, 28, 0.96) 100%)",
-          marginBottom: "14px"
-        }}
-      >
-        <div>
-          <small style={{ color: "#c4b5fd" }}>TRÍ TUỆ NHÂN TẠO AI</small>
-          <strong style={{ color: "#fff" }}>{geminiNeedsProject ? "AI Gemini (Cần chọn Project)" : "AI Gemini (Dịch & Lồng tiếng)"}</strong>
-          <p>{geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc tạo Project ID để hoàn tất kích hoạt quota Gemini." : "Chưa kết nối Google. Kết nối để dùng AI dịch phụ đề, Vietsub và lồng tiếng bằng quota miễn phí của bạn."}</p>
-        </div>
-        <Link
-          href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"}
-          className="btn primary"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
-            color: "#fff",
-            boxShadow: "0 4px 16px rgba(109, 40, 217, 0.4)",
-            textDecoration: "none",
-            whiteSpace: "nowrap"
-          }}
-        >
-          {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
-        </Link>
-      </section>
-    )}
-    <section className="source-youtube-banner"><div><small>XUẤT BẢN THÀNH PHẨM</small><strong>YouTube Studio</strong><p>{youtube.connection?.connected ? `Kênh: ${youtube.connection.channel.title} · Sẵn sàng đăng và hẹn giờ` : 'Kết nối kênh để đăng video ngay sau khi xử lý.'}</p></div><button type="button" className="btn primary" onClick={youtube.connection?.connected ? youtube.refresh : youtube.connect} disabled={!youtube.supported || youtube.busy || youtube.connection?.connecting}>{youtube.connection?.connecting ? 'Đang chờ Google…' : youtube.connection?.connected ? 'Kiểm tra kết nối' : 'Kết nối YouTube'}</button>{youtube.error && <p role="alert">{youtube.error}</p>}</section>
+    <div className="source-status-strip">
+      {status === "connected" && diagnostics && !geminiReady && (
+        <section className="source-youtube-banner is-gemini" aria-label="Kích hoạt AI Gemini">
+          <div>
+            <small>TRÍ TUỆ NHÂN TẠO AI</small>
+            <strong>{geminiNeedsProject ? "AI Gemini · Cần chọn Project" : "AI Gemini · Dịch & Lồng tiếng"}</strong>
+            <p>{geminiNeedsProject ? "Đã đăng nhập Google. Chọn hoặc tạo Project ID để kích hoạt quota Gemini." : "Kết nối Google để dùng AI dịch phụ đề, Vietsub và lồng tiếng bằng quota của bạn."}</p>
+          </div>
+          <Link
+            href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"}
+            className="btn primary"
+          >
+            {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
+          </Link>
+        </section>
+      )}
+      <section className={`source-youtube-banner is-youtube${youtube.connection?.connected ? " is-connected" : ""}`}><div><small>XUẤT BẢN THÀNH PHẨM</small><strong>YouTube Studio</strong><p>{youtube.connection?.connected ? `Kênh: ${youtube.connection.channel.title} · Sẵn sàng đăng và hẹn giờ` : 'Kết nối kênh để đăng video ngay sau khi xử lý.'}</p></div><button type="button" className={youtube.connection?.connected ? "btn secondary" : "btn primary"} onClick={youtube.connection?.connected ? youtube.refresh : youtube.connect} disabled={!youtube.supported || youtube.busy || youtube.connection?.connecting}>{youtube.connection?.connecting ? 'Đang chờ Google…' : youtube.connection?.connected ? 'Kiểm tra kết nối' : 'Kết nối YouTube'}</button>{youtube.error && <p role="alert">{youtube.error}</p>}</section>
+    </div>
     <div ref={host} className="source-runtime-host" data-product-runtime="sources" />
     {socialItem && <SocialPublishDialog client={client} item={socialItem} onClose={() => setSocialItem(null)} />}
     {publishing && youtube.connection?.connected && <YoutubePublishDialog client={client} item={publishing} connection={youtube.connection} onClose={() => setPublishing(null)} />}
