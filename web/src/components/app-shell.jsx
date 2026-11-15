@@ -17,12 +17,15 @@ import { PublicFooter } from "./public-footer";
 
 const groups = [
   ["WORKSPACE", [["/app", "home", "Trang chủ"], ["/sources", "video", "Nguồn video"]]],
+  ["STUDIO CHUYÊN NGHIỆP", [["/studio/youtube", "play", "YouTube Studio"], ["/studio/shorts", "spark", "Shorts Studio"]]],
   ["THƯ VIỆN", [["/downloads", "download", "Video đã tải"], ["/outputs", "sparkles", "Thành phẩm"], ["/favorites", "heart", "Video yêu thích", "sidebarFavorites"], ["/collections", "folder", "Collections"], ["/series", "folder", "Series"], ["/history", "history", "Lịch sử"], ["/sources?view=tracked", "radio", "Nguồn theo dõi", "trackedSourcesNav"]]],
   ["TÀI KHOẢN", [["/profile", "user", "Hồ sơ"], ["/plans", "sparkles", "Gói dịch vụ"], ["/settings", "settings", "Cài đặt"], ["/help", "check", "Trợ giúp"], ["/feedback", "mail", "Gửi phản hồi"]]],
 ];
 const pages = {
   "/app": ["Trang chủ", "Trò chuyện với trợ lý và theo dõi công việc xử lý video"],
   "/sources": ["Nguồn video", "Tìm video nguồn, tải xuống và chạy Vietsub / Voice AI"],
+  "/studio/youtube": ["YouTube Studio", "Chọn lọc video ngang (16:9) & dài phù hợp để reup chuẩn YouTube"],
+  "/studio/shorts": ["Shorts Studio", "Chọn lọc video ngắn & khung dọc (9:16) phù hợp làm YouTube Shorts"],
   "/downloads": ["Video đã tải", "Quản lý video nguồn đã tải và tiếp tục xử lý"],
   "/outputs": ["Thành phẩm", "Xem lại và tải video Vietsub / Voice đã hoàn tất"],
   "/favorites": ["Video yêu thích", "Những video đã đánh dấu trong thư viện local"],

@@ -38,5 +38,6 @@
 @import "../src/styles/processing-star-border.css";
 @import "../src/styles/output-transcript-editor.css";
 @import "../src/styles/controls.css";
+@import "../src/styles/studio.css";
 
 .chunk-recovery-banner{position:fixed;z-index:10000;top:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;width:min(620px,calc(100vw - 28px));box-sizing:border-box;padding:12px 14px;border:1px solid #4b5563;border-radius:14px;background:#11141a;color:#f3f4f6;box-shadow:0 14px 40px #0009;font-size:13px;line-height:1.45}.chunk-recovery-banner button{flex:none;border:1px solid #596273;border-radius:9px;background:#222833;color:inherit;padding:9px 12px;font:inherit;font-weight:650;cursor:pointer}.chunk-recovery-banner button:hover{background:#303846}@media(max-width:520px){.chunk-recovery-banner{align-items:stretch;flex-direction:column;gap:8px}.chunk-recovery-banner button{width:100%}}
