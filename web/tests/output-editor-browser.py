@@ -1,5 +1,6 @@
 """Check the real React editor with local fixtures; no account or upload calls."""
 import asyncio
+import base64
 import importlib.util
 import json
 from pathlib import Path
@@ -35,7 +36,7 @@ async def main():
 const {useCallback,useEffect,useRef,useState}=React;const createPortal=ReactDOM.createPortal;
 const Icon=()=>null,Loading=()=>null,Notice=({children})=>React.createElement('div',null,children),ErrorMessage=({error})=>React.createElement('div',null,error),modeLabel=()=> 'Voice';
 const googleConsentUrl=()=>null;
-const youtubeRequest=()=>{throw Error('Unexpected external API call');};
+const youtubeRequest=(_client,path)=>{if(path==='suggest') return {title:'Bí mật cuốn nhật ký'}; throw Error('Unexpected external API call');};
 const useYoutubeConnection=()=>({supported:true,connection:{connected:true,account_id:'fixture-account',channel:{id:'channel',title:'Kênh kiểm thử'}},connect:()=>{},refresh:()=>{},client});
 const client={mediaUrl:async()=>'/sample.mp4',json:async(path,options)=>{
  if(path.includes('/rerender')){window.payload=JSON.parse(options.body);return {job_id:1};}
@@ -66,6 +67,20 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 await publish.get_by_role("checkbox").check()
                 await expect(publish.get_by_role("button", name="Đăng thử riêng tư")).to_be_enabled()
                 await page.screenshot(path=str(ROOT / "artifacts/output-youtube-0.2.52-desktop.png"), full_page=True)
+                png = await page.evaluate("""() => { const canvas = document.createElement('canvas'); canvas.width=180; canvas.height=320; return canvas.toDataURL().split(',')[1]; }""")
+                await publish.locator('input[type=file]').set_input_files({"name": "cover.png", "mimeType": "image/png", "buffer": base64.b64decode(png)})
+                await publish.get_by_role("button", name="Thiết kế ảnh bìa").click()
+                designer = publish.get_by_role("region", name="Thiết kế ảnh bìa")
+                await designer.get_by_label("Yêu cầu cho AI").fill("Bí ẩn")
+                await designer.get_by_role("button", name="AI viết chữ và ghép ảnh").click()
+                await expect(designer.get_by_label("Chữ trên ảnh")).to_have_value("Bí mật cuốn nhật ký")
+                await designer.locator("canvas").press("ArrowRight")
+                await designer.get_by_role("button", name="Lưu làm mẫu").click()
+                await designer.get_by_role("button", name="Đóng chỉnh ảnh").click()
+                await publish.get_by_role("button", name="Thiết kế ảnh bìa").click()
+                await expect(designer.get_by_role("button", name="Dùng mẫu đã lưu")).to_be_visible()
+                await designer.get_by_role("button", name="Tự bố trí theo tiêu đề").click()
+                await expect(designer.get_by_label("Vị trí chữ")).to_have_value("free")
                 await page.keyboard.press("Escape")
                 await expect(publish).to_have_count(0)
                 await expect(page.get_by_label("Bản dịch câu 1")).to_be_visible()
