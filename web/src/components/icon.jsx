@@ -23,6 +23,7 @@ const paths = {
   play: <path d="m8 5 11 7-11 7V5Z" />,
   captions: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 10h3M14 10h3M7 14h5M14 14h3" /></>,
   check: <path d="m5 12 4 4L19 6" />,
+  edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" /></>,
   alert: <><path d="M10.3 3.5 2.1 18a2 2 0 0 0 1.7 3h16.4a2 2 0 0 0 1.7-3L13.7 3.5a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></>,
   external: <><path d="M14 3h7v7" /><path d="m10 14 11-11" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></>,
 };
