@@ -161,6 +161,14 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", keydown); };
   }, [onClose, submitting]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => syncCanvas());
+    observer.observe(video);
+    return () => observer.disconnect();
+  });
+
   const syncCanvas = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -295,7 +303,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
         <button className="btn secondary" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button>
       </div>
       {loading ? <Loading label="Đang mở thành phẩm và cấu hình trước đó" /> : error && !previewUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <>
-        {(error || notice) && <div className="output-editor-alerts"><ErrorMessage error={error} /><Notice>{notice}</Notice></div>}
+        {error && <div className="output-editor-alerts"><ErrorMessage error={error} /></div>}
         <div className="output-editor-studio">
           <div className="output-editor-left">
             <div className="output-editor-toolbar">
@@ -305,18 +313,18 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
               </div>
               <div className="output-editor-tools" role="group" aria-label="Công cụ chỉnh vùng mờ">
                 <button type="button" className={`btn secondary ${editMode === "subtitle" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => beginEdit("subtitle")}><Icon name="edit" size={13} />Phụ đề</button>
-                <button type="button" className={`btn secondary ${editMode === "interval" && newRegionKind === "logo" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => { beginIntervalEdit("logo"); setActiveTab("regions"); }}><Icon name="edit" size={13} />Logo / chữ</button>
+                <button type="button" className={`btn secondary ${editMode === "interval" && newRegionKind === "logo" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => { beginIntervalEdit("logo"); setActiveTab("regions"); }}><Icon name="edit" size={13} />Logo</button>
                 <button type="button" className={`btn secondary ${editMode === "interval" && newRegionKind === "detail" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => { beginIntervalEdit("detail"); setActiveTab("regions"); }}><Icon name="edit" size={13} />Chi tiết</button>
                 {editMode && <button type="button" className="btn secondary" onClick={finishEdit}><Icon name="check" size={13} />Xong</button>}
-                {editMode === "subtitle" && <button type="button" className="btn secondary" onClick={() => setRegion(null)}>Xóa phụ đề</button>}
-                {editMode === "interval" && activeInterval && <button type="button" className="btn secondary" onClick={removeActiveInterval}>Xóa vùng</button>}
+                {editMode === "subtitle" && <button type="button" className="btn secondary" onClick={() => setRegion(null)}>Xóa</button>}
+                {editMode === "interval" && activeInterval && <button type="button" className="btn secondary" onClick={removeActiveInterval}>Xóa</button>}
               </div>
             </div>
             <div className="output-editor-stage-wrap">
               <div className="output-editor-stage">{previewUrl && <><video key={previewSource ? "source" : "result"} ref={videoRef} src={previewUrl} controls playsInline crossOrigin="anonymous" onLoadedMetadata={syncCanvas} onCanPlay={syncCanvas} onResize={syncCanvas} onTimeUpdate={() => { if (cueEnd.current != null && videoRef.current.currentTime >= cueEnd.current) { videoRef.current.pause(); cueEnd.current = null; } }} onError={() => setError("Không thể mở video xem trước từ Local Engine. Hãy thử lại.")} /><canvas ref={canvasRef} className={`output-editor-canvas${editMode ? " editable" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} /></>}</div>
             </div>
             <div className="output-editor-stage-meta">
-              <span className="output-editor-hint">{editMode === "subtitle" ? "Kéo khung đỏ để di chuyển; kéo góc để đổi cỡ." : editMode === "interval" ? `Kéo quanh ${newRegionKind === "logo" ? "logo / chữ" : "chi tiết"} rồi thả để lưu.` : previewSource ? "Đang xem video gốc." : sourceUrl ? "Các vùng đã lưu hiện màu đỏ." : "Không có video gốc trên máy."}</span>
+              <span className={`output-editor-hint${notice ? " has-notice" : ""}`}>{notice || (editMode === "subtitle" ? "Kéo khung đỏ để di chuyển; kéo góc để đổi cỡ." : editMode === "interval" ? `Kéo quanh ${newRegionKind === "logo" ? "logo / chữ" : "chi tiết"} rồi thả để lưu.` : previewSource ? "Đang xem video gốc." : sourceUrl ? "Các vùng đã lưu hiện màu đỏ." : "Không có video gốc trên máy.")}</span>
               <div className="output-editor-coords">
                 <span>Phụ đề: {region ? `${region.x}, ${region.y} · ${region.width}×${region.height}` : "chưa chọn"}</span>
                 {dimensions && <span>{dimensions.width}×{dimensions.height}px</span>}

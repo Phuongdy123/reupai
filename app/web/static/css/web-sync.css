@@ -8683,21 +8683,22 @@ body.theme-xports #batchBar > button:is(:hover, :focus-visible):not(:disabled) {
 .theme-xports .output-editor-studio { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(390px, 0.95fr); overflow: hidden; }
 
 /* Left Studio Pane */
-.theme-xports .output-editor-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 16px; gap: 12px; background: #0a0b0e; }
-.theme-xports .output-editor-toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.theme-xports .output-editor-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 16px; gap: 10px; background: #0a0b0e; }
+.theme-xports .output-editor-toolbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
 .theme-xports .output-editor-seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; background: #12141a; border: 1px solid #23252d; border-radius: 8px 3px 8px 3px; }
-.theme-xports .output-editor-seg .btn { min-height: 28px; padding: 0 11px; border: 0; background: transparent; color: #9ca3af; font-size: 12px; font-weight: 500; box-shadow: none; }
+.theme-xports .output-editor-seg .btn { min-height: 26px; padding: 0 10px; border: 0; background: transparent; color: #9ca3af; font-size: 11.5px; font-weight: 500; box-shadow: none; }
 .theme-xports .output-editor-seg .btn:hover:not(:disabled) { color: #f4f4f6; background: rgba(255, 255, 255, 0.05); }
 .theme-xports .output-editor-seg .btn.is-active { background: #22242b; color: #ffffff; box-shadow: inset 0 -2px 0 #ef4444; }
-.theme-xports .output-editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.theme-xports .output-editor-tools .btn { min-height: 32px; padding: 0 10px; font-size: 12px; gap: 5px; }
+.theme-xports .output-editor-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.theme-xports .output-editor-tools .btn { min-height: 30px; padding: 0 9px; font-size: 11.5px; gap: 4px; }
 .theme-xports .output-editor-tools .btn.is-editing { border-color: rgba(239, 68, 68, 0.58); background: rgba(239, 68, 68, 0.14); color: #fecaca; }
 
-.theme-xports .output-editor-stage-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; background: radial-gradient(circle at center, #11131a 0%, #07080b 100%); border: 1px solid #1e2028; border-radius: 10px 3px 10px 3px; overflow: hidden; }
-.theme-xports .output-editor-stage { position: relative; max-width: 100%; max-height: 100%; display: flex; align-items: center; justify-content: center; background: #000; border-radius: 6px; border: 1px solid #262932; overflow: hidden; }
-.theme-xports .output-editor-stage video { width: auto; height: auto; max-width: 100%; max-height: calc(min(860px, 90dvh) - 210px); display: block; }
+.theme-xports .output-editor-stage-wrap { container-type: size; flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; background: radial-gradient(circle at center, #11131a 0%, #07080b 100%); border: 1px solid #1e2028; border-radius: 10px 3px 10px 3px; overflow: hidden; }
+.theme-xports .output-editor-stage { position: relative; display: flex; align-items: center; justify-content: center; background: #000; border-radius: 6px; border: 1px solid #262932; overflow: hidden; }
+.theme-xports .output-editor-stage video { width: auto; height: auto; max-width: calc(100cqw - 24px); max-height: calc(100cqh - 24px); display: block; }
 
 .theme-xports .output-editor-stage-meta { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; font-size: 11.5px; color: #8f939e; }
+.theme-xports .output-editor-hint.has-notice { color: #fca5a5; }
 .theme-xports .output-editor-coords { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
 .theme-xports .output-editor-coords span { padding: 2px 8px; background: #12141a; border: 1px solid #22242c; border-radius: 5px 2px 5px 2px; color: #c4c7d0; font-size: 11px; }
 
