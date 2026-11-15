@@ -114,9 +114,18 @@ body.theme-xports :is(.btn, .btn-primary, .btn-secondary, .action-primary, .acti
 }
 
 /* ---------- Icon-only buttons: square, same heights ---------- */
-body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger, .sidebar-mobile-toggle, .sidebar-mobile-close) {
+body.theme-xports :is(.modern-icon-btn, .favorite-btn, .icon-btn, .btn-icon, .guest-auth-close, .auth-password-toggle, .more-trigger) {
   display: inline-grid;
   place-items: center;
+  box-sizing: border-box;
+  width: var(--ds-control-h);
+  min-width: var(--ds-control-h);
+  height: var(--ds-control-h);
+  min-height: var(--ds-control-h);
+  padding: 0;
+  border-radius: var(--ds-control-radius);
+}
+body.theme-xports :is(.sidebar-mobile-toggle, .sidebar-mobile-close) {
   box-sizing: border-box;
   width: var(--ds-control-h);
   min-width: var(--ds-control-h);
@@ -204,3 +213,362 @@ body.theme-xports :is(.badge, .status-pill, .result-chip, .tag-chip) :is(svg, .i
   }
   body.theme-xports .sidebar .nav-item { min-height: var(--ds-control-h-touch); }
 }
+
+/* ==========================================================================
+   Phase 2 — Linear Surface & Layout Polish for /sources and Workspace Banners
+   ========================================================================== */
+
+/* ---------- 1. Compact Status Strip (Gemini + YouTube Studio) ---------- */
+body.theme-xports .source-status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--ds-space-3);
+  margin-bottom: var(--ds-space-4);
+}
+body.theme-xports .source-youtube-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-4);
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface);
+  box-shadow: inset 3px 0 0 var(--ds-border-strong);
+}
+body.theme-xports .source-youtube-banner.is-gemini {
+  box-shadow: inset 3px 0 0 var(--ds-accent);
+}
+body.theme-xports .source-youtube-banner.is-youtube.is-connected {
+  box-shadow: inset 3px 0 0 var(--ds-success);
+}
+body.theme-xports .source-youtube-banner small {
+  display: block;
+  color: var(--ds-text-faint);
+  font-size: var(--ds-text-2xs);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-caps);
+}
+body.theme-xports .source-youtube-banner strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--ds-text);
+  font-size: var(--ds-text-md);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-tight);
+}
+body.theme-xports .source-youtube-banner p {
+  margin: 3px 0 0;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-leading-snug);
+}
+body.theme-xports .source-youtube-banner > :is(.btn, a, button) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Dashboard Gemini alert aligned to the same Linear strip */
+body.theme-xports .dashboard-overview-alert.dashboard-gemini-onboarding {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ds-space-4);
+  margin: 0 0 var(--ds-space-4) 0;
+  padding: 14px 18px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface);
+  box-shadow: inset 3px 0 0 var(--ds-accent);
+}
+
+/* ---------- 2. Source Panel: unified 40px primary row + 32px filter row ---------- */
+body.theme-xports .source-panel {
+  padding: var(--ds-space-4) !important;
+  border: 1px solid var(--ds-border) !important;
+  border-radius: var(--ds-radius-lg) !important;
+  background: var(--ds-surface) !important;
+}
+body.theme-xports .source-bar {
+  gap: var(--ds-space-2) !important;
+  align-items: center !important;
+}
+body.theme-xports .source-bar :is(input, select, button) {
+  box-sizing: border-box !important;
+  height: var(--ds-control-h-lg) !important;
+  min-height: var(--ds-control-h-lg) !important;
+  border-radius: var(--ds-control-radius-lg) !important;
+  font-size: var(--ds-text-base) !important;
+}
+body.theme-xports .source-bar :is(input, select) {
+  border: 1px solid var(--ds-border-strong) !important;
+  background-color: var(--ds-surface-sunken) !important;
+  color: var(--ds-text) !important;
+  padding-block: 0 !important;
+  line-height: 1.2 !important;
+}
+body.theme-xports .control-bar select {
+  padding-block: 0 !important;
+  line-height: 1.2 !important;
+}
+body.theme-xports .source-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2);
+  margin-top: var(--ds-space-3);
+}
+body.theme-xports .source-filter-row .control-bar {
+  display: flex;
+  flex: 1 1 340px;
+  align-items: center;
+  gap: var(--ds-space-2) !important;
+  margin: 0 !important;
+}
+body.theme-xports .source-filter-row .toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2) !important;
+  margin: 0 !important;
+}
+body.theme-xports :is(.control-bar, .toolbar) {
+  gap: var(--ds-space-2) !important;
+  align-items: center !important;
+}
+body.theme-xports .control-bar :is(input, select, button, .search-field),
+body.theme-xports .toolbar button {
+  box-sizing: border-box !important;
+  height: var(--ds-control-h) !important;
+  min-height: var(--ds-control-h) !important;
+  border-radius: var(--ds-control-radius) !important;
+  font-size: var(--ds-text-sm) !important;
+}
+
+/* Shared Google notice box (Settings & YouTube connection) */
+body.theme-xports .google-notice-box {
+  margin-top: var(--ds-space-3);
+  padding: 10px 14px;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-surface-sunken);
+  box-shadow: inset 2px 0 0 var(--ds-accent);
+  font-size: var(--ds-text-sm);
+  line-height: var(--ds-leading-normal);
+}
+body.theme-xports .google-notice-box p {
+  margin: 0 0 4px 0;
+  color: var(--ds-text-secondary);
+}
+body.theme-xports .google-notice-box small {
+  display: block;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-xs);
+}
+body.theme-xports .google-consent-tip {
+  display: block;
+  margin: 6px 0;
+  color: var(--ds-text-muted);
+  font-size: var(--ds-text-sm);
+}
+
+/* ---------- 3. Video Grid & Compact Video Cards ---------- */
+body.theme-xports #videos {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: var(--ds-space-3) !important;
+}
+@media (max-width: 960px) {
+  body.theme-xports #videos {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+body.theme-xports #videos > .compact-video-card,
+body.theme-xports .tracked-channel-card {
+  border: 1px solid var(--ds-border) !important;
+  border-radius: var(--ds-radius-lg) !important;
+  background: var(--ds-surface) !important;
+  transition: border-color var(--ds-duration-fast) var(--ds-ease), background-color var(--ds-duration-fast) var(--ds-ease);
+}
+body.theme-xports #videos > .compact-video-card:hover,
+body.theme-xports .tracked-channel-card:hover {
+  border-color: var(--ds-border-hover) !important;
+  background: var(--ds-surface-raised) !important;
+  transform: none !important;
+}
+body.theme-xports .compact-video-card .compact-cover {
+  border-radius: var(--ds-radius-md) !important;
+}
+body.theme-xports .compact-video-card .progress {
+  background: var(--ds-surface-active) !important;
+}
+body.theme-xports .compact-video-card .progress-bar {
+  background: var(--ds-accent) !important;
+}
+body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary, .action-secondary) {
+  min-height: var(--ds-control-h-sm) !important;
+  height: var(--ds-control-h-sm) !important;
+  padding-inline: var(--ds-control-px-sm) !important;
+  border-radius: var(--ds-control-radius) !important;
+  font-size: var(--ds-text-sm) !important;
+}
+
+/* ---------- 4. Guest Browse (/sources when unauthenticated) ---------- */
+body.theme-xports .guest-browse .guest-browse-heading {
+  margin-bottom: var(--ds-space-4);
+}
+body.theme-xports .guest-browse .guest-source-card {
+  padding: var(--ds-space-4);
+  margin-bottom: var(--ds-space-4);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-surface);
+}
+
+/* ---------- 5. Topbar Account & Status Actions Uniformity ---------- */
+@media (min-width: 941px) {
+  body.theme-xports :is(.sidebar-mobile-toggle, .sidebar-mobile-close, .sidebar-backdrop) {
+    display: none !important;
+  }
+}
+
+body.theme-xports .workspace-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+body.theme-xports .workspace-account-actions :is(.quick-nav-trigger, .workspace-guest-signin) {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-sizing: border-box !important;
+}
+
+body.theme-xports .workspace-account-actions .quick-nav-trigger kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+body.theme-xports .workspace-account-actions .topbar-user.engine-status-control,
+body.theme-xports .workspace-account-actions .engine-status-control {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 4px 0 12px !important;
+  border: 1px solid var(--ds-border-strong) !important;
+  border-radius: 8px !important;
+  background: var(--ds-surface-raised) !important;
+  box-sizing: border-box !important;
+}
+
+body.theme-xports .workspace-account-actions .local-engine-indicator {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: var(--ds-text-secondary) !important;
+  font-size: 12px !important;
+  font-weight: 550 !important;
+  text-transform: none !important;
+  line-height: 1 !important;
+}
+
+body.theme-xports .workspace-account-actions .local-engine-dot {
+  width: 8px !important;
+  height: 8px !important;
+  flex: 0 0 8px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+
+body.theme-xports .workspace-account-actions .local-engine-indicator[data-state="connected"] .local-engine-dot {
+  background: #22c55e !important;
+  box-shadow: 0 0 0 3px rgb(34 197 94 / 16%) !important;
+}
+
+body.theme-xports .workspace-account-actions #localEngineLabel {
+  padding: 0 !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  color: var(--ds-text-secondary) !important;
+  font-size: 12px !important;
+  font-weight: 550 !important;
+  text-transform: none !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+body.theme-xports .workspace-account-actions .local-engine-action {
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  box-sizing: border-box !important;
+}
+
+body.theme-xports .workspace-account-actions .local-engine-action.engine-retry {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 6px !important;
+  display: inline-grid !important;
+  place-items: center !important;
+}
+
+body.theme-xports .workspace-account-actions .plan-status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 12px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  line-height: 1 !important;
+  box-sizing: border-box !important;
+}
+
+body.theme-xports .workspace-account-actions .account-menu-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+body.theme-xports .workspace-account-actions .topbar-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  padding: 2px !important;
+  border-radius: 50% !important;
+  box-sizing: border-box !important;
+}
+
+
