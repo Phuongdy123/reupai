@@ -1,6 +1,5 @@
 """Check the real React editor with local fixtures; no account or upload calls."""
 import asyncio
-import base64
 import importlib.util
 import json
 from pathlib import Path
@@ -36,7 +35,7 @@ async def main():
 const {useCallback,useEffect,useRef,useState}=React;const createPortal=ReactDOM.createPortal;
 const Icon=()=>null,Loading=()=>null,Notice=({children})=>React.createElement('div',null,children),ErrorMessage=({error})=>React.createElement('div',null,error),modeLabel=()=> 'Voice';
 const googleConsentUrl=()=>null;
-const youtubeRequest=(_client,path)=>{if(path==='suggest') return {title:'Bí mật cuốn nhật ký'}; throw Error('Unexpected external API call');};
+const youtubeRequest=(_client,path)=>{if(path==='thumbnails') return {images:[window.coverImage]}; if(path==='suggest') return {title:'Bí mật cuốn nhật ký'}; throw Error('Unexpected external API call');};
 const useYoutubeConnection=()=>({supported:true,connection:{connected:true,account_id:'fixture-account',channel:{id:'channel',title:'Kênh kiểm thử'}},connect:()=>{},refresh:()=>{},client});
 const client={mediaUrl:async()=>'/sample.mp4',json:async(path,options)=>{
  if(path.includes('/rerender')){window.payload=JSON.parse(options.body);return {job_id:1};}
@@ -67,9 +66,8 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 await publish.get_by_role("checkbox").check()
                 await expect(publish.get_by_role("button", name="Đăng thử riêng tư")).to_be_enabled()
                 await page.screenshot(path=str(ROOT / "artifacts/output-youtube-0.2.52-desktop.png"), full_page=True)
-                png = await page.evaluate("""() => { const canvas = document.createElement('canvas'); canvas.width=180; canvas.height=320; return canvas.toDataURL().split(',')[1]; }""")
-                await publish.locator('input[type=file]').set_input_files({"name": "cover.png", "mimeType": "image/png", "buffer": base64.b64decode(png)})
-                await publish.get_by_role("button", name="Thiết kế ảnh bìa").click()
+                await page.evaluate("""() => { const canvas = document.createElement('canvas'); canvas.width=180; canvas.height=320; window.coverImage=canvas.toDataURL(); }""")
+                await publish.get_by_role("button", name="Tạo ảnh bìa với AI").click()
                 designer = publish.get_by_role("region", name="Thiết kế ảnh bìa")
                 await designer.get_by_label("Yêu cầu cho AI").fill("Bí ẩn")
                 await designer.get_by_role("button", name="AI viết chữ và ghép ảnh").click()
@@ -77,7 +75,7 @@ ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(O
                 await designer.locator("canvas").press("ArrowRight")
                 await designer.get_by_role("button", name="Lưu làm mẫu").click()
                 await designer.get_by_role("button", name="Đóng chỉnh ảnh").click()
-                await publish.get_by_role("button", name="Thiết kế ảnh bìa").click()
+                await publish.get_by_role("button", name="Tạo ảnh bìa với AI").click()
                 await expect(designer.get_by_role("button", name="Dùng mẫu đã lưu")).to_be_visible()
                 await designer.get_by_role("button", name="Tự bố trí theo tiêu đề").click()
                 await expect(designer.get_by_label("Vị trí chữ")).to_have_value("free")
