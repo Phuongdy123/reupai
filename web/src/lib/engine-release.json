@@ -1,18 +1,17 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.53",
+    "version": "0.2.54",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.53/ReupAI-Setup-0.2.53.exe",
-    "sha256": "65ce98a4aa31c3179292f0e589b9ff906baf078caf36fdd6fb201cfe1dfd8af0",
-    "size": 464989573,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.54/ReupAI-Setup-0.2.54.exe",
+    "sha256": "a2c939450e6bff2b70b91cbd2f697b7295e12e6022a1d9bef27943ef5e654ba0",
+    "size": 469223938,
     "notes": [
-      "Tạo ảnh Nano Banana bằng phiên Gemini và Google Cloud project đã kết nối.",
-      "Đăng bài chữ hoặc video lên Facebook Page với Page access token; gửi video TikTok vào bản nháp bằng access token có quyền phù hợp.",
-      "Trang chủ có biểu đồ hoạt động các kênh được ghi nhận qua ReupAI trên trình duyệt."
+      "Sửa lỗi HTTP 400 do cấu hình tạo ảnh Nano Banana gửi sai định dạng.",
+      "Chọn model dịch trong Phụ đề. Mặc định Gemini 3.1 Flash Lite; tự chuyển về model này khi model đã chọn hết quota."
     ],
-    "publishedAt": "2026-11-15T14:59:41+00:00"
+    "publishedAt": "2026-11-15T16:10:49+00:00"
   },
-  "signature": "YbQ8G88xM5UYdduRLkvliI6Kt1PmS7kzuXTzQ4La5C+tJt5T07IUbv6WDnCHFhP3k3b9X9Bjqd5PY+dDGwoaDQ=="
+  "signature": "Yzb3Y5oo068NGbXoMW/RQLeQ/XJI8giGGDBEVZ2t5JEv01GqmVz/XQJsFLtwJ24RmgBYBjbNUmqh+xc884IBCg=="
 }
