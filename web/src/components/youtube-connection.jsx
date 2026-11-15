@@ -88,6 +88,9 @@ export function YoutubeConnection() {
       <button type="button" className="btn secondary" onClick={youtube.refresh} disabled={youtube.busy}>Kiểm tra lại</button>
     </div>}
     {youtube.error && <p className="youtube-error" role="alert">{youtube.error}</p>}
-    <small>Quyền YouTube được cấp riêng với Gemini và lưu mã hóa trên máy Windows này.</small>
+    <div style={{ marginTop: "10px", padding: "10px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "6px", fontSize: "0.85rem" }}>
+      <p style={{ margin: "0 0 4px 0" }}><strong>Chúng tôi cần quyền Google của bạn để tiếp tục</strong> kết nối kênh YouTube. Quyền được lưu mã hóa an toàn trên máy Windows này.</p>
+      <small className="muted" style={{ display: "block" }}>💡 <em>Nếu gặp màn hình &quot;Ứng dụng chưa được xác minh&quot;, bạn chọn <strong>Nâng cao (Advanced)</strong> &rarr; <strong>Đi tới ReupAI (Vẫn an toàn)</strong>.</em></small>
+    </div>
   </section>;
 }
