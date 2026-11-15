@@ -12,8 +12,7 @@ export function PublicFooter({ variant = "default" }) {
     <div className="public-footer-main">
       <div className="public-footer-intro">
         <Link href="/" className="public-footer-brand" aria-label="ReupAI - Trang chủ">Reup<span>AI</span></Link>
-        <p>Từ video nguồn đến Vietsub, lồng tiếng và thành phẩm. Bạn chọn cách xử lý, Local Engine thực hiện trên máy của bạn.</p>
-        <span className="public-footer-local"><i aria-hidden="true" /> Video và thành phẩm lưu trên thiết bị</span>
+        <p>Từ video nguồn đến Vietsub, lồng tiếng và thành phẩm. Mọi công cụ sáng tạo trong một không gian làm việc.</p>
       </div>
       {columns.map((column) => <nav key={column.title} aria-label={column.title} className="public-footer-column"><h2>{column.title}</h2>{column.links.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}</nav>)}
       <div className="public-footer-contact"><h2>Cần hỗ trợ?</h2><p>Gửi câu hỏi hoặc mã job để được hướng dẫn cụ thể.</p><a href="mailto:phuongndps39487@gmail.com?subject=Ho%20tro%20ReupAI">Liên hệ hỗ trợ <span aria-hidden="true">↗</span></a></div>

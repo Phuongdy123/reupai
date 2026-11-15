@@ -22,6 +22,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog._logoData = null;
     dialog._logoFilename = null;
     let transcriptConfirmed = false;
+    let submitting = false;
+    let reviewPaused = false;
+    let translationReady = false;
+    let autoContinueScheduled = false;
     const set = (id, value) => {
         const element = dialog.querySelector(`#${id}`);
         if (element && value !== undefined && value !== null) element.value = value;
@@ -525,6 +529,27 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const reviewStatus = reviewDialog?.querySelector('#processTranscriptReviewStatus');
     const reviewConfirm = reviewDialog?.querySelector('#processTranscriptReviewConfirm');
     const reviewSkip = reviewDialog?.querySelector('#processTranscriptReviewSkip');
+    const reviewPause = reviewDialog?.querySelector('#processTranscriptReviewPause');
+    const reviewFootnote = reviewDialog?.querySelector('.process-transcript-review-footnote');
+    if (reviewConfirm) reviewConfirm.hidden = true;
+    if (reviewPause) reviewPause.hidden = false;
+    if (reviewFootnote) reviewFootnote.textContent = 'Tự tiếp tục xuất khi dịch xong. Bạn có thể tạm dừng để chỉnh bản dịch.';
+    const pauseReviewForEditing = () => {
+        reviewPaused = true;
+        if (reviewPause) reviewPause.hidden = true;
+        if (reviewConfirm) reviewConfirm.hidden = false;
+        if (reviewFootnote) reviewFootnote.textContent = 'Đã tạm dừng tự xuất. Sửa câu hoặc thời gian, rồi bấm “Tiếp tục xuất”.';
+    };
+    if (reviewPause) reviewPause.onclick = pauseReviewForEditing;
+    const maybeAutoContinueReview = () => {
+        if (autoContinueScheduled || reviewPaused || !translationReady || translatingReview || submitting || !isCurrent() || !reviewDialog?.open) return;
+        autoContinueScheduled = true;
+        // Leave the current form submission before requesting the next one.
+        window.setTimeout(() => {
+            autoContinueScheduled = false;
+            if (!reviewPaused && translationReady && !submitting && isCurrent() && reviewDialog?.open) reviewConfirm.onclick?.();
+        }, 0);
+    };
     const reviewPreviewLoading = reviewDialog?.querySelector('#processTranscriptPreviewLoading');
     const reviewPreviewRetry = reviewDialog?.querySelector('#processTranscriptPreviewRetry');
     const translationRetry = reviewDialog?.querySelector('#processTranscriptTranslationRetry');
@@ -646,8 +671,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startInput.setAttribute('aria-label', 'Thời gian bắt đầu, giây');
             const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endInput.setAttribute('aria-label', 'Thời gian kết thúc, giây');
             startInput.addEventListener('focus', seekToLine);
-            startInput.oninput = () => { line.start = Number(startInput.value); };
-            endInput.oninput = () => { line.end = Number(endInput.value); };
+            startInput.oninput = () => { line.start = Number(startInput.value); pauseReviewForEditing(); };
+            endInput.oninput = () => { line.end = Number(endInput.value); pauseReviewForEditing(); };
             row.addEventListener('click', event => {
                 if (!event.target.closest('input, textarea, button')) seekToLine();
             });
@@ -656,14 +681,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-translation'; sourceInput.rows = 2;
             sourceInput.value = String(line.translated_text ?? ''); sourceInput.readOnly = line.translated_text == null;
             sourceInput.setAttribute('aria-label', 'Bản dịch tiếng Việt'); sourceInput.placeholder = 'Đang chờ dịch sang tiếng Việt…';
-            sourceInput.oninput = () => { line.translated_text = sourceInput.value; };
+            sourceInput.oninput = () => { line.translated_text = sourceInput.value; pauseReviewForEditing(); };
             const original = document.createElement('details'); original.className = 'process-transcript-original';
             const originalLabel = document.createElement('summary'); originalLabel.textContent = 'Câu gốc';
             const originalText = document.createElement('p'); originalText.textContent = line.text || '';
             original.append(originalLabel, originalText); sourceCell.append(sourceInput, original);
             const actions = document.createElement('td'); actions.className = 'process-ocr-line-actions';
             const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = 'Xóa câu phụ đề'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
-            remove.onclick = () => { deletedTranscriptIds.add(String(line.id)); manualOcrRows[index] = null; renderManualOcrRows(); };
+            remove.onclick = () => { pauseReviewForEditing(); deletedTranscriptIds.add(String(line.id)); manualOcrRows[index] = null; renderManualOcrRows(); };
             actions.append(remove); row.append(number, timing, sourceCell, actions);
             return row;
         }));
@@ -702,6 +727,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const translateReviewRows = async () => {
         if (translatingReview || !recognitionComplete) return;
         translatingReview = true;
+        translationReady = false;
         reviewConfirm.disabled = true;
         if (translationRetry) translationRetry.hidden = true;
         setReviewStage(1);
@@ -734,17 +760,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 }
             }
             setReviewProgress(1, 100);
-            reviewStatus.textContent = `${lines.length} câu đã dịch sang tiếng Việt. Sửa bản dịch và thời gian nếu cần, rồi xác nhận để xuất.`;
+            translationReady = true;
+            reviewStatus.textContent = reviewPaused
+                ? `${lines.length} câu đã dịch sang tiếng Việt. Sửa nếu cần, rồi bấm “Tiếp tục xuất”.`
+                : `${lines.length} câu đã dịch sang tiếng Việt. Đang tiếp tục xuất thành phẩm…`;
             reviewConfirm.disabled = false;
         } catch (error) {
             if (!isCurrent()) return;
             reviewStatus.textContent = `Chưa dịch xong: ${ocrErrorMessage(error)}`;
             if (translationRetry) translationRetry.hidden = false;
-        } finally { translatingReview = false; }
+        } finally { translatingReview = false; maybeAutoContinueReview(); }
     };
     if (translationRetry) translationRetry.onclick = () => { void translateReviewRows(); };
     if (reviewDialog) {
-        reviewDialog.querySelector('#processTranscriptReviewClose').onclick = () => reviewDialog.close();
+        reviewDialog.oncancel = pauseReviewForEditing;
+        reviewDialog.querySelector('#processTranscriptReviewClose').onclick = () => { pauseReviewForEditing(); reviewDialog.close(); };
         reviewSkip.onclick = () => {
             transcriptConfirmed = true;
             manualOcrRows = [];
@@ -759,10 +789,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 return text && Number.isFinite(start) && Number.isFinite(end) && end > start;
             });
             if (!validRows.length || validRows.length !== manualOcrRows.filter(Boolean).length) {
+                pauseReviewForEditing();
                 reviewStatus.textContent = 'Mỗi câu cần có bản dịch tiếng Việt và thời gian kết thúc lớn hơn thời gian bắt đầu.';
                 return;
             }
             if (!window.reupEngineClient.health?.capabilities?.reviewed_translations) {
+                pauseReviewForEditing();
                 reviewStatus.textContent = 'Cần cập nhật Local Engine 0.2.51 trở lên để xuất đúng bản dịch bạn đã sửa. Bản dịch vẫn được giữ ở đây.';
                 if (reviewEngineUpdate) reviewEngineUpdate.hidden = false;
                 return;
@@ -864,6 +896,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.querySelector('#resetProcessConfig').onclick = () => {
         manualOcrRows = [];
         recognitionComplete = false;
+        translationReady = false;
+        reviewPaused = false;
+        if (reviewPause) reviewPause.hidden = false;
+        if (reviewConfirm) reviewConfirm.hidden = true;
+        if (reviewFootnote) reviewFootnote.textContent = 'Tự tiếp tục xuất khi dịch xong. Bạn có thể tạm dừng để chỉnh bản dịch.';
         transcriptConfirmed = false;
         transcriptSignature = '';
         if (reviewConfirm) reviewConfirm.disabled = true;
@@ -1219,7 +1256,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         aiApply.hidden = true;
     };
 
-    let submitting = false;
     dialog.querySelector('form').onsubmit = async event => {
         event.preventDefault();
         if (submitting || !isCurrent()) return;
@@ -1247,6 +1283,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 if (reviewConfirm) reviewConfirm.disabled = true;
                 if (reviewSkip) reviewSkip.hidden = true;
                 setReviewStage(0);
+                translationReady = false;
+                renderManualOcrRows('Đang nhận diện. Bản dịch tiếng Việt sẽ xuất hiện sau bước này.');
                 void syncReviewPreview();
                 reviewDialog.showModal();
                 const recognitionStartedAt = Date.now();
@@ -1463,6 +1501,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             submitting = false;
             submitButton.disabled = false;
             configForm.removeAttribute('aria-busy');
+            maybeAutoContinueReview();
         }
     };
     outputSummary.refresh();

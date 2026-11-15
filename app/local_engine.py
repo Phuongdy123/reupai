@@ -114,7 +114,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.51"
+ENGINE_VERSION = "0.2.52"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -134,6 +134,7 @@ ENGINE_CAPABILITIES = {
     "subtitle_ocr": True,
     "manual_subtitle_translation": True,
     "reviewed_translations": True,
+    "output_subtitle_edit": True,
     "subtitle_srt_export": True,
     "youtube_publishing": True,
     "subtitle_styles": True,

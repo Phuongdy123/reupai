@@ -553,6 +553,7 @@ class ProcessRequest(BaseModel):
     # and generated voice. It is only produced by the authenticated editor.
     render_only: bool = False
     regenerate_voice: bool = False
+    revised_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=10000)
     rerender_music_path: Optional[str] = None
 
 
@@ -567,6 +568,7 @@ class RenderEditRequest(BaseModel):
     # regenerates local TTS clips, then renders from the saved source/SRT.
     voice: Optional[str] = None
     tts_speed: Optional[float] = None
+    subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=10000)
 
 
 # =========================================================
@@ -5440,6 +5442,11 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
     )
     config = previous.get("config") if isinstance(previous, dict) else {}
     config = config if isinstance(config, dict) else {}
+    from services.output_subtitles import read_cues
+    try:
+        subtitles = read_cues(job_dir_for(channel, video_id) / "vietnamese.srt")
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     return {
         "video_id": video_id,
         "channel": channel,
@@ -5452,6 +5459,8 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
         "tts_speed": float(config.get("tts_speed") or 1.10),
         "source_ready": bool(local_source_for_process(channel, video_id)),
         "can_rerender": bool(previous),
+        "subtitles": subtitles,
+        "subtitle_edit_supported": True,
     }
 
 
@@ -5475,6 +5484,8 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
         mode=snapshot["mode"],
     )
     previous_config = dict((previous or {}).get("config") or {})
+    previous_config.pop("revised_subtitles", None)
+    previous_config.pop("regenerate_voice", None)
     # Never carry browser uploads into a revision request. Existing local
     # assets are retained by the renderer; no file content goes through web.
     previous_config.pop("logo_data", None)
@@ -5510,6 +5521,15 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
         previous_config["blur_intervals"] = body.blur_intervals
         previous_config["custom_blur_region"] = None
     voice_changed = False
+    if body.subtitles is not None:
+        from services.output_subtitles import validate_cues
+        try:
+            subtitles = validate_cues([line.model_dump(exclude_none=True) for line in body.subtitles])
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        if subtitles != snapshot["subtitles"]:
+            previous_config["revised_subtitles"] = subtitles
+            voice_changed = snapshot["mode"] == "voiceover"
     if "voice" in body.model_fields_set:
         if snapshot["mode"] != "voiceover":
             raise HTTPException(status_code=400, detail="Chỉ thành phẩm Voice mới thay được giọng.")

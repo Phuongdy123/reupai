@@ -23,7 +23,7 @@ const groups = [
 const pages = {
   "/app": ["Trang chủ", "Trò chuyện với trợ lý và theo dõi công việc xử lý video"],
   "/sources": ["Nguồn video", "Tìm video nguồn, tải xuống và chạy Vietsub / Voice AI"],
-  "/downloads": ["Video đã tải", "Thư viện video nguồn được lưu trên máy của bạn"],
+  "/downloads": ["Video đã tải", "Quản lý video nguồn đã tải và tiếp tục xử lý"],
   "/outputs": ["Thành phẩm", "Xem lại và tải video Vietsub / Voice đã hoàn tất"],
   "/favorites": ["Video yêu thích", "Những video đã đánh dấu trong thư viện local"],
   "/collections": ["Collections", "Sắp xếp video theo bộ sưu tập trên máy của bạn"],

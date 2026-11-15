@@ -111,8 +111,20 @@ window.fixtureReady=true;
                 assert cues[0]["end"] == 0.95
                 assert cues[1]["translated_text"] == "Cảm ơn"
                 assert not errors, errors
+                await page.reload()
+                await page.wait_for_function("window.fixtureReady")
+                await page.evaluate("translationCalls=1")
+                await page.locator("#runProcessConfig").click()
+                try:
+                    await page.wait_for_function("window.processCount === 1",timeout=6000)
+                except Exception:
+                    print(await page.evaluate("({count:processCount,calls:translationCalls,status:document.getElementById('processTranscriptReviewStatus').textContent,open:document.getElementById('processTranscriptReviewDialog').open,confirm:document.getElementById('processTranscriptReviewConfirm').outerHTML,foot:document.querySelector('.process-transcript-review-footnote').textContent})"))
+                    print('JS errors:',errors)
+                    raise
+                assert await page.evaluate("lastProcess.config.manual_transcript[0].translated_text") == "Xin chào"
+                assert not await page.locator("#processTranscriptReviewDialog").is_visible()
                 await browser.close()
-                print("PASS: protected video plays; translation retry preserves edits; old engines cannot discard edits; final config keeps edited Vietnamese and timings.")
+                print("PASS: protected video plays; edits pause automatic export; retry preserves edits; old engines cannot discard edits; untouched translations auto-export exactly once.")
         finally:
             server.shutdown()
             media_server.shutdown()

@@ -30,7 +30,6 @@ export function LandingPage() {
           <li><Icon name="play" size={16} /><span>Lồng tiếng</span></li>
         </ul>
         <div className="landing-actions"><Link href="/app" className="button-primary button-large">Bắt đầu ngay</Link><a href="#tinh-nang" className="button-secondary button-large">Tìm hiểu thêm</a></div>
-        <p className="landing-local-note"><Icon name="check" size={16} /> Video và thành phẩm được xử lý, lưu trên máy của bạn.</p>
       </div>
       <div className="landing-visual" aria-hidden="true">
         <div className="landing-orbit-art"><span className="landing-orbit-ring ring-one" /><span className="landing-orbit-ring ring-two" /><span className="landing-orbit-sphere" /><span className="landing-orbit-dot dot-one" /><span className="landing-orbit-dot dot-two" /></div>

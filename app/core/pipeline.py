@@ -2852,89 +2852,92 @@ def rerender_existing_output(
     voice_volume: float,
 ):
     """Render an edited result from existing local pipeline artifacts only."""
-    if not source_file:
-        raise FileNotFoundError("Khong tim thay video nguon local de xuat lai.")
-    source_video = get_source_video(url, job_dir, source_file, force=False)
-    if not vietnamese_srt.is_file():
-        raise FileNotFoundError("Khong tim thay phu de Viet da tao truoc do.")
-    no_speech = not vietnamese_srt.read_text(encoding="utf-8-sig").strip()
-    if mode == "voiceover" and not no_speech and not file_ok(voice_path):
-        raise FileNotFoundError("Khong tim thay file voice da tao truoc do.")
+    from services.output_subtitles import staged_revision
 
-    # A revision normally reuses voice.wav.  When the editor changed its
-    # speaker or pace, regenerate TTS locally from the existing Vietnamese
-    # subtitle and keep every other pipeline stage untouched.
-    if mode == "voiceover" and not no_speech and config.get("regenerate_voice"):
-        write_progress(job_dir, stage="tts", percent=24, status="running", message="Dang tao lai giong Viet da chon.", mode=mode)
-        create_voice(
-            source_video,
-            vietnamese_srt,
-            voice_path,
-            job_dir / "tts",
-            job_dir / "tts_manifest.json",
-            force=True,
-            voice_name=config.get("voice"),
-            speed=config.get("tts_speed"),
-        )
-        if not file_ok(voice_path):
-            raise RuntimeError("Khong tao duoc file voice moi.")
+    with staged_revision(vietnamese_srt, config.get("revised_subtitles")) as vietnamese_srt:
+        if not source_file:
+            raise FileNotFoundError("Khong tim thay video nguon local de xuat lai.")
+        source_video = get_source_video(url, job_dir, source_file, force=False)
+        if not vietnamese_srt.is_file():
+            raise FileNotFoundError("Khong tim thay phu de Viet da tao truoc do.")
+        no_speech = not vietnamese_srt.read_text(encoding="utf-8-sig").strip()
+        if mode == "voiceover" and not no_speech and not file_ok(voice_path) and not config.get("regenerate_voice"):
+            raise FileNotFoundError("Khong tim thay file voice da tao truoc do.")
 
-    # Keep the last selection if an API caller omits it. Never invoke OCR for
-    # an output-only revision unless there is no saved region at all.
-    previous_no_blur = False
-    if not isinstance(config.get("blur_region"), dict) and region_path.is_file():
-        try:
-            previous_region = json.loads(region_path.read_text(encoding="utf-8"))
-            previous_no_blur = previous_region.get("blur_enabled") is False
-            if (
-                not previous_no_blur
-                and not config.get("disable_main_blur")
-                and isinstance(previous_region.get("blur"), dict)
-            ):
-                previous_blur = dict(previous_region["blur"])
-                previous_method = str((previous_region.get("detected") or {}).get("method", ""))
-                if previous_method.startswith("temporal_srt_paddleocr"):
-                    previous_blur["x"] = 0
-                    previous_blur["width"] = previous_region["video"]["width"]
-                config = {**config, "blur_region": previous_blur}
-        except (OSError, ValueError, json.JSONDecodeError):
-            pass
+        # A revision normally reuses voice.wav.  When the editor changed its
+        # speaker or pace, regenerate TTS locally from the existing Vietnamese
+        # subtitle and keep every other pipeline stage untouched.
+        if mode == "voiceover" and not no_speech and config.get("regenerate_voice"):
+            write_progress(job_dir, stage="tts", percent=24, status="running", message="Dang tao lai giong Viet da chon.", mode=mode)
+            create_voice(
+                source_video,
+                vietnamese_srt,
+                voice_path,
+                job_dir / "tts",
+                job_dir / "tts_manifest.json",
+                force=True,
+                voice_name=config.get("voice"),
+                speed=config.get("tts_speed"),
+            )
+            if not file_ok(voice_path):
+                raise RuntimeError("Khong tao duoc file voice moi.")
 
-    write_progress(job_dir, stage="render", percent=15, status="running", message="Dang chuan bi xuat lai thanh pham.", mode=mode)
-    region = resolve_subtitle_region(source_video, region_path, region_preview, config=config, no_subtitle=previous_no_blur, force=True)
-    intervals = [dict(item) for item in (config.get("blur_intervals") or []) if isinstance(item, dict)]
-    custom_only = config.get("custom_blur_region")
-    if isinstance(custom_only, dict) and not intervals:
-        intervals.append({**custom_only, "start": 0, "end": 86400})
+        # Keep the last selection if an API caller omits it. Never invoke OCR for
+        # an output-only revision unless there is no saved region at all.
+        previous_no_blur = False
+        if not isinstance(config.get("blur_region"), dict) and region_path.is_file():
+            try:
+                previous_region = json.loads(region_path.read_text(encoding="utf-8"))
+                previous_no_blur = previous_region.get("blur_enabled") is False
+                if (
+                    not previous_no_blur
+                    and not config.get("disable_main_blur")
+                    and isinstance(previous_region.get("blur"), dict)
+                ):
+                    previous_blur = dict(previous_region["blur"])
+                    previous_method = str((previous_region.get("detected") or {}).get("method", ""))
+                    if previous_method.startswith("temporal_srt_paddleocr"):
+                        previous_blur["x"] = 0
+                        previous_blur["width"] = previous_region["video"]["width"]
+                    config = {**config, "blur_region": previous_blur}
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
 
-    temporary_output = output_path.with_name(f".{output_path.stem}.rerendering{output_path.suffix}")
-    temporary_output.unlink(missing_ok=True)
-    write_progress(job_dir, stage="render", percent=35, status="running", message="Dang xuat lai video voi vung mo da chinh.", mode=mode)
-    common = {
-        "preview_seconds": None,
-        "font_size": config.get("subtitle_font_size"),
-        "subtitle_style": config.get("subtitle_style", "minimal"),
-        "aspect_ratio": config.get("aspect_ratio"),
-        "logo_size": config.get("logo_size"),
-        "logo_x": config.get("logo_x"),
-        "logo_y": config.get("logo_y"),
-        "logo_mode": config.get("logo_mode", "none"),
-        "logo_text": config.get("logo_text"),
-        "logo_path": config.get("logo_path"),
-        "blur_intervals": intervals,
-        "music_path": config.get("music_path"),
-        "music_volume": normalize_music_volume(config.get("music_volume", 0.25)),
-        "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
-        "force": True,
-    }
-    if mode == "voiceover" and not no_speech:
-        render_voiceover(source_video, voice_path, vietnamese_srt, region_path, ass_path, temporary_output, region, original_volume=original_volume, voice_volume=voice_volume, **common)
-    else:
-        render_subtitle_only(source_video, vietnamese_srt, region_path, ass_path, temporary_output, region, **common)
-    if not file_ok(temporary_output):
-        raise RuntimeError("Khong tao duoc file thanh pham khi xuat lai.")
-    temporary_output.replace(output_path)
-    return source_video, region
+        write_progress(job_dir, stage="render", percent=15, status="running", message="Dang chuan bi xuat lai thanh pham.", mode=mode)
+        region = resolve_subtitle_region(source_video, region_path, region_preview, config=config, no_subtitle=previous_no_blur, force=True)
+        intervals = [dict(item) for item in (config.get("blur_intervals") or []) if isinstance(item, dict)]
+        custom_only = config.get("custom_blur_region")
+        if isinstance(custom_only, dict) and not intervals:
+            intervals.append({**custom_only, "start": 0, "end": 86400})
+
+        temporary_output = output_path.with_name(f".{output_path.stem}.rerendering{output_path.suffix}")
+        temporary_output.unlink(missing_ok=True)
+        write_progress(job_dir, stage="render", percent=35, status="running", message="Dang xuat lai video voi vung mo da chinh.", mode=mode)
+        common = {
+            "preview_seconds": None,
+            "font_size": config.get("subtitle_font_size"),
+            "subtitle_style": config.get("subtitle_style", "minimal"),
+            "aspect_ratio": config.get("aspect_ratio"),
+            "logo_size": config.get("logo_size"),
+            "logo_x": config.get("logo_x"),
+            "logo_y": config.get("logo_y"),
+            "logo_mode": config.get("logo_mode", "none"),
+            "logo_text": config.get("logo_text"),
+            "logo_path": config.get("logo_path"),
+            "blur_intervals": intervals,
+            "music_path": config.get("music_path"),
+            "music_volume": normalize_music_volume(config.get("music_volume", 0.25)),
+            "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
+            "force": True,
+        }
+        if mode == "voiceover" and not no_speech:
+            render_voiceover(source_video, voice_path, vietnamese_srt, region_path, ass_path, temporary_output, region, original_volume=original_volume, voice_volume=voice_volume, **common)
+        else:
+            render_subtitle_only(source_video, vietnamese_srt, region_path, ass_path, temporary_output, region, **common)
+        if not file_ok(temporary_output):
+            raise RuntimeError("Khong tao duoc file thanh pham khi xuat lai.")
+        temporary_output.replace(output_path)
+        return source_video, region
 
 
 # =========================================================

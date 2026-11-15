@@ -104,3 +104,10 @@ body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn):is(:hove
 @media (prefers-reduced-motion: reduce) {
   .processing-star-frame > i { animation: none; opacity: .7; }
 }
+
+#batchBar > button { position: relative; isolation: isolate; }
+body.theme-xports #batchBar > button:not(:disabled) { background: #222225 !important; border-color: #4b4b51 !important; color: #f4f4f5 !important; }
+body.theme-xports #batchBar > button:is(:hover, :focus-visible):not(:disabled) { background: #2b2b30 !important; border-color: #ffffff66 !important; box-shadow: none !important; }
+#batchBar > button:is(:hover, :focus-visible):not(:disabled) > .processing-star-frame { display: block; }
+#batchBar > button > .processing-star-frame > i { --star-size: 5px; }
+#batchBar > button > .processing-star-frame > i:nth-child(n + 3) { display: none; }

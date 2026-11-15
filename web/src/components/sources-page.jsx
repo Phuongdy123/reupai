@@ -7,6 +7,7 @@ import { mountProductRuntime } from "../lib/product-runtime";
 import { sendFeedback } from "./feedback-provider";
 import { useFeedback } from "./feedback-provider";
 import { PENDING_SOURCE_KEY } from "./workspace-assistant";
+import { OutputEditor } from "./output-editor";
 
 export function SourcesPage() {
   const { status, error: connectionError, client, connect, check } = useEngine();
@@ -14,6 +15,12 @@ export function SourcesPage() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
+  const [editor, setEditor] = useState(null);
+  useEffect(() => {
+    const open = event => { if (event.detail?.video_id) setEditor(event.detail); };
+    window.addEventListener("reupai:edit-output", open);
+    return () => window.removeEventListener("reupai:edit-output", open);
+  }, []);
   const { beginWaiting, endWaiting } = useFeedback();
 
   useEffect(() => {
@@ -120,5 +127,6 @@ export function SourcesPage() {
     {error && <div className="error-banner" role="alert"><span>{error}</span><button className="btn secondary" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div>}
     {!ready && !error && <p className="info-line" aria-live="polite">Đang đọc thư viện local…</p>}
     <div ref={host} className="source-runtime-host" data-product-runtime="sources" />
+    {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setEditor(null); sendFeedback("success", "Đã vào hàng đợi xuất lại. Theo dõi ở Lịch sử hoặc Thành phẩm."); }} />}
   </div>;
 }

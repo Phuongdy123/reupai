@@ -3310,6 +3310,19 @@ async function openPlayer(
         )
     );
 
+    let editResult = modal.querySelector('.player-edit-output');
+    if (!editResult) {
+        editResult = document.createElement('button');
+        editResult.type = 'button';
+        editResult.className = 'btn secondary player-edit-output';
+        editResult.textContent = 'Sửa thoại / video · YouTube';
+        modal.querySelector('.modal-box')?.appendChild(editResult);
+    }
+    editResult.onclick = () => {
+        closePlayer();
+        window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: { ...video, channel: channel || video.channel || '2d_animation', mode } }));
+    };
+
     const title = (
         document
         .getElementById(
@@ -7257,6 +7270,7 @@ function ensureBatchBar() {
             class="green batch-action"
             id="batchSubtitle"
         >
+            ${PROCESSING_STAR_BORDER}
             Vietsub
         </button>
 
@@ -7265,6 +7279,7 @@ function ensureBatchBar() {
             class="orange batch-action"
             id="batchVoice"
         >
+            ${PROCESSING_STAR_BORDER}
             Voice
         </button>
 
@@ -7273,6 +7288,7 @@ function ensureBatchBar() {
             class="secondary batch-action"
             id="batchDownload"
         >
+            ${PROCESSING_STAR_BORDER}
             Tải
         </button>
 
@@ -7281,6 +7297,7 @@ function ensureBatchBar() {
             class="secondary"
             id="batchClear"
         >
+            ${PROCESSING_STAR_BORDER}
             Bỏ chọn
         </button>
     `;
