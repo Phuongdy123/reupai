@@ -85,7 +85,7 @@ export function Dashboard() {
     if (!id) return;
     setStopping(id);
     try {
-      const query = new URLSearchParams({ channel: job.channel_key || "2d_animation", mode: job.mode || "subtitle" });
+      const query = new URLSearchParams({ channel: job.channel_key || "default", mode: job.mode || "subtitle" });
       await client.json(`/api/jobs/${encodeURIComponent(id)}/stop?${query}`, { method: "POST" });
       await Promise.all([load(), loadJobs()]);
     } catch (requestError) { setError(requestError.message || "Không thể dừng job."); }
@@ -123,70 +123,15 @@ export function Dashboard() {
         <div className="dashboard-engine-actions"><a className="dashboard-engine-download" href={REUPAI_MICROSOFT_STORE_URL} target="_blank" rel="noopener noreferrer">Tải Local Engine từ Microsoft Store</a><button type="button" disabled={status === "checking" || status === "authorizing"} onClick={status === "authorization_required" || status === "permission_denied" ? connect : check}>{status === "checking" || status === "authorizing" ? "Đang kiểm tra…" : status === "authorization_required" || status === "permission_denied" ? "Cấp quyền kết nối" : "Đã cài · Kiểm tra kết nối"}</button></div>
       </section>}
       {status === "connected" && diagnostics && !geminiReady && !isGuest && (
-        <section
-          className="dashboard-overview-alert dashboard-gemini-onboarding"
-          style={{
-            border: "1px solid rgba(139, 92, 246, 0.45)",
-            background: "linear-gradient(135deg, rgba(124, 58, 237, 0.18) 0%, rgba(20, 20, 28, 0.96) 100%)",
-            borderRadius: "14px",
-            padding: "18px 22px",
-            margin: "0 0 16px 0",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "18px",
-            flexWrap: "wrap",
-            boxShadow: "0 8px 32px rgba(124, 58, 237, 0.2)"
-          }}
-          aria-label="Kích hoạt AI Gemini"
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "16px", flex: "1 1 320px" }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "48px",
-                height: "48px",
-                borderRadius: "12px",
-                background: "rgba(139, 92, 246, 0.25)",
-                color: "#ddd6fe",
-                flexShrink: 0,
-                border: "1px solid rgba(139, 92, 246, 0.35)"
-              }}
-            >
-              <Icon name="spark" size={26} />
-            </span>
-            <div>
-              <strong style={{ display: "block", fontSize: "15px", color: "#f9fafb", marginBottom: "4px", fontWeight: "650" }}>
-                {geminiNeedsProject ? "Đã kết nối Google · Cần chọn Project Gemini" : "Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu"}
-              </strong>
-              <p style={{ margin: 0, fontSize: "13px", color: "#d1d5db", lineHeight: 1.55 }}>
-                {geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc nhập Project ID để hoàn tất kích hoạt quota Gemini." : "Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này."}
-              </p>
-            </div>
+        <section className="dashboard-overview-alert dashboard-gemini-onboarding" aria-label="Kích hoạt AI Gemini">
+          <Icon name="spark" size={20} />
+          <div className="dashboard-engine-guide">
+            <strong>{geminiNeedsProject ? "Đã kết nối Google · Cần chọn Project Gemini" : "Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu"}</strong>
+            <p>{geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc nhập Project ID để hoàn tất kích hoạt quota Gemini." : "Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này."}</p>
           </div>
-          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexShrink: 0 }}>
-            <Link
-              href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"}
-              className="btn primary"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "11px 22px",
-                fontSize: "13.5px",
-                fontWeight: "650",
-                background: "linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)",
-                color: "#fff",
-                borderRadius: "10px",
-                textDecoration: "none",
-                boxShadow: "0 4px 18px rgba(109, 40, 217, 0.5)",
-                whiteSpace: "nowrap",
-                border: "1px solid rgba(255, 255, 255, 0.2)"
-              }}
-            >
-              <Icon name="spark" size={17} /> {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
+          <div className="dashboard-engine-actions">
+            <Link href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"} className="btn primary">
+              <Icon name="spark" size={16} /> {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
             </Link>
           </div>
         </section>

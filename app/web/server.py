@@ -501,7 +501,7 @@ class ProcessRequest(BaseModel):
     url: str
     video_id: str
     billing_token: Optional[str] = None
-    channel: str = "2d_animation"
+    channel: str = "default"
     mode: Literal[
         "subtitle",
         "voiceover",
@@ -559,7 +559,7 @@ class ProcessRequest(BaseModel):
 
 
 class RenderEditRequest(BaseModel):
-    channel: str = "2d_animation"
+    channel: str = "default"
     mode: Literal["subtitle", "voiceover"] = "subtitle"
     blur_region: Optional[dict[str, float]] = None
     # `kind` is UI metadata (logo versus a timed detail) retained with the
@@ -1380,7 +1380,7 @@ def enrich_video(
             "channel_key"
         )
         or default_channel
-        or "2d_animation"
+        or "default"
     )
 
     download_file = (
@@ -3686,7 +3686,7 @@ def library_source(
 )
 def preview_source_video(
     video_id: str,
-    channel: str = "2d_animation",
+    channel: str = "default",
 ):
     """Serve a downloaded source inline for lightweight library previews."""
 
@@ -4373,7 +4373,7 @@ def api_videos(
         )
 
     source = find_source_by_profile(url)
-    default_channel = source["channel_key"] if source else "2d_animation"
+    default_channel = source["channel_key"] if source else "default"
 
     def read_cache_state():
         sync_cache = load_source_sync_cache(url)
@@ -4766,7 +4766,7 @@ def api_videos_page(
             "channel_key"
         ]
         if source
-        else "2d_animation"
+        else "default"
     )
 
     start = (
@@ -5466,7 +5466,7 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
 
 
 @app.get("/api/outputs/{video_id}/edit")
-def api_output_edit(video_id: str, channel: str = "2d_animation", mode: str = "subtitle"):
+def api_output_edit(video_id: str, channel: str = "default", mode: str = "subtitle"):
     return _output_edit_snapshot(video_id, channel, mode)
 
 
@@ -5556,7 +5556,7 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
 def api_process_stop(
     video_id: str,
     channel: str =
-        "2d_animation",
+        "default",
     mode: str =
         "subtitle",
 ):
@@ -5698,7 +5698,7 @@ def api_process_stop(
 def api_process_status(
     video_id: str,
     channel: str =
-        "2d_animation",
+        "default",
     mode: str =
         "subtitle",
 ):
@@ -5941,7 +5941,7 @@ def api_process_status(
 def api_result(
     video_id: str,
     channel: str =
-        "2d_animation",
+        "default",
     mode: str =
         "subtitle",
     output_format: str = "video",
@@ -6031,7 +6031,7 @@ def api_result(
 def api_stream(
     video_id: str,
     channel: str =
-        "2d_animation",
+        "default",
     mode: str =
         "subtitle",
 ):

@@ -127,9 +127,9 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     let alive = true;
     setLoading(true); setError(null); setNotice(null); setMeta(null); setRegion(null); setIntervals([]); setDraft(null); setActiveDetailId(null); setEditMode(null); setNewRegionKind("logo"); setPreviewSource(false); setSourceUrl(null); setResultUrl(null);
     Promise.allSettled([
-      client.json(`/api/outputs/${encodeURIComponent(item.video_id)}/edit?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
-      client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
-      client.mediaUrl(`/api/preview/source/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}`),
+      client.json(`/api/outputs/${encodeURIComponent(item.video_id)}/edit?channel=${encodeURIComponent(item.channel || "default")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
+      client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "default")}&mode=${encodeURIComponent(item.mode || "subtitle")}`),
+      client.mediaUrl(`/api/preview/source/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "default")}`),
     ]).then(([detailsResult, renderedResult, sourceResult]) => {
       if (!alive) return;
       if (detailsResult.status !== "fulfilled") throw detailsResult.reason;
@@ -249,7 +249,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
     try {
       const result = await client.json(`/api/outputs/${encodeURIComponent(item.video_id)}/rerender`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel: item.channel || "2d_animation", mode: item.mode || "subtitle", blur_region: region, blur_intervals: intervals.map(({ id, ...entry }) => entry), ...(voiceChanged ? { voice: voiceName, tts_speed: ttsSpeed } : {}), ...(transcriptChanged ? { subtitles: normalizedCues } : {}) }),
+        body: JSON.stringify({ channel: item.channel || "default", mode: item.mode || "subtitle", blur_region: region, blur_intervals: intervals.map(({ id, ...entry }) => entry), ...(voiceChanged ? { voice: voiceName, tts_speed: ttsSpeed } : {}), ...(transcriptChanged ? { subtitles: normalizedCues } : {}) }),
       });
       onQueued?.(result, item);
       setNotice("Đã vào hàng đợi xuất lại. Video cũ vẫn được giữ cho tới khi file mới hoàn tất.");

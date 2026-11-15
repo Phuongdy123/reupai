@@ -953,7 +953,7 @@ def _channel_candidates(channel_key):
     channels = []
     if channel_key:
         channels.append(channel_key)
-    for name in ("2d_animation", "3d_animation", "comedy"):
+    for name in ("default",):
         if name not in channels:
             channels.append(name)
     return channels
@@ -979,7 +979,7 @@ def local_video_states(video_specs):
 
         has_subtitle = False
         has_voice = False
-        resolved_channel = channel_key or "2d_animation"
+        resolved_channel = channel_key or "default"
         for channel in _channel_candidates(channel_key):
             job_dir = CHANNELS_ROOT / channel / "jobs" / video_id
             if (job_dir / "final_sub.mp4").is_file():
@@ -1016,7 +1016,7 @@ def local_video_state(
             "has_voice_result": False,
             "processing": False,
             "db_status": None,
-            "channel_key": channel_key or "2d_animation",
+            "channel_key": channel_key or "default",
         },
     )
 

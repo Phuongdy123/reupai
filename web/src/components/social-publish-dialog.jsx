@@ -9,7 +9,7 @@ import { recordChannelActivity } from "../lib/channel-activity";
 const labels = { facebook: "Facebook Page", tiktok: "TikTok" };
 const videoIdentity = item => ({
   video_id: item.video_id || item.platform_video_id,
-  channel: item.channel || item.channel_key || "2d_animation",
+  channel: item.channel || item.channel_key || "default",
   mode: item.mode || "subtitle",
 });
 

@@ -236,7 +236,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (!isCurrent()) return;
             if (!video.downloaded) { setPreviewState('empty'); return; }
             setPreviewState('loading');
-            const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`, { refresh: true });
+            const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || 'default')}`, { refresh: true });
             if (!isCurrent()) return;
             preview.src = sourceUrl;
             preview.load();
@@ -620,7 +620,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const syncReviewPreview = async (refresh = false) => {
         let source;
         try {
-            source = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`, { refresh });
+            source = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || 'default')}`, { refresh });
         } catch { reviewPreview?.onerror?.(); return; }
         if (!isCurrent()) return;
         if (reviewPreview && source && reviewPreview.dataset.sourceUrl !== source) {
@@ -879,7 +879,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         autoBlurButton.disabled = true;
         autoBlurStatus.textContent = 'AI đang tìm vị trí phụ đề gốc trên video…';
         try {
-            const channel = encodeURIComponent(video.channel || '2d_animation');
+            const channel = encodeURIComponent(video.channel || 'default');
             const result = await requestJson(
                 `/api/preview/subtitle-region/${encodeURIComponent(video.video_id)}?channel=${channel}`,
                 { timeoutMs: 180000 },
@@ -922,7 +922,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     preview.crossOrigin = 'anonymous';
     if (video.downloaded) {
-        window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`)
+        window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || 'default')}`)
             .then(url => { if (isCurrent()) preview.src = url; })
             .catch(() => { if (isCurrent()) preview.onerror(); });
     }
@@ -1343,7 +1343,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                             signal: previewAbortController.signal,
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                channel: video.channel || '2d_animation',
+                                channel: video.channel || 'default',
                                 region: { x: selectedRect.x / preview.videoWidth, y: selectedRect.y / preview.videoHeight,
                                     width: selectedRect.width / preview.videoWidth, height: selectedRect.height / preview.videoHeight },
                                 language: dialog.querySelector('#processOcrLanguage')?.value || 'auto',
@@ -1360,7 +1360,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                             method: 'POST', timeoutMs: 30 * 60 * 1000,
                             signal: previewAbortController.signal,
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ channel: video.channel || '2d_animation', source_language: dialog.querySelector('#processSourceLanguage')?.value || 'auto' }),
+                            body: JSON.stringify({ channel: video.channel || 'default', source_language: dialog.querySelector('#processSourceLanguage')?.value || 'auto' }),
                         });
                         if (skipReviewRequested) return;
                         if (result.task_id) {

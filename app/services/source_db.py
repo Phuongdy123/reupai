@@ -281,6 +281,18 @@ def init_db():
 
     cursor.execute(
         """
+        DELETE FROM sources
+        WHERE channel_key IN ('2d_animation', '3d_animation', 'comedy')
+        """
+    )
+    cursor.execute(
+        """
+        DELETE FROM channels
+        WHERE channel_key IN ('2d_animation', '3d_animation', 'comedy')
+        """
+    )
+    cursor.execute(
+        """
         INSERT OR IGNORE INTO channels (
             channel_key,
             name,
@@ -289,8 +301,8 @@ def init_db():
         VALUES (?, ?, ?)
         """,
         (
-            "2d_animation",
-            "2D Animation",
+            "default",
+            "Mặc định",
             now(),
         )
     )

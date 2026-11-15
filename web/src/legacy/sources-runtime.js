@@ -1204,7 +1204,7 @@ async function loadVideos(refresh = false) {
                     },
                     body: JSON.stringify({
                         url: sourceUrl,
-                        channel: '2d_animation',
+                        channel: 'default',
                     }),
                 }
             );
@@ -1593,7 +1593,7 @@ function buildCard(
 
     const channel = (
         video.channel_key
-        || '2d_animation'
+        || 'default'
     );
 
     const checked = (
@@ -1798,7 +1798,7 @@ function buildCard(
 
                         </div>
 
-                    <input type="hidden" class="channel" value="${escapeHtml(channel || '2d_animation')}">
+                    <input type="hidden" class="channel" value="${escapeHtml(channel || 'default')}">
                     </div>
 
                 </details>
@@ -2026,7 +2026,7 @@ function buildCard(
                     '.channel'
                 )
                 ?.value
-                || '2d_animation'
+                || 'default'
             );
         };
     }
@@ -2481,7 +2481,7 @@ async function performProcessVideo(
             '.channel'
         )
         ?.value
-        || '2d_animation'
+        || 'default'
     );
 
     const subButton = (
@@ -2785,7 +2785,7 @@ async function stopVideoProcess(
                 '.channel'
             )
             ?.value
-        || '2d_animation'
+        || 'default'
     );
 
     const mode = (
@@ -3281,7 +3281,7 @@ async function openPlayer(
         actions.innerHTML = '<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh của bạn.</p><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg></span>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg>Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong class="result-card-title"><span class="result-card-icon is-youtube"><svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg></span>Đăng YouTube</strong><p>AI gợi ý nội dung, chọn ảnh bìa và lên lịch đăng.</p><button type="button" class="btn primary player-publish-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg>Đăng YouTube</button></div><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-external"></use></svg></span>Facebook &amp; TikTok</strong><p>Đăng lên Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn secondary player-social-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-external"></use></svg>Facebook / TikTok</button></div>';
         layout.appendChild(actions);
     }
-    const output = { ...video, channel: channel || video.channel || '2d_animation', mode };
+    const output = { ...video, channel: channel || video.channel || 'default', mode };
     actions.querySelector('.player-edit-output').onclick = () => {
         closePlayer();
         window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: output }));
@@ -3456,7 +3456,7 @@ function videoLibraryPayload(
         channel_key:
             String(
                 video.channel_key
-                || '2d_animation'
+                || 'default'
             ),
 
         published_at:
@@ -5226,7 +5226,7 @@ function ensureManagerPanel() {
                             type="text"
                             placeholder="Tên nguồn"
                         >
-                        <input type="hidden" id="saveSourceChannel" value="2d_animation">
+                        <input type="hidden" id="saveSourceChannel" value="default">
                     </div>
 
                     <div class="compact-row source-manage-actions">
@@ -5292,7 +5292,7 @@ function ensureManagerPanel() {
                     </div>
 
                     <div class="compact-row">
-                        <input type="hidden" id="directVideoChannel" value="2d_animation">
+                        <input type="hidden" id="directVideoChannel" value="default">
 
                         <button
                             type="button"
@@ -5555,7 +5555,7 @@ async function loadSavedSources() {
 
             option.dataset.channel =
                 source.channel_key
-                || '2d_animation';
+                || 'default';
 
             select.appendChild(
                 option
@@ -8450,7 +8450,7 @@ async function submitFollowSource() {
                 platform,
                 name,
                 url,
-                channel: '2d_animation',
+                channel: 'default',
                 cover_url: cover,
                 auto_process: false,
                 min_views: 0,
@@ -8527,7 +8527,7 @@ async function followCurrentSource() {
             'saveSourceChannel'
         )
         ?.value
-        || '2d_animation'
+        || 'default'
     );
 
     const name = (
@@ -9189,10 +9189,6 @@ function trackedSourceCardHtml(
                     >
                         Xem series
                     </button>
-
-                    <span class="tracked-channel-key">
-                        ${escapeHtml(source.channel_key || '2d_animation')}
-                    </span>
 
                 </div>
 
@@ -10313,7 +10309,7 @@ function buildUiState() {
                     'directVideoChannel'
                 )
                 ?.value
-                || '2d_animation'
+                || 'default'
             ),
 
         scrollY:
@@ -10807,7 +10803,7 @@ async function resumeActiveJobs() {
             const channel = (
                 job.channel_key
                 || video.channel_key
-                || '2d_animation'
+                || 'default'
             );
 
             const mode = (

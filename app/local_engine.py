@@ -645,7 +645,7 @@ def _youtube_video(payload, owner):
     if payload.get("account_id") != owner:
         raise HTTPException(status_code=403, detail="Tài khoản đã thay đổi. Hãy mở lại cửa sổ đăng YouTube.")
     video_id = validate_video_id(str(payload.get("video_id", "")))
-    channel = validate_channel(str(payload.get("channel", "2d_animation")))
+    channel = validate_channel(str(payload.get("channel", "default")))
     mode = payload.get("mode", "subtitle")
     if mode not in {"subtitle", "voiceover"}:
         raise HTTPException(status_code=400, detail="Chỉ đăng video thành phẩm, không đăng file SRT.")
@@ -987,7 +987,7 @@ def cover(url: str, _: bool = Depends(require_token)):
 
 
 @app.get("/api/preview/source/{video_id}")
-def source_preview(video_id: str, channel: str = "2d_animation", _: bool = Depends(require_token)):
+def source_preview(video_id: str, channel: str = "default", _: bool = Depends(require_token)):
     return preview_source_video(video_id=video_id, channel=channel)
 
 
@@ -1017,7 +1017,7 @@ def _detect_preview_subtitle_region(path: str, size: int, mtime_ns: int) -> dict
 @app.get("/api/preview/subtitle-region/{video_id}")
 async def subtitle_region_preview(
     video_id: str,
-    channel: str = "2d_animation",
+    channel: str = "default",
     _: bool = Depends(require_token),
 ):
     path = local_source_for_process(validate_channel(channel), validate_video_id(video_id))
@@ -1034,7 +1034,7 @@ async def subtitle_region_preview(
 
 
 class SubtitleOcrPreviewRequest(BaseModel):
-    channel: str = "2d_animation"
+    channel: str = "default"
     region: dict = Field(default_factory=dict)
     language: str = "auto"
     fps: float = 2.0
@@ -1044,7 +1044,7 @@ class SubtitleOcrPreviewRequest(BaseModel):
 
 
 class AudioTranscriptPreviewRequest(BaseModel):
-    channel: str = "2d_animation"
+    channel: str = "default"
     source_language: str = "auto"
 
 
@@ -1216,12 +1216,12 @@ def source_file(video_id: str, _: bool = Depends(require_token)):
 
 
 @app.get("/api/result/{video_id}")
-def result_file(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", output_format: str = "video", _: bool = Depends(require_token)):
+def result_file(video_id: str, channel: str = "default", mode: str = "subtitle", output_format: str = "video", _: bool = Depends(require_token)):
     return api_result(video_id=video_id, channel=channel, mode=mode, output_format=output_format)
 
 
 @app.get("/api/stream/{video_id}")
-def result_stream(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
+def result_stream(video_id: str, channel: str = "default", mode: str = "subtitle", _: bool = Depends(require_token)):
     return api_stream(video_id=video_id, channel=channel, mode=mode)
 
 
@@ -1258,7 +1258,7 @@ def process(body: ProcessRequest, _: bool = Depends(require_token)):
 
 
 @app.get("/api/outputs/{video_id}/edit")
-def output_edit(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
+def output_edit(video_id: str, channel: str = "default", mode: str = "subtitle", _: bool = Depends(require_token)):
     return api_output_edit(video_id=video_id, channel=channel, mode=mode)
 
 
@@ -1273,12 +1273,12 @@ def jobs(_: bool = Depends(require_token)):
 
 
 @app.get("/api/jobs/{video_id}")
-def job_status(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
+def job_status(video_id: str, channel: str = "default", mode: str = "subtitle", _: bool = Depends(require_token)):
     return api_process_status(video_id=video_id, channel=channel, mode=mode)
 
 
 @app.post("/api/jobs/{video_id}/stop")
-def stop_job(video_id: str, channel: str = "2d_animation", mode: str = "subtitle", _: bool = Depends(require_token)):
+def stop_job(video_id: str, channel: str = "default", mode: str = "subtitle", _: bool = Depends(require_token)):
     return api_process_stop(video_id=video_id, channel=channel, mode=mode)
 
 
@@ -1343,14 +1343,14 @@ def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
     elif path.startswith("/api/preview/source/"):
         response = preview_source_video(
             video_id=path.rsplit("/", 1)[-1],
-            channel=query.get("channel", ["2d_animation"])[0],
+            channel=query.get("channel", ["default"])[0],
         )
     elif path.startswith("/library/source/"):
         response = library_source(video_id=path.rsplit("/", 1)[-1])
     elif path.startswith(("/api/stream/", "/api/result/")):
         handler = api_stream if path.startswith("/api/stream/") else api_result
         options = {"output_format": query.get("output_format", ["video"])[0]} if handler is api_result else {}
-        response = handler(video_id=path.rsplit("/", 1)[-1], channel=query.get("channel", ["2d_animation"])[0], mode=query.get("mode", ["subtitle"])[0], **options)
+        response = handler(video_id=path.rsplit("/", 1)[-1], channel=query.get("channel", ["default"])[0], mode=query.get("mode", ["subtitle"])[0], **options)
     else:
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
     response.headers["Cache-Control"] = "private, no-store"

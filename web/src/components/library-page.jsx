@@ -140,7 +140,7 @@ export function LibraryPage({ kind }) {
   };
   const stopJob = async (job) => {
     const id = jobVideoId(job); setBusyId(id, true); setError(null);
-    try { await client.json(`/api/jobs/${encodeURIComponent(id)}/stop?${new URLSearchParams({ channel: job.channel_key || "2d_animation", mode: job.mode || "subtitle" })}`, { method: "POST" }); await load(); }
+    try { await client.json(`/api/jobs/${encodeURIComponent(id)}/stop?${new URLSearchParams({ channel: job.channel_key || "default", mode: job.mode || "subtitle" })}`, { method: "POST" }); await load(); }
     catch (requestError) { setError(requestError.message || "Không thể dừng job."); }
     finally { setBusyId(id, false); }
   };

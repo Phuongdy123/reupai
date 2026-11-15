@@ -4633,7 +4633,7 @@ def parse_args():
 
 
 
-            "Channel key, vi du: 2d_animation, 3d_animation, comedy. "
+            "Channel key, vi du: default, 3d_animation, comedy. "
 
 
 

@@ -68,7 +68,7 @@ export function videoBody(video) {
   return body;
 }
 export function outputPath(item) {
-  return item.file_path || `channels/${item.channel || item.channel_key || "2d_animation"}/jobs/${item.video_id || item.platform_video_id}/${item.mode === "voiceover" ? "final_voice.mp4" : "final_sub.mp4"}`;
+  return item.file_path || `channels/${item.channel || item.channel_key || "default"}/jobs/${item.video_id || item.platform_video_id}/${item.mode === "voiceover" ? "final_voice.mp4" : "final_sub.mp4"}`;
 }
 export function sourcePath(item) {
   if (item?.file_path) return item.file_path;

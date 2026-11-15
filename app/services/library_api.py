@@ -87,7 +87,7 @@ class SavedSourceBody(BaseModel):
     platform: str
     name: str
     url: str
-    channel: str = "2d_animation"
+    channel: str = "default"
     auto_process: bool = False
     min_views: int = 0
     cover_url: str = ""
@@ -104,7 +104,7 @@ class SavedSourcePatchBody(BaseModel):
 
 class DirectVideoBody(BaseModel):
     url: str
-    channel: str = "2d_animation"
+    channel: str = "default"
 
 
 # Keep older databases compatible with saved source thumbnails.
@@ -422,7 +422,7 @@ def api_save_source(
 
     channel = (
         body.channel.strip()
-        or "2d_animation"
+        or "default"
     )
 
     conn = get_connection()
@@ -834,7 +834,7 @@ def api_direct_video(
 
         "channel_key":
             body.channel
-            or "2d_animation",
+            or "default",
 
         "published_at":
             None,

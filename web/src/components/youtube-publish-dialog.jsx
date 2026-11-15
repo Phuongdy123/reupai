@@ -32,7 +32,7 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   useEffect(() => {
     let active = true;
-    client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`).then(url => { if (active) setPreviewUrl(url); }).catch(() => {});
+    client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "default")}&mode=${encodeURIComponent(item.mode || "subtitle")}`).then(url => { if (active) setPreviewUrl(url); }).catch(() => {});
     return () => { active = false; };
   }, [client, item.video_id, item.channel, item.mode]);
   const chooseSchedule = hours => {
@@ -46,7 +46,7 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [job, setJob] = useState(null);
-  const identity = { video_id: item.video_id, channel: item.channel || "2d_animation", mode: item.mode || "subtitle", account_id: connection.account_id, channel_id: connection.channel.id };
+  const identity = { video_id: item.video_id, channel: item.channel || "default", mode: item.mode || "subtitle", account_id: connection.account_id, channel_id: connection.channel.id };
   const storageKey = `reupai:youtube-upload:${connection.account_id}:${connection.channel.id}:${item.video_id}:${item.mode}`;
   const uploading = job && ["queued", "uploading"].includes(job.state);
   useEffect(() => {
