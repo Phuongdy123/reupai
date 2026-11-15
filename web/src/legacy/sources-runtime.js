@@ -1798,6 +1798,7 @@ function buildCard(
 
                         </div>
 
+                    <input type="hidden" class="channel" value="${escapeHtml(channel || '2d_animation')}">
                     </div>
 
                 </details>
@@ -2024,7 +2025,8 @@ function buildCard(
                 .querySelector(
                     '.channel'
                 )
-                .value
+                ?.value
+                || '2d_animation'
             );
         };
     }
@@ -2478,7 +2480,8 @@ async function performProcessVideo(
         .querySelector(
             '.channel'
         )
-        .value
+        ?.value
+        || '2d_animation'
     );
 
     const subButton = (
