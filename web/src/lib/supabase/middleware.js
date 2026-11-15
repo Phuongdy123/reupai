@@ -36,23 +36,49 @@ export async function updateSession(request) {
     },
   });
   const isPublic = publicRoutes.has(pathname) || pathname.startsWith("/auth/");
-  let user = null;
-  try { const result = await supabase.auth.getUser(); user = result.data?.user || null; }
-  catch { /* Public pages still render as a guest if account services are unavailable. */ }
-  if (!user) {
-    if (isPublic || pathname === "/pending") return response;
+  const hasAuthCookie = request.cookies.getAll().some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("-auth-token"));
+  if (!hasAuthCookie) {
+    if (isPublic || pathname === "/pending") {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-reupai-guest", "1");
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(url);
   }
-  const { data: profile } = await supabase.from("profiles").select("status, role").eq("id", user.id).maybeSingle();
-  const status = profile?.status || "pending";
-  if (status !== "approved") {
-    if (pathname === "/pending" || pathname === "/plans" || pathname.startsWith("/auth/")) return response;
-    const url = request.nextUrl.clone(); url.pathname = "/pending"; url.search = "";
+
+  let user = null;
+  try { const result = await supabase.auth.getUser(); user = result.data?.user || null; }
+  catch { /* Public pages still render as a guest if account services are unavailable. */ }
+  if (!user) {
+    if (isPublic || pathname === "/pending") {
+      const requestHeaders = new Headers(request.headers);
+      requestHeaders.set("x-reupai-guest", "1");
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(url);
   }
+
+  const cachedOk = request.cookies.get("reupai_profile_ok")?.value === `1:${user.id}`;
+  const needsFreshProfile = !cachedOk || pathname.startsWith("/admin/") || pathname === "/pending";
+  let profile = null;
+  if (needsFreshProfile) {
+    const { data } = await supabase.from("profiles").select("status, role").eq("id", user.id).maybeSingle();
+    profile = data;
+    const status = profile?.status || "pending";
+    if (status !== "approved") {
+      if (pathname === "/pending" || pathname === "/plans" || pathname.startsWith("/auth/")) return response;
+      const url = request.nextUrl.clone(); url.pathname = "/pending"; url.search = "";
+      return NextResponse.redirect(url);
+    }
+    response.cookies.set("reupai_profile_ok", `1:${user.id}`, { path: "/", maxAge: 120, httpOnly: true, sameSite: "lax" });
+  }
+
   if (pathname === "/pending" || pathname === "/sign-in" || pathname === "/sign-up" || pathname === "/") {
     const url = request.nextUrl.clone(); url.pathname = "/app"; url.search = "";
     return NextResponse.redirect(url);
@@ -61,5 +87,10 @@ export async function updateSession(request) {
     const url = request.nextUrl.clone(); url.pathname = "/app"; url.search = "";
     return NextResponse.redirect(url);
   }
-  return response;
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-reupai-user-id", user.id);
+  const nextResponse = NextResponse.next({ request: { headers: requestHeaders } });
+  response.cookies.getAll().forEach((cookie) => nextResponse.cookies.set(cookie));
+  return nextResponse;
 }

@@ -21,6 +21,12 @@ body.theme-xports .btn:active:not(:disabled) {
   transform: scale(0.975);
 }
 
+@keyframes reupai-route-bar {
+  0% { transform: translateX(-60%); opacity: 0.7; }
+  50% { transform: translateX(0%); opacity: 1; }
+  100% { transform: translateX(60%); opacity: 0.7; }
+}
+
 /* Promote fixed/sticky shell chrome onto dedicated GPU layers for 120fps scrolling. */
 body.theme-xports :is(.sidebar, .topbar) {
   transform: translateZ(0);
