@@ -494,6 +494,7 @@ class ManualTranscriptLine(BaseModel):
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     text: str = Field(min_length=1, max_length=2000)
+    translated_text: Optional[str] = Field(default=None, min_length=1, max_length=2000)
 
 
 class ProcessRequest(BaseModel):

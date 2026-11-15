@@ -66,6 +66,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.dataset.videoId = video.video_id;
     dialog.dataset.cardId = card.dataset.videoId || '';
     let manualOcrRows = [];
+    let recognitionComplete = false;
+    let translatingReview = false;
     const deletedTranscriptIds = new Set();
     let transcriptSignature = '';
     const reviewDialog = document.getElementById('processTranscriptReviewDialog');
@@ -218,7 +220,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (!isCurrent()) return;
             if (!video.downloaded) { setPreviewState('empty'); return; }
             setPreviewState('loading');
-            const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
+            const sourceUrl = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`, { refresh: true });
             if (!isCurrent()) return;
             preview.src = sourceUrl;
             preview.load();
@@ -524,6 +526,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const reviewConfirm = reviewDialog?.querySelector('#processTranscriptReviewConfirm');
     const reviewSkip = reviewDialog?.querySelector('#processTranscriptReviewSkip');
     const reviewPreviewLoading = reviewDialog?.querySelector('#processTranscriptPreviewLoading');
+    const reviewPreviewRetry = reviewDialog?.querySelector('#processTranscriptPreviewRetry');
+    const translationRetry = reviewDialog?.querySelector('#processTranscriptTranslationRetry');
+    const reviewEngineUpdate = reviewDialog?.querySelector('#processTranscriptEngineUpdate');
+    if (reviewEngineUpdate) reviewEngineUpdate.hidden = true;
     const reviewStages = [
         reviewDialog?.querySelector('#processTranscriptStepRecognize'),
         reviewDialog?.querySelector('#processTranscriptStepReview'),
@@ -550,13 +556,18 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (index < currentIndex) setReviewProgress(index, 100);
     });
     if (reviewPreview) {
-        reviewPreview.addEventListener('loadeddata', () => { if (reviewPreviewLoading) reviewPreviewLoading.hidden = true; });
-        reviewPreview.addEventListener('error', () => {
+        reviewPreview.crossOrigin = 'anonymous';
+        reviewPreview.onloadeddata = () => {
+            if (reviewPreviewLoading) reviewPreviewLoading.hidden = true;
+            if (reviewPreviewRetry) reviewPreviewRetry.hidden = true;
+        };
+        reviewPreview.onerror = () => {
             if (reviewPreviewLoading) {
                 reviewPreviewLoading.hidden = false;
-                reviewPreviewLoading.textContent = 'Video xem trước chưa tải được. Lời thoại vẫn có thể duyệt bình thường.';
+                reviewPreviewLoading.textContent = 'Chưa mở được video xem trước. Bấm thử tải lại để kết nối lại với file trên máy.';
             }
-        });
+            if (reviewPreviewRetry) reviewPreviewRetry.hidden = false;
+        };
     }
     const currentTranscriptSignature = () => JSON.stringify({
         source: transcriptSource?.value || 'audio',
@@ -567,13 +578,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         fps: Number(dialog.querySelector('#processOcrFps')?.value || 2),
         confidence: Number(dialog.querySelector('#processOcrConfidence')?.value || .45),
     });
-    const syncReviewPreview = async () => {
-        let source = preview.currentSrc || preview.src;
-        if (!source) {
-            try {
-                source = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`);
-            } catch { /* Recognition can proceed even if this optional preview is unavailable. */ }
-        }
+    const syncReviewPreview = async (refresh = false) => {
+        let source;
+        try {
+            source = await window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`, { refresh });
+        } catch { reviewPreview?.onerror?.(); return; }
+        if (!isCurrent()) return;
         if (reviewPreview && source && reviewPreview.dataset.sourceUrl !== source) {
             reviewPreview.dataset.sourceUrl = source;
             if (reviewPreviewLoading) {
@@ -584,6 +594,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             reviewPreview.load();
         }
     };
+    if (reviewPreviewRetry) reviewPreviewRetry.onclick = () => { void syncReviewPreview(true); };
     if (reviewPreview) {
         reviewPreview.addEventListener('loadedmetadata', () => {
             const pending = Number(reviewPreview.dataset.seekTo);
@@ -634,12 +645,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const startInput = document.createElement('input'); startInput.className = 'ocr-line-start'; startInput.type = 'number'; startInput.min = '0'; startInput.step = '0.01'; startInput.value = Number(line.start).toFixed(2); startInput.setAttribute('aria-label', 'Thời gian bắt đầu, giây');
             const endInput = document.createElement('input'); endInput.className = 'ocr-line-end'; endInput.type = 'number'; endInput.min = '0'; endInput.step = '0.01'; endInput.value = Number(line.end).toFixed(2); endInput.setAttribute('aria-label', 'Thời gian kết thúc, giây');
             startInput.addEventListener('focus', seekToLine);
+            startInput.oninput = () => { line.start = Number(startInput.value); };
+            endInput.oninput = () => { line.end = Number(endInput.value); };
             row.addEventListener('click', event => {
                 if (!event.target.closest('input, textarea, button')) seekToLine();
             });
             timeFields.append(startInput, endInput); timing.append(timeFields);
             const sourceCell = document.createElement('td');
-            const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-source'; sourceInput.rows = 2; sourceInput.value = String(line.text || ''); sourceInput.setAttribute('aria-label', 'Câu phụ đề gốc'); sourceInput.placeholder = 'Câu nhận diện…'; sourceCell.append(sourceInput);
+            const sourceInput = document.createElement('textarea'); sourceInput.className = 'ocr-line-translation'; sourceInput.rows = 2;
+            sourceInput.value = String(line.translated_text ?? ''); sourceInput.readOnly = line.translated_text == null;
+            sourceInput.setAttribute('aria-label', 'Bản dịch tiếng Việt'); sourceInput.placeholder = 'Đang chờ dịch sang tiếng Việt…';
+            sourceInput.oninput = () => { line.translated_text = sourceInput.value; };
+            const original = document.createElement('details'); original.className = 'process-transcript-original';
+            const originalLabel = document.createElement('summary'); originalLabel.textContent = 'Câu gốc';
+            const originalText = document.createElement('p'); originalText.textContent = line.text || '';
+            original.append(originalLabel, originalText); sourceCell.append(sourceInput, original);
             const actions = document.createElement('td'); actions.className = 'process-ocr-line-actions';
             const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = 'Xóa câu phụ đề'; remove.setAttribute('aria-label', 'Xóa câu phụ đề');
             remove.onclick = () => { deletedTranscriptIds.add(String(line.id)); manualOcrRows[index] = null; renderManualOcrRows(); };
@@ -660,7 +680,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (!line) continue;
             line.start = Number(row.querySelector('.ocr-line-start')?.value ?? line.start);
             line.end = Number(row.querySelector('.ocr-line-end')?.value ?? line.end);
-            line.text = row.querySelector('.ocr-line-source')?.value ?? line.text;
+            const edited = row.querySelector('.ocr-line-translation');
+            if (edited && !edited.readOnly) line.translated_text = edited.value;
         }
         const merged = [...manualOcrRows];
         let added = false;
@@ -677,6 +698,50 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         renderManualOcrRows();
         if (followTail && tableWrap) tableWrap.scrollTop = tableWrap.scrollHeight;
     };
+    const translateReviewRows = async () => {
+        if (translatingReview || !recognitionComplete) return;
+        translatingReview = true;
+        reviewConfirm.disabled = true;
+        if (translationRetry) translationRetry.hidden = true;
+        setReviewStage(1);
+        try {
+            const lines = manualOcrRows.filter(Boolean);
+            const pending = lines.filter(line => line.translated_text == null);
+            const sourceLanguage = transcriptSource?.value === 'video_subtitles'
+                ? dialog.querySelector('#processOcrLanguage')?.value || 'auto'
+                : dialog.querySelector('#processSourceLanguage')?.value || 'auto';
+            for (let offset = 0; offset < pending.length; offset += 16) {
+                if (!isCurrent()) return;
+                const batch = pending.slice(offset, offset + 16);
+                const done = lines.filter(line => line.translated_text != null).length;
+                reviewStatus.textContent = `Đang dịch sang tiếng Việt · ${done}/${lines.length} câu. Bạn có thể sửa các câu đã dịch.`;
+                setReviewProgress(1, done / lines.length * 100);
+                const result = sourceLanguage === 'vi'
+                    ? { translations: batch.map(line => ({ id: line.id, text: line.text })) }
+                    : await requestJson('/api/preview/subtitle-translation', {
+                        method: 'POST', timeoutMs: 180000, headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ source_language: sourceLanguage, lines: batch.map(line => ({ id: line.id, text: line.text })) }),
+                    });
+                if (!isCurrent()) return;
+                const translated = new Map((result.translations || []).map(item => [String(item.id), String(item.text || '').trim()]));
+                for (const line of batch) {
+                    const text = translated.get(String(line.id));
+                    if (!text) throw new Error('Có câu chưa dịch được. Bấm “Thử dịch lại” để hoàn tất các câu còn lại.');
+                    line.translated_text = text;
+                    const input = ocrLines.querySelector(`.process-ocr-line[data-id="${line.id}"] .ocr-line-translation`);
+                    if (input) { input.value = text; input.readOnly = false; }
+                }
+            }
+            setReviewProgress(1, 100);
+            reviewStatus.textContent = `${lines.length} câu đã dịch sang tiếng Việt. Sửa bản dịch và thời gian nếu cần, rồi xác nhận để xuất.`;
+            reviewConfirm.disabled = false;
+        } catch (error) {
+            if (!isCurrent()) return;
+            reviewStatus.textContent = `Chưa dịch xong: ${ocrErrorMessage(error)}`;
+            if (translationRetry) translationRetry.hidden = false;
+        } finally { translatingReview = false; }
+    };
+    if (translationRetry) translationRetry.onclick = () => { void translateReviewRows(); };
     if (reviewDialog) {
         reviewDialog.querySelector('#processTranscriptReviewClose').onclick = () => reviewDialog.close();
         reviewSkip.onclick = () => {
@@ -689,11 +754,16 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const validRows = [...ocrLines.querySelectorAll('.process-ocr-line')].filter(row => {
                 const start = Number(row.querySelector('.ocr-line-start')?.value);
                 const end = Number(row.querySelector('.ocr-line-end')?.value);
-                const text = row.querySelector('.ocr-line-source')?.value.trim();
+                const text = row.querySelector('.ocr-line-translation')?.value.trim();
                 return text && Number.isFinite(start) && Number.isFinite(end) && end > start;
             });
-            if (!validRows.length) {
-                reviewStatus.textContent = 'Cần giữ lại ít nhất một câu có thời gian hợp lệ để tiếp tục.';
+            if (!validRows.length || validRows.length !== manualOcrRows.filter(Boolean).length) {
+                reviewStatus.textContent = 'Mỗi câu cần có bản dịch tiếng Việt và thời gian kết thúc lớn hơn thời gian bắt đầu.';
+                return;
+            }
+            if (!window.reupEngineClient.health?.capabilities?.reviewed_translations) {
+                reviewStatus.textContent = 'Cần cập nhật Local Engine 0.2.51 trở lên để xuất đúng bản dịch bạn đã sửa. Bản dịch vẫn được giữ ở đây.';
+                if (reviewEngineUpdate) reviewEngineUpdate.hidden = false;
                 return;
             }
             setReviewProgress(1, 100); setReviewProgress(2, 0);
@@ -785,13 +855,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     };
     preview.crossOrigin = 'anonymous';
     if (video.downloaded) {
-        window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}`)
+        window.reupEngineClient.mediaUrl(`/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || '2d_animation')}`)
             .then(url => { if (isCurrent()) preview.src = url; })
             .catch(() => { if (isCurrent()) preview.onerror(); });
     }
 
     dialog.querySelector('#resetProcessConfig').onclick = () => {
         manualOcrRows = [];
+        recognitionComplete = false;
         transcriptConfirmed = false;
         transcriptSignature = '';
         if (reviewConfirm) reviewConfirm.disabled = true;
@@ -1158,7 +1229,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         try {
         if (!transcriptConfirmed) {
             const scanVideoSubtitles = transcriptSource?.value === 'video_subtitles';
-            if (manualOcrRows.length && transcriptSignature !== currentTranscriptSignature()) manualOcrRows = [];
+            if (manualOcrRows.length && (!recognitionComplete || transcriptSignature !== currentTranscriptSignature())) { manualOcrRows = []; recognitionComplete = false; }
             if (scanVideoSubtitles && (dialog.dataset.previewState !== 'ready' || !preview.videoWidth || !selectedRect)) {
                 inspector.select('ocr');
                 if (ocrStatus) ocrStatus.textContent = 'Để quét phụ đề gắn trên hình, hãy tải video, chọn “Chọn vùng phụ đề trên video” và khoanh vùng trước.';
@@ -1249,10 +1320,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     renderManualOcrRows();
                     if (!manualOcrRows.length) throw new Error('Không tìm thấy câu thoại/phụ đề để duyệt. Kiểm tra âm thanh hoặc thử OCR.');
                     setReviewProgress(0, 100); setReviewProgress(1, 0);
-                    if (reviewStatus) reviewStatus.textContent = `${manualOcrRows.length} câu đã nhận diện bằng ${scanVideoSubtitles ? 'OCR' : 'Whisper'}. Chỉnh sửa nếu cần, rồi xác nhận để dịch và xuất.`;
+                    window.clearInterval(statusTimer);
+                    recognitionComplete = true;
+                    if (reviewStatus) reviewStatus.textContent = `${manualOcrRows.length} câu đã nhận diện bằng ${scanVideoSubtitles ? 'OCR' : 'Whisper'}. Đang chuẩn bị bản dịch tiếng Việt…`;
                     setReviewStage(1);
                     if (ocrStatus) ocrStatus.textContent = `Đã nhận diện ${manualOcrRows.length} câu. Bạn có thể sửa ở bước kiểm tra phụ đề.`;
-                    if (reviewConfirm) reviewConfirm.disabled = false;
+                    await translateReviewRows();
                 } catch (error) {
                     const message = ocrErrorMessage(error);
                     renderManualOcrRows('Chưa có câu thoại để duyệt. Kiểm tra lỗi phía trên, rồi thử lại hoặc bỏ qua bước kiểm tra.');
@@ -1269,10 +1342,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             }
             renderManualOcrRows();
             setReviewStage(1);
-            if (reviewStatus) reviewStatus.textContent = `${manualOcrRows.length} câu đã nhận diện. Kiểm tra và xác nhận để tiếp tục.`;
-            if (reviewConfirm) reviewConfirm.disabled = false;
+            if (reviewStatus) reviewStatus.textContent = `${manualOcrRows.length} câu đã nhận diện. Đang mở bản dịch để duyệt.`;
             void syncReviewPreview();
             reviewDialog.showModal();
+            await translateReviewRows();
             return;
         }
         const selectedPreset = presetSelect.value;
@@ -1327,11 +1400,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 reader.readAsDataURL(musicFile);
             });
         }
-        const reviewedTranscript = [...ocrLines.querySelectorAll('.process-ocr-line')].map(row => ({
+        const reviewedTranscript = manualOcrRows.length ? [...ocrLines.querySelectorAll('.process-ocr-line')].map(row => ({
             start: Number(row.querySelector('.ocr-line-start')?.value),
             end: Number(row.querySelector('.ocr-line-end')?.value),
-            text: row.querySelector('.ocr-line-source')?.value.trim() || '',
-        })).filter(line => line.text && Number.isFinite(line.start) && Number.isFinite(line.end) && line.end > line.start);
+            text: manualOcrRows[Number(row.dataset.index)]?.text || '',
+            translated_text: row.querySelector('.ocr-line-translation')?.value.trim() || '',
+        })).filter(line => line.text && line.translated_text && Number.isFinite(line.start) && Number.isFinite(line.end) && line.end > line.start) : [];
         const config = {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,

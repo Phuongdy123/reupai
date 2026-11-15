@@ -422,15 +422,15 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <header class="process-transcript-review-head">
                     <div class="process-transcript-review-title">
                         <span class="process-transcript-step">QUY TRÌNH XỬ LÝ VIDEO</span>
-                        <h2 id="processTranscriptReviewTitle">Duyệt lời thoại</h2>
-                        <p id="processTranscriptReviewDescription">Chọn câu để xem đúng đoạn video, chỉnh nội dung hoặc thời gian rồi tiếp tục.</p>
+                        <h2 id="processTranscriptReviewTitle">Duyệt bản dịch tiếng Việt</h2>
+                        <p id="processTranscriptReviewDescription">Xem đúng đoạn video, sửa câu tiếng Việt và thời gian trước khi xuất.</p>
                     </div>
                     <button type="button" class="btn secondary" id="processTranscriptReviewClose" aria-label="Quay lại thiết lập">Quay lại</button>
                 </header>
                 <nav class="process-transcript-stepper" aria-label="Các bước xử lý">
                     <span class="is-current" id="processTranscriptStepRecognize" aria-current="step"><b>1</b> Nhận diện <small>0%</small></span><i aria-hidden="true"></i>
-                    <span id="processTranscriptStepReview"><b>2</b> Duyệt lời thoại <small>0%</small></span><i aria-hidden="true"></i>
-                    <span id="processTranscriptStepExport"><b>3</b> Dịch &amp; xuất <small>0%</small></span>
+                    <span id="processTranscriptStepReview"><b>2</b> Dịch &amp; duyệt <small>0%</small></span><i aria-hidden="true"></i>
+                    <span id="processTranscriptStepExport"><b>3</b> Xuất thành phẩm <small>0%</small></span>
                 </nav>
                 <div class="process-transcript-progress" role="progressbar" aria-label="Tiến độ nhận diện lời thoại" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="processTranscriptProgressFill"></span></div>
                 <div class="process-transcript-review-status" id="processTranscriptReviewStatus" role="status">Đang nhận diện lời thoại…</div>
@@ -438,18 +438,21 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <section class="process-transcript-preview-panel" aria-label="Xem trước video">
                         <div class="process-transcript-panel-heading"><span>VIDEO NGUỒN</span><small id="processTranscriptScanPosition">Đang chuẩn bị quét</small></div>
                         <div class="process-transcript-preview-player">
-                            <video id="processTranscriptReviewPreview" controls muted playsinline preload="metadata"></video>
+                            <video id="processTranscriptReviewPreview" crossorigin="anonymous" controls muted playsinline preload="metadata"></video>
                             <div class="process-transcript-preview-loading" id="processTranscriptPreviewLoading" role="status">Đang mở video xem trước…</div>
+                            <button type="button" class="btn secondary process-transcript-preview-retry" id="processTranscriptPreviewRetry" hidden>Thử tải lại video</button>
                         </div>
                     </section>
-                    <section class="process-ocr-result-section" aria-label="Lời thoại đã nhận diện">
-                        <div class="process-transcript-panel-heading"><span>LỜI THOẠI ĐÃ NHẬN DIỆN</span><small>Chỉnh câu gốc và thời gian ngay tại đây</small></div>
-                        <div class="process-ocr-table-wrap"><table class="process-ocr-table"><thead><tr><th>#</th><th>THỜI GIAN</th><th>CÂU GỐC · CÓ THỂ SỬA</th><th></th></tr></thead><tbody class="process-ocr-lines" id="processTranscriptReviewLines" aria-live="polite"><tr class="process-ocr-empty"><td colspan="4">Đang chuẩn bị nhận diện…</td></tr></tbody></table></div>
+                    <section class="process-ocr-result-section" aria-label="Bản dịch tiếng Việt">
+                        <div class="process-transcript-panel-heading"><span>BẢN DỊCH TIẾNG VIỆT</span><small>Sửa bản dịch · mở câu gốc để đối chiếu</small></div>
+                        <div class="process-ocr-table-wrap"><table class="process-ocr-table"><thead><tr><th>#</th><th>THỜI GIAN</th><th>TIẾNG VIỆT · CÓ THỂ SỬA</th><th></th></tr></thead><tbody class="process-ocr-lines" id="processTranscriptReviewLines" aria-live="polite"><tr class="process-ocr-empty"><td colspan="4">Các bản dịch sẽ hiện ở đây sau khi nhận diện.</td></tr></tbody></table></div>
                     </section>
                 </main>
                 <footer class="process-transcript-review-actions">
-                    <div class="process-transcript-review-footnote">Các chỉnh sửa sẽ được dùng trực tiếp khi tạo phụ đề và render.</div>
+                    <div class="process-transcript-review-footnote">Dùng đúng bản dịch bạn duyệt để xuất phụ đề, giọng đọc và video.</div>
                     <div class="process-transcript-review-buttons"><button type="button" class="btn secondary" id="processTranscriptReviewSkip" hidden>Bỏ qua kiểm tra</button>
+                    <button type="button" class="btn secondary" id="processTranscriptTranslationRetry" hidden>Thử dịch lại</button>
+                    <a class="btn secondary" id="processTranscriptEngineUpdate" href="/local-engine" target="_blank" rel="noopener" hidden>Cập nhật Local Engine</a>
                     <button type="button" class="btn primary" id="processTranscriptReviewConfirm" disabled>Đúng rồi · Tiếp tục</button></div>
                 </footer>
             </div>`;

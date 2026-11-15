@@ -3490,9 +3490,13 @@ def pipeline(
             message="Dang kiem tra quyen Gemini.",
             mode=mode,
         )
-        from services.translator import ensure_translation_ready
+        from services.reviewed_subtitles import reviewed_translation_lines
 
-        ensure_translation_ready()
+        approved_translation = reviewed_translation_lines(config.get("manual_transcript"))
+        if approved_translation is None:
+            from services.translator import ensure_translation_ready
+
+            ensure_translation_ready()
 
         # 1. SOURCE
 
@@ -3822,7 +3826,12 @@ def pipeline(
 
 
 
-        if not no_speech:
+        if approved_translation is not None:
+            from services.transcriber import save_srt
+
+            save_srt(approved_translation, rel(vietnamese_srt))
+            print(f"[REVIEWED TRANSLATION] Using {len(approved_translation)} approved Vietnamese lines without retranslating.")
+        elif not no_speech:
             translate_srt(
 
 

@@ -164,20 +164,45 @@ def _is_cuda_runtime_error(error: Exception) -> bool:
     ))
 
 
-def _run_transcription(model, audio, language: str | None = None):
-    """Materialize segments while the CUDA fallback guard is still active."""
+def _run_transcription(
+    model,
+    audio,
+    language: str | None = None,
+    *,
+    on_progress: Callable[[float, float], None] | None = None,
+    progress_offset: float = 0.0,
+    progress_total: float | None = None,
+    on_segment: Callable[[dict], None] | None = None,
+):
+    """Materialize segments while reporting decoded audio as Whisper yields it."""
     options = {"beam_size": WHISPER_BEAM_SIZE}
     if language:
         options["language"] = language
     segments, info = model.transcribe(audio, **options)
-    return list(segments), info
+    decoded = []
+    for segment in segments:
+        decoded.append(segment)
+        if on_segment:
+            on_segment({"start": float(segment.start), "end": float(segment.end), "text": str(segment.text).strip()})
+        if on_progress and progress_total and progress_total > 0:
+            on_progress(min(progress_offset + float(segment.end), progress_total), progress_total)
+    return decoded, info
 
 
-def _transcribe_once(audio, language: str | None = None):
+def _transcribe_once(
+    audio,
+    language: str | None = None,
+    *,
+    on_progress: Callable[[float, float], None] | None = None,
+    progress_offset: float = 0.0,
+    progress_total: float | None = None,
+    on_segment: Callable[[dict], None] | None = None,
+):
     global _CUDA_DISABLED_FOR_SESSION
     model = _model()
     try:
-        return _run_transcription(model, audio, language)
+        return _run_transcription(model, audio, language, on_progress=on_progress, progress_offset=progress_offset,
+                                  progress_total=progress_total, on_segment=on_segment)
     except Exception as error:
         # CUDA can fail only when the first audio window is decoded. Retry that
         # window on CPU; already completed long-audio windows are retained.
@@ -186,7 +211,8 @@ def _transcribe_once(audio, language: str | None = None):
         print(f"Whisper CUDA loi ({error}); chuyen sang CPU toi uu.")
         _CUDA_DISABLED_FOR_SESSION = True
         _model.cache_clear()
-        return _run_transcription(_cpu_model(), audio, language)
+        return _run_transcription(_cpu_model(), audio, language, on_progress=on_progress, progress_offset=progress_offset,
+                                  progress_total=progress_total, on_segment=on_segment)
 
 
 def _chunkable_wav_duration(audio_path: str) -> float | None:
@@ -205,6 +231,7 @@ def _transcribe_long_wav(
     duration: float,
     on_progress: Callable[[float, float], None] | None,
     source_language: str | None = None,
+    on_segment: Callable[[dict], None] | None = None,
 ) -> list[dict]:
     """Bound decode memory by transcribing ten-minute audio windows."""
     import numpy as np
@@ -231,12 +258,30 @@ def _transcribe_long_wav(
                     on_progress(processed, duration)
                 continue
             audio = pcm.astype(np.float32) / 32768.0
-            segments, info = _transcribe_once(audio, language)
-            if not language and segments and (getattr(info, "language_probability", 0) or 0) >= 0.6:
-                language = info.language
             read_offset = read_start / 16000
             floor = core_start / 16000
             ceiling = core_end / 16000
+
+            def stream_chunk_segment(segment: dict) -> None:
+                if not on_segment:
+                    return
+                start = read_offset + float(segment.get("start", 0))
+                end = read_offset + float(segment.get("end", 0))
+                midpoint = (start + end) / 2
+                # The overlap gives Whisper context, but each utterance belongs
+                # to one core window so the live preview never duplicates it.
+                if floor <= midpoint < ceiling and end > start:
+                    on_segment({**segment, "start": max(0.0, start), "end": min(duration, end)})
+
+            segments, info = _transcribe_once(
+                audio, language,
+                on_progress=on_progress,
+                progress_offset=read_offset,
+                progress_total=duration,
+                on_segment=stream_chunk_segment if on_segment else None,
+            )
+            if not language and segments and (getattr(info, "language_probability", 0) or 0) >= 0.6:
+                language = info.language
             for segment in segments:
                 start = read_offset + segment.start
                 end = read_offset + segment.end
@@ -254,6 +299,8 @@ def _transcribe_long_wav(
                 if end <= start:
                     continue
                 results.append({"start": start, "end": end, "text": text})
+                if on_segment:
+                    on_segment(results[-1].copy())
             print(f"Whisper: {processed:.0f}/{duration:.0f} giay; {len(results)} doan loi thoai")
             if on_progress:
                 on_progress(processed, duration)
@@ -269,14 +316,19 @@ def transcribe(
     *,
     on_progress: Callable[[float, float], None] | None = None,
     language: str | None = None,
+    on_segment: Callable[[dict], None] | None = None,
 ):
     print("Dang nhan dien audio...")
 
     duration = _chunkable_wav_duration(audio_path)
     if duration is not None and duration > _LONG_AUDIO_THRESHOLD_SECONDS:
-        return _transcribe_long_wav(audio_path, duration, on_progress, language)
+        return _transcribe_long_wav(audio_path, duration, on_progress, language, on_segment)
 
-    segments, info = _transcribe_once(audio_path, language)
+    total = duration or 0
+    segments, info = _transcribe_once(
+        audio_path, language, on_progress=on_progress, progress_total=total or None,
+        on_segment=on_segment,
+    )
     if on_progress:
         total = duration or getattr(info, "duration", 0) or 0
         if total > 0:

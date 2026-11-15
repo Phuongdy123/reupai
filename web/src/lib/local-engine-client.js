@@ -249,9 +249,10 @@ export class LocalEngineClient {
     window.location.assign(`${this.baseUrl}/authorize?${params.toString()}`);
   }
 
-  async mediaUrl(path) {
+  async mediaUrl(path, { refresh = false } = {}) {
     const resource = String(path || "").startsWith("/") ? path : `/api/files/${String(path || "").split("/").map(encodeURIComponent).join("/")}`;
     const now = Date.now();
+    if (refresh) this.mediaTickets.delete(resource);
     for (const [key, ticket] of this.mediaTickets) if (ticket.expires <= now) this.mediaTickets.delete(key);
     const cached = this.mediaTickets.get(resource);
     if (cached && cached.expires > now) return cached.url;

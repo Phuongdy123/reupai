@@ -11,6 +11,17 @@ function storage() {
   };
 }
 
+test("retrying media creates a fresh ticket instead of reusing a failed preview URL", async () => {
+  const client = new LocalEngineClient("http://127.0.0.1:17888");
+  let count = 0;
+  client.createMediaTicket = async () => ({ url: `/api/media/ticket-${++count}`, expires_in: 600 });
+  const first = await client.mediaUrl("/api/preview/source/test?channel=other");
+  assert.equal(await client.mediaUrl("/api/preview/source/test?channel=other"), first);
+  const retried = await client.mediaUrl("/api/preview/source/test?channel=other", { refresh: true });
+  assert.notEqual(retried, first);
+  assert.equal(count, 2);
+});
+
 test("running engine connects automatically when the browser has no saved grant", async () => {
   const calls = [];
   let authorized = false;

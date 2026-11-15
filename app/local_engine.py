@@ -114,7 +114,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.49"
+ENGINE_VERSION = "0.2.51"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -133,6 +133,7 @@ ENGINE_CAPABILITIES = {
     "source_language": True,
     "subtitle_ocr": True,
     "manual_subtitle_translation": True,
+    "reviewed_translations": True,
     "subtitle_srt_export": True,
     "youtube_publishing": True,
     "subtitle_styles": True,
@@ -1017,6 +1018,11 @@ class AudioTranscriptPreviewRequest(BaseModel):
     source_language: str = "auto"
 
 
+_transcript_preview_jobs: dict[str, dict] = {}
+_transcript_preview_jobs_lock = threading.Lock()
+_TRANSCRIPT_PREVIEW_TTL_SECONDS = 30 * 60
+
+
 class ManualSubtitleTranslationLine(BaseModel):
     id: int
     text: str = Field(min_length=1, max_length=1000)
@@ -1045,29 +1051,64 @@ async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest,
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str):
+def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str, task_id: str):
     from core.pipeline import extract_audio
     from services.transcriber import transcribe
+    seen_segments: set[tuple] = set()
+
+    def update(**values):
+        with _transcript_preview_jobs_lock:
+            task = _transcript_preview_jobs.get(task_id)
+            if task:
+                task.update(values)
+
+    def on_progress(processed: float, total: float):
+        total = max(0.0, float(total or 0))
+        processed = max(0.0, min(float(processed or 0), total)) if total else 0.0
+        update(progress=round(processed / total * 100) if total else 0,
+               processed_seconds=round(processed, 2), total_seconds=round(total, 2))
+
+    def on_segment(line: dict):
+        text = str(line.get("text", "")).strip()
+        start, end = float(line.get("start", 0)), float(line.get("end", 0))
+        if not text or end <= start:
+            return
+        key = (round(start, 2), round(end, 2), text)
+        with _transcript_preview_jobs_lock:
+            task = _transcript_preview_jobs.get(task_id)
+            if task and key not in seen_segments:
+                seen_segments.add(key)
+                task["lines"].append({"id": len(task["lines"]) + 1, "start": start, "end": end, "text": text})
+                task["line_count"] = len(task["lines"])
 
     try:
         audio_path.parent.mkdir(parents=True, exist_ok=True)
+        update(phase="extracting_audio", message="Đang tách âm thanh từ video…")
         extract_audio(source_path, audio_path, force=True)
-        lines = transcribe(str(audio_path), language=None if language == "auto" else language)
-        return {
-            "lines": [
-                {"id": index, "start": float(line["start"]), "end": float(line["end"]), "text": str(line["text"])}
-                for index, line in enumerate(lines, 1)
-                if str(line.get("text", "")).strip() and float(line.get("end", 0)) > float(line.get("start", 0))
-            ],
-            "count": len(lines),
-        }
+        update(phase="recognizing", progress=0, message="Đang nhận diện lời thoại bằng Whisper…")
+        lines = transcribe(str(audio_path), language=None if language == "auto" else language,
+                           on_progress=on_progress, on_segment=on_segment)
+        # Older/custom transcriber paths may not report segments incrementally.
+        if not _transcript_preview_jobs.get(task_id, {}).get("lines"):
+            for line in lines:
+                on_segment(line)
+        update(status="complete", phase="complete", progress=100,
+               message="Đã nhận diện xong lời thoại.", line_count=len(_transcript_preview_jobs.get(task_id, {}).get("lines", [])))
     finally:
         audio_path.unlink(missing_ok=True)
 
 
+def _prune_transcript_preview_jobs():
+    cutoff = time.time() - _TRANSCRIPT_PREVIEW_TTL_SECONDS
+    with _transcript_preview_jobs_lock:
+        expired = [key for key, value in _transcript_preview_jobs.items() if value.get("updated_at", 0) < cutoff]
+        for key in expired:
+            _transcript_preview_jobs.pop(key, None)
+
+
 @app.post("/api/preview/transcript/{video_id}")
 async def audio_transcript_preview(video_id: str, body: AudioTranscriptPreviewRequest, _: str = Depends(require_token)):
-    """Run the pipeline's Whisper recognizer and return editable timed speech lines."""
+    """Start Whisper recognition; transcript segments and audio progress are polled live."""
     channel = validate_channel(body.channel)
     video_id = validate_video_id(video_id)
     if body.source_language not in {"auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru", "it", "hi", "ar", "tr", "ms", "vi"}:
@@ -1075,14 +1116,46 @@ async def audio_transcript_preview(video_id: str, body: AudioTranscriptPreviewRe
     source = local_source_for_process(channel, video_id)
     if not source or not Path(source).is_file():
         raise HTTPException(status_code=404, detail="Hãy tải video về máy trước khi quét lời thoại.")
+    _prune_transcript_preview_jobs()
+    task_id = secrets.token_urlsafe(24)
+    with _transcript_preview_jobs_lock:
+        _transcript_preview_jobs[task_id] = {
+            "task_id": task_id, "video_id": video_id, "status": "processing", "phase": "queued",
+            "progress": 0, "processed_seconds": 0, "total_seconds": 0,
+            "lines": [], "line_count": 0, "message": "Đang chuẩn bị nhận diện…", "updated_at": time.time(),
+        }
     audio_path = job_dir_for(channel, video_id) / f".transcript-preview-{secrets.token_hex(8)}.wav"
-    try:
-        result = await run_in_threadpool(_transcribe_audio_preview, Path(source), audio_path, body.source_language)
-    except Exception as error:
-        raise HTTPException(status_code=422, detail=str(error) or "Không nhận diện được lời thoại.") from error
-    if not result["lines"]:
-        raise HTTPException(status_code=422, detail="Whisper không tìm thấy lời thoại. Thử chọn ngôn ngữ nguồn cụ thể hoặc dùng OCR nếu video có phụ đề sẵn.")
-    return result
+    def worker():
+        try:
+            _transcribe_audio_preview(Path(source), audio_path, body.source_language, task_id)
+            with _transcript_preview_jobs_lock:
+                task = _transcript_preview_jobs.get(task_id)
+                if task and not task["lines"]:
+                    task.update(status="error", phase="error", error="Whisper không tìm thấy lời thoại. Thử chọn ngôn ngữ nguồn cụ thể hoặc dùng OCR nếu video có phụ đề sẵn.")
+        except Exception as error:
+            with _transcript_preview_jobs_lock:
+                task = _transcript_preview_jobs.get(task_id)
+                if task:
+                    task.update(status="error", phase="error", error=str(error) or "Không nhận diện được lời thoại.")
+        finally:
+            with _transcript_preview_jobs_lock:
+                task = _transcript_preview_jobs.get(task_id)
+                if task:
+                    task["updated_at"] = time.time()
+
+    threading.Thread(target=worker, name="reupai-transcript-preview", daemon=True).start()
+    return {"task_id": task_id, "video_id": video_id, "status": "processing", "phase": "queued", "progress": 0, "lines": []}
+
+
+@app.get("/api/preview/transcript/{video_id}/{task_id}")
+async def audio_transcript_preview_status(video_id: str, task_id: str, _: str = Depends(require_token)):
+    _prune_transcript_preview_jobs()
+    with _transcript_preview_jobs_lock:
+        task = _transcript_preview_jobs.get(task_id)
+        if not task or task.get("video_id") != validate_video_id(video_id):
+            raise HTTPException(status_code=404, detail="Phiên nhận diện đã hết hạn. Hãy quét lại lời thoại.")
+        task["updated_at"] = time.time()
+        return {key: value for key, value in task.items() if key != "updated_at"}
 
 
 @app.post("/api/preview/subtitle-translation")
