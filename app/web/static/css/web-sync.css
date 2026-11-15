@@ -9747,6 +9747,21 @@ body.theme-xports .gemini-project-picker {
   box-shadow: inset 3px 0 0 #ef4444 !important;
 }
 
+/* ---------- 9. Fix Modal Stacking Context Above Sidebar ---------- */
+body.theme-xports .page-content {
+  z-index: auto !important;
+}
+body.theme-xports :is(.modal, .source-runtime-host > .modal, #playerModal) {
+  z-index: var(--ds-z-modal) !important;
+  padding: 24px !important;
+}
+body.theme-xports :is(#playerModal .modal-box, .source-runtime-host #playerModal .modal-box, .result-preview-dialog) {
+  width: min(1160px, calc(100vw - 48px)) !important;
+  max-height: calc(100dvh - 48px) !important;
+  margin: auto !important;
+}
+
+
 
 
 
