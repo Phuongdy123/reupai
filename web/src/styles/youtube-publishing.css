@@ -104,3 +104,6 @@
 .youtube-publish-fields .thumbnail-designer input[type=range] { padding: 0; height: 24px; accent-color: #eeeeef; cursor: pointer; }
 .youtube-chosen-thumbnail > .library-actions { display: grid; justify-content: start; gap: 10px; }
 @media(max-width:480px) { .thumbnail-controls { grid-template-columns: 1fr; } .youtube-chosen-thumbnail { grid-template-columns: 1fr; } .thumbnail-designer { padding: 12px; } }
+
+.thumbnail-designer > .thumbnail-background-toggle { display: flex; align-items: center; gap: 10px; line-height: 1.6; }
+.thumbnail-background-toggle input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: #eeeeef; }

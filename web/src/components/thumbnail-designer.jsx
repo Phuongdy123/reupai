@@ -40,6 +40,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
   const [color, setColor] = useState("#ffe066");
   const [background, setBackground] = useState("#ac142b");
   const [position, setPosition] = useState("top");
+  const [showBackground, setShowBackground] = useState(true);
   const [tone, setTone] = useState(DEFAULT_TONE);
   const [error, setError] = useState("");
   const [ready, setReady] = useState(false);
@@ -77,10 +78,12 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
       const lineHeight = size * 1.2;
       const boxHeight = lines.length * lineHeight + 36;
       const y = position === "top" ? 28 : 720 - boxHeight - 28;
-      context.fillStyle = background;
-      context.globalAlpha = .9;
-      context.fillRect(32, y, 1216, boxHeight);
-      context.globalAlpha = 1;
+      if (showBackground) {
+        context.fillStyle = background;
+        context.globalAlpha = .9;
+        context.fillRect(32, y, 1216, boxHeight);
+        context.globalAlpha = 1;
+      }
       context.textBaseline = "top";
       context.textAlign = "center";
       context.lineJoin = "round";
@@ -93,7 +96,7 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
       });
     }
     setReady(true);
-  }, [image, text, font, color, background, position, tone]);
+  }, [image, text, font, color, background, position, tone, showBackground]);
 
   const chooseLook = key => {
     const look = LOOKS[key];
@@ -124,9 +127,10 @@ export function ThumbnailDesigner({ source, title, onTranslateTitle, onApply, on
     <canvas ref={canvas} width={1280} height={720} aria-label="Ảnh bìa xem trước" />
     <div className="thumbnail-looks">{Object.entries(LOOKS).map(([key, look]) => <button type="button" className="btn secondary" key={key} onClick={()=>chooseLook(key)}>{look.label}</button>)}<button type="button" className="btn primary" onClick={autoLayout} disabled={!title}>Tự bố trí theo tiêu đề</button></div>
     <label>Chữ trên ảnh<textarea rows={2} maxLength={100} placeholder="Nhập tiêu đề ngắn, dễ đọc…" value={text} onChange={event=>{setText(event.target.value);setError("");}} /></label>
-    <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={position} onChange={event=>setPosition(event.target.value)}><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
+    <label className="thumbnail-background-toggle"><input type="checkbox" checked={!showBackground} onChange={event=>setShowBackground(!event.target.checked)} />Không nền chữ · chỉ giữ chữ và viền</label>
+    <div className="thumbnail-controls"><label>Kiểu chữ<select value={font} onChange={event=>setFont(event.target.value)}>{Object.entries(FONTS).map(([key, value])=><option key={key} value={key}>{value.label}</option>)}</select></label><label>Vị trí chữ<select value={position} onChange={event=>setPosition(event.target.value)}><option value="top">Phía trên</option><option value="bottom">Phía dưới</option></select></label><label>Màu chữ<input type="color" value={color} onChange={event=>setColor(event.target.value)} /></label><label>Màu nền chữ<input type="color" disabled={!showBackground} value={background} onChange={event=>setBackground(event.target.value)} /></label></div>
     <div className="thumbnail-tone">{[["brightness", "Độ sáng", 60, 150], ["contrast", "Tương phản", 60, 160], ["saturation", "Độ rực", 0, 180]].map(([key, label, min, max])=><label key={key}>{label} <output>{tone[key]}%</output><input type="range" min={min} max={max} value={tone[key]} onChange={event=>setTone(current=>({...current,[key]:Number(event.target.value)}))} /></label>)}</div>
-    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("top");}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
+    <div className="library-actions"><button type="button" className="btn secondary" onClick={()=>{setTone(DEFAULT_TONE);setText("");chooseLook("story");setPosition("top");setShowBackground(true);}}>Đặt lại</button><button type="button" className="btn primary" disabled={!ready || Boolean(error)} onClick={apply}>Dùng ảnh bìa này</button></div>
     <small>Chỉnh ảnh trong trình duyệt. Bấm “Dùng ảnh bìa này” để áp dụng vào lượt đăng. Font hiển thị tùy theo thiết bị.</small>
   </section>;
 }
