@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useEngine } from "./engine-provider";
-import { useYoutube } from "./youtube-provider";
+import { useYoutubeConnection } from "./youtube-connection";
 import { Icon } from "./icon";
-import { ACTIVE_JOBS, JOB_LABELS, Loading, ErrorMessage, Notice, VideoCover, formatDate } from "./library-ui";
-import { PreviewDialog } from "./preview-dialog";
+import { ACTIVE_JOBS, JOB_LABELS, Loading, ErrorMessage, Notice, VideoCover, PreviewDialog } from "./library-ui";
 import { OutputEditor } from "./output-editor";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
 
@@ -20,6 +19,13 @@ function parseDurationSeconds(video) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   return 0;
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatDuration(sec) {
@@ -92,7 +98,7 @@ function formatViews(views) {
 export function StudioPage({ mode = "youtube" }) {
   const isYoutube = mode === "youtube";
   const { client, status: engineStatus } = useEngine();
-  const youtube = useYoutube();
+  const youtube = useYoutubeConnection();
 
   const [sources, setSources] = useState([]);
   const [selectedSourceId, setSelectedSourceId] = useState("all");
