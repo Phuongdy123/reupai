@@ -36,7 +36,7 @@ const {useCallback,useEffect,useRef,useState}=React;const createPortal=ReactDOM.
 const Icon=()=>null,Loading=()=>null,Notice=({children})=>React.createElement('div',null,children),ErrorMessage=({error})=>React.createElement('div',null,error),modeLabel=()=> 'Voice';
 const googleConsentUrl=()=>null;
 const youtubeRequest=()=>{throw Error('Unexpected external API call');};
-const useYoutubeConnection=()=>({supported:true,connection:{connected:true,account_id:'fixture-account',channel:{id:'channel',title:'Kênh kiểm thử'}},connect:()=>{},refresh:()=>{},client:{}});
+const useYoutubeConnection=()=>({supported:true,connection:{connected:true,account_id:'fixture-account',channel:{id:'channel',title:'Kênh kiểm thử'}},connect:()=>{},refresh:()=>{},client});
 const client={mediaUrl:async()=>'/sample.mp4',json:async(path,options)=>{
  if(path.includes('/rerender')){window.payload=JSON.parse(options.body);return {job_id:1};}
  return {subtitles:[{start:0,end:1,text:'Xin chào'},{start:1,end:2,text:'Cảm ơn'}],subtitle_edit_supported:true,voice:'Trúc Ly',tts_speed:1.1,source_ready:true,can_rerender:true,blur_intervals:[],blur_region:null};

@@ -17,7 +17,25 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const [thumbnail, setThumbnail] = useState("");
   const [privacy, setPrivacy] = useState("private");
   const [audience, setAudience] = useState("");
-  const [publishAt, setPublishAt] = useState("");
+  const [scheduleMode, setScheduleMode] = useState("now");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("09:00");
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const publishAt = scheduleMode === "scheduled" && scheduleDate && scheduleTime ? `${scheduleDate}T${scheduleTime}` : "";
+  const scheduleValid = scheduleMode === "now" || Boolean(publishAt && Number.isFinite(new Date(publishAt).getTime()) && new Date(publishAt).getTime() > Date.now() + 60000);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  useEffect(() => {
+    let active = true;
+    client.mediaUrl(`/api/stream/${encodeURIComponent(item.video_id)}?channel=${encodeURIComponent(item.channel || "2d_animation")}&mode=${encodeURIComponent(item.mode || "subtitle")}`).then(url => { if (active) setPreviewUrl(url); }).catch(() => {});
+    return () => { active = false; };
+  }, [client, item.video_id, item.channel, item.mode]);
+  const chooseSchedule = hours => {
+    const date = new Date(Date.now() + hours * 3600000);
+    const pad = n => String(n).padStart(2, "0");
+    setScheduleDate(`${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}`);
+    setScheduleTime(`${pad(date.getHours())}:${pad(date.getMinutes())}`);
+    setScheduleMode("scheduled"); setConfirmed(false);
+  };
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -82,6 +100,7 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   const submit = async (event) => {
     event.preventDefault();
     if (locked || !confirmed || !audience) return;
+    if (!scheduleValid) { setError("Chọn ngày và giờ đăng cách hiện tại ít nhất 1 phút."); return; }
     setBusy("upload"); setError("");
     try {
       sessionStorage.setItem(storageKey, requestId.current);
@@ -100,7 +119,7 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   return createPortal(<dialog ref={dialog} className="youtube-publish-dialog" onCancel={onClose}>
     <form onSubmit={submit}>
       <header><div><small>ĐĂNG THÀNH PHẨM</small><h2>Chuẩn bị đăng YouTube</h2><p>Kênh: <strong>{connection.channel.title}</strong></p></div><button type="button" className="modern-icon-btn" onClick={onClose} aria-label="Đóng">×</button></header>
-      <div className="youtube-publish-body">
+      <div className="youtube-publish-workspace"><aside className="youtube-publish-preview"><small>VIDEO SẮP ĐĂNG</small><div className="youtube-publish-stage">{previewUrl ? <video crossOrigin="anonymous" src={previewUrl} controls playsInline /> : <p>Chưa mở được bản xem trước. Bạn vẫn có thể chuẩn bị nội dung đăng.</p>}</div><strong>{item.title || item.video_id}</strong><div className="youtube-publish-target"><span>ĐĂNG LÊN KÊNH</span><strong>{connection.channel.title}</strong><p>{scheduleMode === "scheduled" ? 'Hẹn giờ · Tải lên riêng tư trước' : privacy === "public" ? 'Công khai' : privacy === "unlisted" ? 'Không công khai' : 'Riêng tư'}</p>{publishAt && <p>{new Date(publishAt).toLocaleString("vi-VN")} · {timezone}</p>}</div></aside><div className="youtube-publish-body">
         <p className="muted">AI chỉ chuẩn bị nội dung. Bạn kiểm tra và xác nhận trước khi đăng.</p>
         {error && <p className="youtube-error" role="alert">{error}</p>}
         {job && <section className="youtube-upload-status" role="status"><strong>{job.state === "completed" ? "Đã tải lên YouTube" : job.state === "failed" ? "Chưa hoàn tất lượt đăng" : "Đang tải lên YouTube"}</strong><progress aria-label="Tiến độ tải lên YouTube" value={job.percent || 0} max="100" /><span>{job.percent || 0}%</span>{job.error && <p>{job.error}</p>}{job.warning && <p>{job.warning}</p>}{job.url && <a href={job.url} target="_blank" rel="noopener noreferrer">Mở video trên YouTube ↗</a>}{job.state === "completed" && <p>YouTube có thể cần thêm thời gian xử lý video. Chế độ: {job.privacy === "private" ? "Riêng tư" : job.privacy === "unlisted" ? "Không công khai" : job.privacy === "public" ? "Công khai" : "Chưa xác nhận; kiểm tra trong YouTube Studio"}.</p>}</section>}
@@ -110,12 +129,12 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
           <label>Mô tả và hashtag<textarea rows={6} value={description} onChange={e => { setDescription(e.target.value); setConfirmed(false); }} maxLength={5000} /></label>
           <label>Tag / từ khóa<input value={tags} onChange={e => { setTags(e.target.value); setConfirmed(false); }} placeholder="Các từ khóa, ngăn cách bằng dấu phẩy" /></label>
           <section className="youtube-thumbnails"><div className="library-actions"><strong>Ảnh bìa</strong><button type="button" className="btn secondary" onClick={loadImages}>{busy === "images" ? "Đang lấy khung hình…" : "Lấy ảnh từ video"}</button><label className="btn secondary youtube-file-label">Chọn ảnh trên máy<input type="file" accept="image/jpeg,image/png" onChange={chooseImage} /></label></div>{images.length > 0 && <div className="youtube-thumbnail-grid">{images.map((src, index) => <button key={index} type="button" className={thumbnail === src ? "selected" : ""} aria-label={`Chọn ảnh bìa ${index + 1}`} aria-pressed={thumbnail === src} onClick={() => { setThumbnail(src); setConfirmed(false); }}><img src={src} alt={`Khung hình ${index + 1}`} /></button>)}</div>}{thumbnail && <div className="youtube-chosen-thumbnail"><img src={thumbnail} alt="Ảnh bìa đã chọn" /><button type="button" className="btn secondary" onClick={() => setThumbnail("")}>Bỏ ảnh bìa</button></div>}<small>Chọn khung hình thật hoặc ảnh JPEG/PNG dưới 2 MB. Lấy ảnh từ video trước khi nhờ AI để AI có thể gợi ý ảnh bìa.</small></section>
-          <div className="youtube-publish-grid"><label>Chế độ hiển thị<select value={privacy} onChange={e => { setPrivacy(e.target.value); setConfirmed(false); }}><option value="private">Riêng tư · Nên dùng khi thử</option><option value="unlisted">Không công khai</option><option value="public">Công khai</option></select></label><label>Video có dành cho trẻ em không?<select required value={audience} onChange={e => { setAudience(e.target.value); setConfirmed(false); }}><option value="">Bạn cần chọn</option><option value="no">Không dành riêng cho trẻ em</option><option value="yes">Có, dành cho trẻ em</option></select></label></div>
-          <label>Hẹn giờ đăng (tùy chọn)<input type="datetime-local" value={publishAt} onChange={e => { setPublishAt(e.target.value); setConfirmed(false); }} /><small>Có lịch đăng: video được tải lên riêng tư và YouTube công khai theo lịch.</small></label>
+          <div className="youtube-publish-grid"><label>Chế độ hiển thị<select disabled={scheduleMode === "scheduled"} value={scheduleMode === "scheduled" ? "private" : privacy} onChange={e => { setPrivacy(e.target.value); setConfirmed(false); }}><option value="private">Riêng tư · Nên dùng khi thử</option><option value="unlisted">Không công khai</option><option value="public">Công khai</option></select></label><label>Video có dành cho trẻ em không?<select required value={audience} onChange={e => { setAudience(e.target.value); setConfirmed(false); }}><option value="">Bạn cần chọn</option><option value="no">Không dành riêng cho trẻ em</option><option value="yes">Có, dành cho trẻ em</option></select></label></div>
+          <section className="youtube-schedule"><div><strong>Thời điểm đăng</strong><p>Chọn đăng ngay hoặc đặt lịch công khai.</p></div><div className="youtube-schedule-toggle"><button type="button" aria-pressed={scheduleMode === "now"} className={`btn ${scheduleMode === "now" ? "primary" : "secondary"}`} onClick={() => { setScheduleMode("now"); setConfirmed(false); }}>Đăng ngay</button><button type="button" aria-pressed={scheduleMode === "scheduled"} className={`btn ${scheduleMode === "scheduled" ? "primary" : "secondary"}`} onClick={() => { setScheduleMode("scheduled"); setConfirmed(false); }}>Hẹn giờ đăng</button></div>{scheduleMode === "scheduled" && <><div className="youtube-publish-grid"><label>Ngày đăng<input type="date" required value={scheduleDate} onChange={e => { setScheduleDate(e.target.value); setConfirmed(false); }} /></label><label>Giờ đăng<input type="time" required value={scheduleTime} onChange={e => { setScheduleTime(e.target.value); setConfirmed(false); }} /></label></div><div className="library-actions"><button type="button" className="btn secondary" onClick={()=>chooseSchedule(1)}>Sau 1 giờ</button><button type="button" className="btn secondary" onClick={()=>chooseSchedule(24)}>Ngày mai, giờ này</button></div><small>Múi giờ: {timezone}. Video được tải lên riêng tư trước và công khai theo lịch.</small>{!scheduleValid && <p className="youtube-schedule-warning" role="status">Chọn lịch đăng cách hiện tại ít nhất 1 phút.</p>}{scheduleValid && <p className="youtube-schedule-summary">Dự kiến công khai: {new Date(publishAt).toLocaleString("vi-VN")}</p>}</>}</section>
           <label className="youtube-publish-confirm"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Tôi đã xem lại video và nội dung, đồng ý đăng lên kênh {connection.channel.title}.</label>
         </fieldset>
-      </div>
-      <footer><button type="button" className="btn secondary" onClick={onClose}>Đóng</button><button type="submit" className="btn primary" disabled={locked || !confirmed || !audience}>{busy === "upload" ? "Đang bắt đầu…" : publishAt ? "Xác nhận hẹn đăng" : privacy === "private" ? "Đăng thử riêng tư" : "Xác nhận đăng YouTube"}</button></footer>
+      </div></div>
+      <footer><button type="button" className="btn secondary" onClick={onClose}>Đóng</button><button type="submit" className="btn primary" disabled={locked || !confirmed || !audience || !scheduleValid}>{busy === "upload" ? "Đang bắt đầu…" : scheduleMode === "scheduled" ? "Xác nhận hẹn đăng" : privacy === "private" ? "Đăng thử riêng tư" : "Xác nhận đăng YouTube"}</button></footer>
     </form>
   </dialog>, document.body);
 }

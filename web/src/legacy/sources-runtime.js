@@ -3310,17 +3310,28 @@ async function openPlayer(
         )
     );
 
-    let editResult = modal.querySelector('.player-edit-output');
-    if (!editResult) {
-        editResult = document.createElement('button');
-        editResult.type = 'button';
-        editResult.className = 'btn secondary player-edit-output';
-        editResult.textContent = 'Sửa thoại / video · YouTube';
-        modal.querySelector('.modal-box')?.appendChild(editResult);
+    let actions = modal.querySelector('.result-preview-actions');
+    if (!actions) {
+        const layout = document.createElement('div');
+        layout.className = 'result-preview-layout';
+        const stage = document.createElement('div');
+        stage.className = 'result-preview-video';
+        player.parentNode.insertBefore(layout, player);
+        stage.appendChild(player);
+        layout.appendChild(stage);
+        actions = document.createElement('aside');
+        actions.className = 'result-preview-actions';
+        actions.innerHTML = '<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh của bạn.</p><div class="result-action-card"><strong>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output">Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong>Đăng YouTube</strong><p>AI gợi ý nội dung, chọn ảnh bìa và lên lịch đăng.</p><button type="button" class="btn primary player-publish-output">Đăng YouTube</button></div>';
+        layout.appendChild(actions);
     }
-    editResult.onclick = () => {
+    const output = { ...video, channel: channel || video.channel || '2d_animation', mode };
+    actions.querySelector('.player-edit-output').onclick = () => {
         closePlayer();
-        window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: { ...video, channel: channel || video.channel || '2d_animation', mode } }));
+        window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: output }));
+    };
+    actions.querySelector('.player-publish-output').onclick = () => {
+        closePlayer();
+        window.dispatchEvent(new CustomEvent('reupai:publish-output', { detail: output }));
     };
 
     const title = (

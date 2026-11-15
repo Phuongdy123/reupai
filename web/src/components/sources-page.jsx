@@ -9,8 +9,13 @@ import { useFeedback } from "./feedback-provider";
 import { PENDING_SOURCE_KEY } from "./workspace-assistant";
 import { OutputEditor } from "./output-editor";
 
+import { useYoutubeConnection } from "./youtube-connection";
+import { YoutubePublishDialog } from "./youtube-publish-dialog";
+
 export function SourcesPage() {
   const { status, error: connectionError, client, connect, check } = useEngine();
+  const youtube = useYoutubeConnection();
+  const [publishing, setPublishing] = useState(null);
   const host = useRef(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -21,6 +26,15 @@ export function SourcesPage() {
     window.addEventListener("reupai:edit-output", open);
     return () => window.removeEventListener("reupai:edit-output", open);
   }, []);
+  useEffect(() => {
+    const publish = event => {
+      if (!event.detail?.video_id) return;
+      if (!youtube.connection?.connected) { setError('Kết nối kênh YouTube ở phía trên trước khi đăng thành phẩm.'); return; }
+      setPublishing(event.detail);
+    };
+    window.addEventListener('reupai:publish-output', publish);
+    return () => window.removeEventListener('reupai:publish-output', publish);
+  }, [youtube.connection?.connected]);
   const { beginWaiting, endWaiting } = useFeedback();
 
   useEffect(() => {
@@ -126,7 +140,9 @@ export function SourcesPage() {
     `}</style>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button className="btn secondary" onClick={() => setRetry((value) => value + 1)}>Thử lại</button></div>}
     {!ready && !error && <p className="info-line" aria-live="polite">Đang đọc thư viện local…</p>}
+    <section className="source-youtube-banner"><div><small>XUẤT BẢN THÀNH PHẨM</small><strong>YouTube Studio</strong><p>{youtube.connection?.connected ? `Kênh: ${youtube.connection.channel.title} · Sẵn sàng đăng và hẹn giờ` : 'Kết nối kênh để đăng video ngay sau khi xử lý.'}</p></div><button type="button" className="btn primary" onClick={youtube.connection?.connected ? youtube.refresh : youtube.connect} disabled={!youtube.supported || youtube.busy || youtube.connection?.connecting}>{youtube.connection?.connecting ? 'Đang chờ Google…' : youtube.connection?.connected ? 'Kiểm tra kết nối' : 'Kết nối YouTube'}</button>{youtube.error && <p role="alert">{youtube.error}</p>}</section>
     <div ref={host} className="source-runtime-host" data-product-runtime="sources" />
+    {publishing && youtube.connection?.connected && <YoutubePublishDialog client={client} item={publishing} connection={youtube.connection} onClose={() => setPublishing(null)} />}
     {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setEditor(null); sendFeedback("success", "Đã vào hàng đợi xuất lại. Theo dõi ở Lịch sử hoặc Thành phẩm."); }} />}
   </div>;
 }

@@ -47,3 +47,45 @@
   .youtube-thumbnail-grid { gap: 5px; }
   .youtube-publish-dialog .btn { min-height: 44px; }
 }
+
+/* Result workspace: watching, editing and publishing stay distinct. */
+.result-preview-dialog, .source-runtime-host #playerModal .modal-box { width: min(1240px, calc(100vw - 40px)); max-height: 92dvh; overflow: auto; border-radius: 24px; background: #101011; }
+.result-preview-layout { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(280px,.8fr); gap: 20px; padding: 20px; }
+.result-preview-video { display: grid; align-content: center; min-width: 0; background: #050505; border: 1px solid #272729; border-radius: 18px; overflow: hidden; }
+.result-preview-video video, .source-runtime-host #playerModal .result-preview-video video { display: block; width: 100%; max-height: 72dvh; margin: 0; object-fit: contain; }
+.result-preview-actions { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 8px 0; }
+.result-preview-actions > small, .source-youtube-banner small { font-size: 10px; letter-spacing: .12em; color: #929298; }
+.result-preview-actions h3 { margin: 0; font-size: 20px; letter-spacing: -.03em; }
+.result-preview-actions p { margin: 0; font-size: 12px; line-height: 1.7; color: #a5a5ad; }
+.result-action-card { display: grid; gap: 10px; border: 1px solid #303034; border-radius: 18px; padding: 18px; background: #171719; }
+.result-action-card .btn { width: 100%; min-height: 44px; border-radius: 999px; }
+.youtube-action-card { border-color: #626269; background: linear-gradient(140deg,#29292d,#151516); }
+.source-youtube-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 24px; margin-bottom: 18px; border: 1px solid #49494f; border-radius: 20px; background: linear-gradient(120deg,#242427,#111112); }
+.source-youtube-banner strong { display: block; margin-top: 5px; font-size: 20px; }
+.source-youtube-banner p { margin: 6px 0 0; font-size: 12px; color: #b2b2ba; }
+.youtube-publish-dialog { width: min(1200px,calc(100vw - 40px)); }
+.youtube-publish-workspace { display: grid; grid-template-columns: minmax(0,.85fr) minmax(0,1.15fr); min-height: 0; overflow: hidden; }
+.youtube-publish-preview { display: flex; flex-direction: column; gap: 16px; padding: 24px; min-width: 0; overflow-y: auto; border-right: 1px solid #303034; background: #0c0c0d; }
+.youtube-publish-preview > small, .youtube-publish-target > span { color: #929299; font-size: 10px; letter-spacing: .1em; }
+.youtube-publish-preview > strong { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.youtube-publish-stage { display: grid; place-items: center; background: #050505; border: 1px solid #29292c; border-radius: 16px; overflow: hidden; }
+.youtube-publish-stage video { width: 100%; max-height: 45dvh; object-fit: contain; }
+.youtube-publish-stage p { padding: 20px; font-size: 12px; color: #aaa; line-height: 1.6; }
+.youtube-publish-target { display: grid; gap: 10px; padding: 18px; border: 1px solid #303034; border-radius: 16px; background: #171719; }
+.youtube-publish-target p { margin: 0; font-size: 12px; line-height: 1.6; color: #bdbdc5; }
+.youtube-schedule { display: grid; gap: 14px; padding: 18px; border: 1px solid #525259; border-radius: 18px; background: #19191c; }
+.youtube-schedule p { margin: 6px 0 0; font-size: 12px; line-height: 1.6; color: #b8b8c0; }
+.youtube-schedule-toggle { display: flex; gap: 8px; }
+.youtube-schedule .youtube-publish-grid label { display: grid; gap: 8px; font-size: 12px; }
+.youtube-publish-dialog input:is([type=date],[type=time]) { color-scheme: dark; min-height: 44px; }
+.youtube-publish-dialog input::-webkit-calendar-picker-indicator { cursor: pointer; padding: 4px; }
+.youtube-publish-fields .youtube-publish-confirm { padding: 14px; border: 1px solid #38383c; border-radius: 12px; background: #19191b; }
+@media(max-width:800px) {
+ .result-preview-layout { grid-template-columns: 1fr; padding: 12px; }
+ .result-preview-video video, .source-runtime-host #playerModal .result-preview-video video { max-height: 52dvh; }
+ .youtube-publish-workspace { display: block; overflow-y: auto; }
+ .youtube-publish-preview { border-right: 0; border-bottom: 1px solid #303034; overflow: visible; padding: 16px; }
+ .youtube-publish-body { overflow: visible; }
+ .youtube-publish-stage video { max-height: 30dvh; }
+ .source-youtube-banner { flex-wrap: wrap; padding: 18px; }
+}
