@@ -3940,7 +3940,7 @@ def pipeline(
                 "schema": 1,
                 "subtitle": file_fingerprint(vietnamese_srt),
                 "voice": config.get("voice") or "default",
-                "speed": float(config.get("tts_speed") or 1.10),
+                "speed": float(config.get("tts_speed") or 1.00),
             })
             tts_force = bool(
                 force

@@ -146,7 +146,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
-    set('processTtsSpeed', defaults.tts_speed ?? 1.10);
+    set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
@@ -956,7 +956,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         set('processSubtitleStyle', 'minimal');
         set('processOriginalVolume', 0.15);
         set('processVoiceVolume', 1);
-        set('processTtsSpeed', 1.10);
+        set('processTtsSpeed', 1.00);
         set('processVoice', 'Trúc Ly');
         set('processAspectRatio', '');
         set('processMusicUrl', '');
@@ -1508,7 +1508,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             subtitle_style: value('processSubtitleStyle') || 'minimal',
             original_volume: Number(value('processOriginalVolume') || 0.15),
             voice_volume: Number(value('processVoiceVolume') || 1),
-            tts_speed: Number(value('processTtsSpeed') || 1.10),
+            tts_speed: Number(value('processTtsSpeed') || 1.00),
             voice: value('processVoice'),
             music_url: musicUrl || null,
             music_data: musicData,

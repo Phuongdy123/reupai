@@ -2351,8 +2351,8 @@ function ensureProcessConfigDialog() {
                     <output data-for="processVoiceVolume">100%</output>
                 </label>
                 <label>Tốc độ lồng tiếng
-                    <input id="processTtsSpeed" type="range" min="0.5" max="1.6" step="0.05" value="1.1">
-                    <output data-for="processTtsSpeed">1.10x</output>
+                    <input id="processTtsSpeed" type="range" min="0.5" max="1.6" step="0.05" value="1.0">
+                    <output data-for="processTtsSpeed">1.00x</output>
                 </label>
                 <label id="processVoiceField">Giọng lồng tiếng
                     <select id="processVoice">
@@ -2560,7 +2560,7 @@ function openProcessConfig(video, card, mode) {
     set('processFontSize', defaults.subtitle_font_size || '');
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
-    set('processTtsSpeed', defaults.tts_speed ?? 1.10);
+    set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
@@ -2825,7 +2825,7 @@ function openProcessConfig(video, card, mode) {
         set('processFontSize', '');
         set('processOriginalVolume', 0.15);
         set('processVoiceVolume', 1);
-        set('processTtsSpeed', 1.10);
+        set('processTtsSpeed', 1.00);
         set('processVoice', 'Trúc Ly');
         set('processAspectRatio', '');
         set('processMusicUrl', '');
@@ -3073,7 +3073,7 @@ function openProcessConfig(video, card, mode) {
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
             original_volume: Number(value('processOriginalVolume') || 0.15),
             voice_volume: Number(value('processVoiceVolume') || 1),
-            tts_speed: Number(value('processTtsSpeed') || 1.10),
+            tts_speed: Number(value('processTtsSpeed') || 1.00),
             voice: value('processVoice'),
             music_url: musicUrl || null,
             music_data: musicData,

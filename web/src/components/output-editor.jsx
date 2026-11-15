@@ -87,7 +87,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const [editMode, setEditMode] = useState(null);
   const [newRegionKind, setNewRegionKind] = useState("logo");
   const [voiceName, setVoiceName] = useState("Trúc Ly");
-  const [ttsSpeed, setTtsSpeed] = useState(1.10);
+  const [ttsSpeed, setTtsSpeed] = useState(1.00);
   const [dimensions, setDimensions] = useState(null);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -101,7 +101,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const cueEnd = useRef(null);
   const normalizedCues = cues.map(cue => ({ start: Number(cue.start), end: Number(cue.end), text: cue.text.trim() }));
   const transcriptChanged = JSON.stringify(normalizedCues) !== originalCues.current;
-  const voiceChanged = item.mode === "voiceover" && (voiceName !== (meta?.voice || "Trúc Ly") || Number(ttsSpeed) !== Number(meta?.tts_speed || 1.10));
+  const voiceChanged = item.mode === "voiceover" && (voiceName !== (meta?.voice || "Trúc Ly") || Number(ttsSpeed) !== Number(meta?.tts_speed || 1.00));
   const intervalKey = items => JSON.stringify(items.map(entry => ({ ...cleanRect(entry), start: Number(entry.start) || 0, end: Number(entry.end) || 0, kind: entry.kind === "logo" ? "logo" : "detail" })));
   const hasChanges = transcriptChanged || voiceChanged || Boolean(editMode) || JSON.stringify(cleanRect(meta?.blur_region)) !== JSON.stringify(region) || intervalKey(meta?.blur_intervals || []) !== intervalKey(intervals);
 
@@ -143,7 +143,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       setRegion(cleanRect(details.blur_region));
       setIntervals((details.blur_intervals || []).map((entry) => ({ ...cleanRect(entry), start: Number(entry.start) || 0, end: Number(entry.end) || 0, id: crypto.randomUUID(), kind: entry.kind === "logo" ? "logo" : "detail" })).filter((entry) => entry.x !== undefined));
       setVoiceName(details.voice || "Trúc Ly");
-      setTtsSpeed(Number(details.tts_speed) || 1.10);
+      setTtsSpeed(Number(details.tts_speed) || 1.00);
       setResultUrl(renderedUrl);
       setSourceUrl(rawSourceUrl);
       if (!rawSourceUrl) setNotice("Không tìm thấy video gốc trên máy. Bạn vẫn có thể xem thành phẩm, nhưng cần tải lại video nguồn để chỉnh vùng mờ chính xác.");
@@ -290,7 +290,24 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       <div className="modal-head"><div><strong className="modal-title">Chỉnh thành phẩm · {modeLabel(item.mode)}</strong><p className="muted">{item.title || item.video_id} · sửa phụ đề, vùng mờ và giọng đọc, rồi xuất lại thành phẩm.</p></div><button className="btn secondary" onClick={onClose} disabled={submitting} aria-label="Đóng">×</button></div>
       {loading ? <Loading label="Đang mở thành phẩm và cấu hình trước đó" /> : error && !previewUrl ? <div className="library-body"><ErrorMessage error={error} onRetry={null} /><button className="btn secondary" onClick={() => window.location.reload()}>Tải lại trang</button></div> : <div className="output-editor-body">
         <ErrorMessage error={error} /><Notice>{notice}</Notice>
-        <div className="output-editor-help"><button type="button" className={`btn ${showTranscript ? "primary" : "secondary"}`} onClick={()=>setShowTranscript(value=>!value)}>Thoại &amp; lồng tiếng</button><button className={`btn ${!previewSource ? "primary" : "secondary"}`} onClick={() => { setPreviewSource(false); setEditMode(null); setDraft(null); }}>Thành phẩm hiện tại</button><button className={`btn ${previewSource ? "primary" : "secondary"}`} disabled={!sourceUrl} title={sourceUrl ? "" : "Video gốc không còn trên máy"} onClick={() => { setPreviewSource(true); }}>Video gốc</button><button className={`btn ${editMode === "subtitle" ? "primary" : "secondary"}`} disabled={!sourceUrl} onClick={() => beginEdit("subtitle")}>Chỉnh vùng phụ đề</button><button className={`btn ${editMode === "interval" && newRegionKind === "logo" ? "primary" : "secondary"}`} disabled={!sourceUrl} onClick={() => beginIntervalEdit("logo")}>Chỉnh logo / chữ</button><button className={`btn ${editMode === "interval" && newRegionKind === "detail" ? "primary" : "secondary"}`} disabled={!sourceUrl} onClick={() => beginIntervalEdit("detail")}>Chỉnh chi tiết</button>{editMode && <button className="btn secondary" onClick={finishEdit}>Xong</button>}{editMode === "subtitle" && <button className="btn secondary" onClick={() => setRegion(null)}>Xóa vùng phụ đề</button>}{editMode === "interval" && activeInterval && <button className="btn secondary" onClick={removeActiveInterval}>Xóa {activeInterval.kind === "logo" ? "logo / chữ" : "chi tiết"}</button>}<span>{editMode === "subtitle" ? "Đang dùng video gốc: kéo khung đỏ để di chuyển; kéo chấm ở góc để đổi kích thước." : editMode === "interval" ? `Đang dùng video gốc: kéo trực tiếp quanh ${newRegionKind === "logo" ? "logo / chữ" : "chi tiết"}; thả chuột để lưu ngay. Bấm khung đỏ có sẵn để kéo, đổi kích thước hoặc xóa.` : previewSource ? "Đang xem video gốc. Bấm Thành phẩm hiện tại để xem kết quả đã render." : sourceUrl ? "Đang xem thành phẩm hiện tại. Các vùng đã lưu hiện màu đỏ; bấm Chỉnh để thay đổi chính xác trên video gốc." : "Video gốc hiện không có trên máy. Thành phẩm vẫn xem và tải được; tải lại nguồn để mở chỉnh vùng mờ."}</span></div>
+        <div className="output-editor-help">
+          <div className="output-editor-toolbar">
+            <div className="output-editor-seg" role="group" aria-label="Chế độ xem trước">
+              <button type="button" className={`btn ${!previewSource ? "is-active" : ""}`} onClick={() => { setPreviewSource(false); setEditMode(null); setDraft(null); }}>Thành phẩm hiện tại</button>
+              <button type="button" className={`btn ${previewSource ? "is-active" : ""}`} disabled={!sourceUrl} title={sourceUrl ? "" : "Video gốc không còn trên máy"} onClick={() => { setPreviewSource(true); }}>Video gốc</button>
+            </div>
+            <div className="output-editor-tools" role="group" aria-label="Công cụ chỉnh vùng mờ">
+              <button type="button" className={`btn secondary ${editMode === "subtitle" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => beginEdit("subtitle")}><Icon name="edit" size={13} />Chỉnh vùng phụ đề</button>
+              <button type="button" className={`btn secondary ${editMode === "interval" && newRegionKind === "logo" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => beginIntervalEdit("logo")}><Icon name="edit" size={13} />Chỉnh logo / chữ</button>
+              <button type="button" className={`btn secondary ${editMode === "interval" && newRegionKind === "detail" ? "is-editing" : ""}`} disabled={!sourceUrl} onClick={() => beginIntervalEdit("detail")}><Icon name="edit" size={13} />Chỉnh chi tiết</button>
+              {editMode && <button type="button" className="btn secondary" onClick={finishEdit}><Icon name="check" size={13} />Xong</button>}
+              {editMode === "subtitle" && <button type="button" className="btn secondary" onClick={() => setRegion(null)}>Xóa vùng phụ đề</button>}
+              {editMode === "interval" && activeInterval && <button type="button" className="btn secondary" onClick={removeActiveInterval}>Xóa {activeInterval.kind === "logo" ? "logo / chữ" : "chi tiết"}</button>}
+            </div>
+            <button type="button" className={`btn secondary output-editor-transcript-toggle ${showTranscript ? "is-active" : ""}`} onClick={() => setShowTranscript(value => !value)}><Icon name="captions" size={14} />Thoại &amp; lồng tiếng</button>
+          </div>
+          <span>{editMode === "subtitle" ? "Đang dùng video gốc: kéo khung đỏ để di chuyển; kéo chấm ở góc để đổi kích thước." : editMode === "interval" ? `Đang dùng video gốc: kéo trực tiếp quanh ${newRegionKind === "logo" ? "logo / chữ" : "chi tiết"}; thả chuột để lưu ngay. Bấm khung đỏ có sẵn để kéo, đổi kích thước hoặc xóa.` : previewSource ? "Đang xem video gốc. Bấm Thành phẩm hiện tại để xem kết quả đã render." : sourceUrl ? "Đang xem thành phẩm hiện tại. Các vùng đã lưu hiện màu đỏ; bấm Chỉnh để thay đổi chính xác trên video gốc." : "Video gốc hiện không có trên máy. Thành phẩm vẫn xem và tải được; tải lại nguồn để mở chỉnh vùng mờ."}</span>
+        </div>
         <div className={`output-editor-preview-grid${showTranscript ? " has-transcript" : ""}`}><div><div className="output-editor-stage">{previewUrl && <><video key={previewSource ? "source" : "result"} ref={videoRef} src={previewUrl} controls playsInline crossOrigin="anonymous" onLoadedMetadata={syncCanvas} onCanPlay={syncCanvas} onResize={syncCanvas} onTimeUpdate={() => { if (cueEnd.current != null && videoRef.current.currentTime >= cueEnd.current) { videoRef.current.pause(); cueEnd.current = null; } }} onError={() => setError("Không thể mở video xem trước từ Local Engine. Hãy thử lại.")} /><canvas ref={canvasRef} className={`output-editor-canvas${editMode ? " editable" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} /></>}</div>
         <div className="output-editor-summary"><span>Vùng phụ đề: {region ? `${region.x}, ${region.y} · ${region.width} × ${region.height}px` : "chưa chọn"}</span>{dimensions && <span>Video gốc: {dimensions.width} × {dimensions.height}px</span>}</div>
         </div>{showTranscript && <OutputTranscriptEditor cues={cues} supported={Boolean(meta?.subtitle_edit_supported)} onChange={(index,key,value)=>setCues(current=>current.map((cue,i)=>i===index?{...cue,[key]:value}:cue))} onSeek={cue=>{ const video=videoRef.current; if(video) { video.currentTime=Number(cue.start); cueEnd.current=Number(cue.end); video.play().catch(()=>{}); } }} />}</div>

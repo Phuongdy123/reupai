@@ -180,7 +180,7 @@ VOICE = normalize_voice_name(
 
 # Edge fallback only. VieNeu remains primary.
 EDGE_VOICE = "vi-VN-NamMinhNeural"
-EDGE_RATE = "+10%"
+EDGE_RATE = "+0%"
 EDGE_PITCH = "+0Hz"
 
 MAX_RETRIES = 3
@@ -189,13 +189,13 @@ MAX_RETRIES = 3
 # We only lower the warning threshold so very large atempo changes are visible.
 COMFORT_SPEED_WARNING = 1.22
 
-# Toc do doc co ban. 1.10 = nhanh hon 10%.
+# Toc do doc co ban. 1.00 = toc do goc 1.0x.
 try:
     BASE_TTS_SPEED = float(
-        os.getenv("REUP_TTS_SPEED", "1.10")
+        os.getenv("REUP_TTS_SPEED", "1.00")
     )
 except ValueError:
-    BASE_TTS_SPEED = 1.10
+    BASE_TTS_SPEED = 1.00
 
 BASE_TTS_SPEED = max(0.5, min(BASE_TTS_SPEED, 2.0))
 

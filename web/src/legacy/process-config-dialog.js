@@ -363,8 +363,8 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <output data-for="processVoiceVolume">100%</output>
                 </label>
                 <label>Tốc độ lồng tiếng
-                    <input id="processTtsSpeed" type="range" min="0.5" max="1.6" step="0.05" value="1.1">
-                    <output data-for="processTtsSpeed">1.10x</output>
+                    <input id="processTtsSpeed" type="range" min="0.5" max="1.6" step="0.05" value="1.0">
+                    <output data-for="processTtsSpeed">1.00x</output>
                 </label>
                 <label id="processVoiceField">Giọng lồng tiếng
                     <select id="processVoice">

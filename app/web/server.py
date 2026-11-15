@@ -529,7 +529,7 @@ class ProcessRequest(BaseModel):
     original_volume: float = 0.15
     voice_volume: float = 1.0
     voice: Optional[str] = None
-    tts_speed: float = 1.10
+    tts_speed: float = 1.00
     subtitle_font_size: Optional[int] = None
     blur_region: Optional[dict[str, float]] = None
     blur_preset: Optional[str] = None
@@ -5457,7 +5457,7 @@ def _output_edit_snapshot(video_id: str, channel: str, mode: str) -> dict:
             item for item in (config.get("blur_intervals") or []) if isinstance(item, dict)
         ],
         "voice": config.get("voice") or "Trúc Ly",
-        "tts_speed": float(config.get("tts_speed") or 1.10),
+        "tts_speed": float(config.get("tts_speed") or 1.00),
         "source_ready": bool(local_source_for_process(channel, video_id)),
         "can_rerender": bool(previous),
         "subtitles": subtitles,
