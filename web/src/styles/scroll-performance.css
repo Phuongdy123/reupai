@@ -48,18 +48,29 @@ body.theme-xports :is(.main, .sidebar-nav) {
   html { scrollbar-gutter: stable; }
 }
 
-/* Fixed and sticky chrome + dialogs should not re-blur the whole page (keep video blur boxes intact). */
-body.theme-xports *:not([class*="blur"]),
-body.theme-xports *::before,
-body.theme-xports *::after,
-body.theme-xports dialog::backdrop {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
+/* Frosted-glass blur on GPU-composited chrome & overlays while keeping scrolling cards fast at 120fps. */
+body.theme-xports .topbar {
+  background: rgba(14, 15, 20, 0.78);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
 }
-
-body.theme-xports :is(.topbar, .sidebar, .account-menu, .sidebar-backdrop) {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+body.theme-xports .sidebar {
+  background: rgba(12, 13, 18, 0.84);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+body.theme-xports :is(.account-menu, .quick-nav-dialog, .modal-box, .studio-stat) {
+  background: rgba(16, 17, 23, 0.82);
+  backdrop-filter: blur(14px) saturate(135%);
+  -webkit-backdrop-filter: blur(14px) saturate(135%);
+}
+body.theme-xports :is(dialog::backdrop, .quick-nav-backdrop, .modal, .feedback-scrim, .guest-auth-backdrop) {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+body.theme-xports .studio-fit-badge {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 body.theme-xports :is(.sidebar, .main, .page-content) { will-change: auto; }
