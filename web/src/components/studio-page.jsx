@@ -114,7 +114,12 @@ export function StudioPage({ mode = "youtube" }) {
   const [processMode, setProcessMode] = useState("voiceover");
   const [voiceName, setVoiceName] = useState("Trúc Ly");
   const [ttsSpeed, setTtsSpeed] = useState(isYoutube ? 1.0 : 1.05);
+  const [boostGpu, setBoostGpu] = useState(false);
   const [submittingIds, setSubmittingIds] = useState({});
+
+  useEffect(() => {
+    try { setBoostGpu(localStorage.getItem("reupai:boost-gpu") === "1"); } catch {}
+  }, []);
 
   // Modals
   const [preview, setPreview] = useState(null);
@@ -263,6 +268,9 @@ export function StudioPage({ mode = "youtube" }) {
         source_language: "auto",
         translation_model: "gemini-3.1-flash-lite",
         output_format: "video",
+        boost_gpu: boostGpu,
+        ocr_use_gpu: boostGpu,
+        ocr_parallelism: boostGpu ? 4 : 2,
       };
       await client.json("/api/process", {
         method: "POST",
@@ -353,6 +361,10 @@ export function StudioPage({ mode = "youtube" }) {
               </select>
             </label>
           </>}
+          <label className="boost-gpu-toggle" title="Tăng tốc GPU tối đa (CUDA / NVENC / OCR GPU / đa luồng)">
+            <input type="checkbox" checked={boostGpu} onChange={(e) => { const next = e.target.checked; setBoostGpu(next); try { localStorage.setItem("reupai:boost-gpu", next ? "1" : "0"); } catch {} }} />
+            <span>Boost GPU</span>
+          </label>
           <span className="studio-aspect-pill">Tỷ lệ: {isYoutube ? "16:9 Ngang" : "9:16 Dọc"}</span>
         </div>
       </section>

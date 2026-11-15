@@ -2187,11 +2187,44 @@ async function downloadVideo(
 }
 
 
+function isBoostGpuEnabled() {
+    const toggle = document.getElementById('boostGpuToggle');
+    if (toggle) return Boolean(toggle.checked);
+    try {
+        return localStorage.getItem('reupai:boost-gpu') === '1';
+    } catch {
+        return false;
+    }
+}
+
+function initBoostGpuToggle() {
+    const toggle = document.getElementById('boostGpuToggle');
+    if (!toggle) return;
+    try {
+        toggle.checked = localStorage.getItem('reupai:boost-gpu') === '1';
+    } catch {
+        toggle.checked = false;
+    }
+    if (toggle.dataset.bound === '1') return;
+    toggle.dataset.bound = '1';
+    toggle.addEventListener('change', () => {
+        try {
+            localStorage.setItem('reupai:boost-gpu', toggle.checked ? '1' : '0');
+        } catch {
+            // ignore storage errors
+        }
+    });
+}
+
 function processConfigDefaults() {
+    const boostGpu = isBoostGpuEnabled();
     // Mỗi job bắt đầu sạch theo flow mặc định, không lấy cấu hình cũ.
     return {
         // Logo chỉ được chèn khi người dùng chủ động chọn trong phần nâng cao.
         logo_mode: 'none',
+        boost_gpu: boostGpu,
+        ocr_use_gpu: boostGpu,
+        ocr_parallelism: boostGpu ? 4 : 2,
     };
 }
 
@@ -3060,6 +3093,8 @@ function openProcessConfig(video, card, mode) {
             logo_text: value('processLogoText') || null,
             logo_data: logoData,
             logo_filename: logoFile?.name || dialog._logoFilename || null,
+            boost_gpu: isBoostGpuEnabled(),
+            ...(isBoostGpuEnabled() ? { ocr_use_gpu: true, ocr_parallelism: 4 } : {}),
         };
         dialog.close();
         processVideo(video, card, mode, config);
@@ -8415,6 +8450,8 @@ function bindV13Manager() {
             followCurrentSource();
         }
     );
+
+    initBoostGpuToggle();
 
     bind(
         'sourceInputMode',

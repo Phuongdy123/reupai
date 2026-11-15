@@ -6702,7 +6702,7 @@ def _replace_video_encoder_with_cpu(command):
 
         "-preset",
 
-        "veryfast",
+        "superfast" if os.getenv("REUP_BOOST_GPU", "").strip() == "1" else "veryfast",
 
 
 

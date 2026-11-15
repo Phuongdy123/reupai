@@ -9969,6 +9969,43 @@ body.theme-xports #followCurrentSource.btn.green {
   box-shadow: none !important;
 }
 
+/* Boost GPU toggle pill in Nguồn video & Studio */
+body.theme-xports .boost-gpu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--ds-control-h);
+  min-height: var(--ds-control-h);
+  padding: 0 12px;
+  border: 1px solid var(--ds-border-strong);
+  border-radius: 7px 2px 7px 2px;
+  background: var(--ds-surface-raised);
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+body.theme-xports .boost-gpu-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #ef4444;
+  cursor: pointer;
+}
+body.theme-xports .boost-gpu-toggle:hover {
+  border-color: var(--ds-text-muted);
+  color: var(--ds-text);
+}
+body.theme-xports .boost-gpu-toggle:has(input:checked) {
+  border-color: rgb(239 68 68 / 60%);
+  background: rgb(220 38 38 / 16%);
+  color: #fecaca;
+  box-shadow: 0 0 0 1px rgb(239 68 68 / 18%);
+}
+
 
 
 

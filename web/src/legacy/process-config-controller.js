@@ -107,9 +107,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processOcrLanguage', defaults.ocr_language || 'auto');
     set('processOcrFps', defaults.ocr_fps ?? 2);
     set('processOcrConfidence', defaults.ocr_min_confidence ?? 0.45);
-    set('processOcrParallelism', defaults.ocr_parallelism ?? 2);
+    set('processOcrParallelism', defaults.ocr_parallelism ?? (defaults.boost_gpu ? 4 : 2));
     set('processOcrSimilarity', defaults.ocr_similarity_threshold ?? 0.82);
-    dialog.querySelector('#processOcrUseGpu').checked = defaults.ocr_use_gpu === true;
+    dialog.querySelector('#processOcrUseGpu').checked = defaults.ocr_use_gpu === true || defaults.boost_gpu === true;
     dialog.querySelector('#processOcrMergeSimilar').checked = defaults.ocr_merge_similar !== false;
     const transcriptSource = dialog.querySelector('#processTranscriptSource');
     const ocrOptions = dialog.querySelector('#processOcrOptions');
@@ -1503,6 +1503,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             ocr_min_confidence: Number(value('processOcrConfidence') || 0.45),
             ocr_parallelism: Number(value('processOcrParallelism') || 2),
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
+            boost_gpu: Boolean(document.getElementById('boostGpuToggle')?.checked || dialog.querySelector('#processOcrUseGpu')?.checked),
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
             ocr_similarity_threshold: Number(value('processOcrSimilarity') || 0.82),
             subtitle_style: value('processSubtitleStyle') || 'minimal',

@@ -118,11 +118,21 @@ def get_detector():
 
     load_start = time.perf_counter()
 
+    use_gpu = os.getenv("REUP_BOOST_GPU", "").strip() == "1"
+    detector_device = "cpu"
+    if use_gpu:
+        try:
+            import paddle
+            if paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0:
+                detector_device = "gpu:0"
+        except Exception:
+            detector_device = "cpu"
+
     try:
         _DETECTOR = TextDetection(
             model_name=OCR_MOBILE_MODEL,
             engine="paddle",
-            device="cpu",
+            device=detector_device,
             enable_mkldnn=False,
             cpu_threads=min(
                 8,

@@ -1083,6 +1083,17 @@ def create_tts_clips(
             if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
                 pending.append((index, subtitle_id, subtitle["text"], raw_wav))
         _generate_parallel_raw_tts(pending, on_progress=on_progress)
+    elif TTS_PROVIDER == "edge" and len(subtitles) > 1:
+        pending_edge = []
+        for subtitle in subtitles:
+            raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
+            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+                pending_edge.append((subtitle["text"], raw_wav))
+        if pending_edge:
+            from concurrent.futures import ThreadPoolExecutor
+            workers = 6 if os.getenv("REUP_BOOST_GPU", "").strip() == "1" else 4
+            with ThreadPoolExecutor(max_workers=min(workers, len(pending_edge))) as pool:
+                list(pool.map(lambda item: generate_edge_fallback(item[0], item[1]), pending_edge))
 
     for index, subtitle in enumerate(
         subtitles,

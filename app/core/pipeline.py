@@ -3224,6 +3224,13 @@ def pipeline(
     language_force = source_language != previous_source_language
     transcript_source = config.get("transcript_source", "audio")
     transcription_signature_path = job_dir / "transcription_settings.sha256"
+    if config.get("boost_gpu"):
+        os.environ["REUP_BOOST_GPU"] = "1"
+        config["ocr_use_gpu"] = True
+        config["ocr_parallelism"] = max(int(config.get("ocr_parallelism") or 2), 4)
+    else:
+        os.environ.pop("REUP_BOOST_GPU", None)
+
     transcription_signature = stable_fingerprint({
         "schema": 1,
         "transcript_source": transcript_source,

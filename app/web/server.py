@@ -523,6 +523,7 @@ class ProcessRequest(BaseModel):
     ocr_min_confidence: float = Field(default=0.45, ge=0.05, le=0.99)
     ocr_parallelism: int = Field(default=2, ge=1, le=8)
     ocr_use_gpu: bool = False
+    boost_gpu: bool = False
     ocr_merge_similar: bool = True
     ocr_similarity_threshold: float = Field(default=0.82, ge=0.5, le=0.99)
     subtitle_style: Literal["minimal", "bold", "cinema", "neon", "box"] = "minimal"
