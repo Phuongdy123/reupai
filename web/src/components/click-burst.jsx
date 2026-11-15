@@ -59,7 +59,7 @@ export function ClickBurst() {
     let rings = [];
 
     function resize() {
-      pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1 : 1.5);
+      pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1 : 1.25);
       width = window.innerWidth;
       height = window.innerHeight;
       canvas.width = Math.round(width * pixelRatio);
@@ -76,14 +76,14 @@ export function ClickBurst() {
       context.clearRect(0, 0, width, height);
 
       particles = particles.filter((particle) => now - particle.born < particle.life);
-      rings = rings.filter((ring) => now - ring.born < 440);
+      rings = rings.filter((ring) => now - ring.born < 280);
 
       for (const ring of rings) {
-        const progress = (now - ring.born) / 440;
+        const progress = (now - ring.born) / 280;
         context.beginPath();
-        context.arc(ring.x, ring.y, 4 + progress * 43, 0, Math.PI * 2);
-        context.strokeStyle = `rgba(220, 222, 255, ${(1 - progress) * 0.48})`;
-        context.lineWidth = 1.4 * (1 - progress * 0.45);
+        context.arc(ring.x, ring.y, 4 + progress * 34, 0, Math.PI * 2);
+        context.strokeStyle = `rgba(220, 222, 255, ${(1 - progress) * 0.42})`;
+        context.lineWidth = 1.25 * (1 - progress * 0.45);
         context.stroke();
       }
 
@@ -99,8 +99,6 @@ export function ClickBurst() {
         context.translate(particle.x, particle.y);
         context.rotate(particle.rotation);
         context.globalAlpha = fade;
-        context.shadowColor = particle.color;
-        context.shadowBlur = coarsePointer ? 0 : particle.type === "gem" ? 5 : 7;
         if (particle.type === "gem") drawGem(context, particle.size, particle.color);
         else {
           context.fillStyle = particle.color;
@@ -119,22 +117,22 @@ export function ClickBurst() {
 
       const x = event.clientX;
       const y = event.clientY;
-      const count = coarsePointer ? 5 : 12;
+      const count = coarsePointer ? 4 : 7;
       const colors = ["#f5f2ff", "#d9dfff", "#c5b8ff", "#b7dcff", "#fff0c2"];
       const now = performance.now();
       if (!coarsePointer) rings.push({ x, y, born: now });
 
       for (let index = 0; index < count; index += 1) {
         const angle = (Math.PI * 2 * index) / count + (Math.random() - 0.5) * 0.28;
-        const speed = 0.075 + Math.random() * 0.11;
+        const speed = 0.08 + Math.random() * 0.1;
         particles.push({
           x: x + Math.cos(angle) * 4,
           y: y + Math.sin(angle) * 4,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           born: now,
-          life: coarsePointer ? 260 + Math.random() * 100 : 460 + Math.random() * 260,
-          size: coarsePointer ? 2.5 + Math.random() * 2 : 3 + Math.random() * 3.5,
+          life: coarsePointer ? 200 + Math.random() * 70 : 280 + Math.random() * 120,
+          size: coarsePointer ? 2.2 + Math.random() * 1.5 : 2.5 + Math.random() * 2.5,
           rotation: Math.random() * Math.PI,
           spin: (Math.random() - 0.5) * 0.009,
           color: colors[Math.floor(Math.random() * colors.length)],
@@ -142,8 +140,8 @@ export function ClickBurst() {
         });
       }
 
-      if (particles.length > 84) particles = particles.slice(-84);
-      if (rings.length > 6) rings = rings.slice(-6);
+      if (particles.length > 36) particles = particles.slice(-36);
+      if (rings.length > 4) rings = rings.slice(-4);
 
       if (!frame) frame = window.requestAnimationFrame(animate);
     }

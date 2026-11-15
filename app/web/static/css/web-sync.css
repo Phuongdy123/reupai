@@ -7916,6 +7916,36 @@ body.theme-xports {
 html,
 body { scroll-behavior: auto; }
 
+/* Eliminate 300ms tap delay and keep touch/click feedback snappy at 60fps. */
+button,
+a,
+select,
+input,
+label,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.theme-xports .btn,
+body.theme-xports .sidebar-nav a {
+  transition: transform 90ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 110ms ease, border-color 110ms ease, color 110ms ease;
+}
+body.theme-xports .btn:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+/* Skip offscreen card layout & paint for 60fps grid scrolling. */
+body.theme-xports .app-shell :is(.studio-card, .library-card, .tracked-channel-card, #videos .compact-video-card) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+  contain: layout style paint;
+}
+
+body.theme-xports :is(.main, .sidebar-nav) {
+  overscroll-behavior-y: contain;
+}
+
 @supports (scrollbar-gutter: stable) {
   html { scrollbar-gutter: stable; }
 }
@@ -10159,16 +10189,15 @@ body.theme-xports .boost-gpu-toggle:has(input:checked) {
   border: 1px solid var(--ds-border);
   border-radius: 10px 3px 10px 3px;
   overflow: hidden;
-  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.18s ease;
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.12s ease;
 }
 .theme-xports .studio-card:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -2px, 0);
   border-color: rgba(239, 68, 68, 0.55);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
 }
 .theme-xports .studio-card.is-selected {
   border-color: #ef4444;
-  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.5), 0 8px 24px rgba(239, 68, 68, 0.16);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.5);
 }
 .theme-xports .studio-select-box {
   position: absolute;
@@ -10186,7 +10215,7 @@ body.theme-xports .boost-gpu-toggle:has(input:checked) {
   cursor: pointer;
 }
 .theme-xports .studio-select-box input { accent-color: #ef4444; width: 15px; height: 15px; cursor: pointer; }
-.theme-xports .studio-fit-badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 5px 2px 5px 2px; background: rgba(12, 13, 16, 0.85); border: 1px solid rgba(255, 255, 255, 0.16); color: #e5e7eb; font-size: 11px; font-weight: 600; backdrop-filter: blur(4px); }
+.theme-xports .studio-fit-badge { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 5px 2px 5px 2px; background: rgba(12, 13, 16, 0.9); border: 1px solid rgba(255, 255, 255, 0.16); color: #e5e7eb; font-size: 11px; font-weight: 600; }
 .theme-xports .studio-fit-badge.is-high { border-color: rgba(239, 68, 68, 0.55); background: rgba(127, 29, 29, 0.82); color: #fecaca; }
 .theme-xports .studio-dur-badge { position: absolute; right: 8px; bottom: 8px; padding: 2px 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.82); color: #fff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .theme-xports .studio-card-body { display: grid; gap: 8px; padding: 12px 14px; flex: 1; align-content: start; }
