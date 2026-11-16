@@ -7250,7 +7250,7 @@ async function toggleSaveCurrentSeries() {
                 body: JSON.stringify({
                     series_key: key,
                     name: item?.name || key,
-                    source_key: activeSourceKey || '',
+                    source_key: item?.source_key || currentVideos.find((v) => v.series_key === key)?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
                     source_label: item?.source_label || '',
                     sort_mode: 'episode_asc',
                     video_ids: videoIds,
