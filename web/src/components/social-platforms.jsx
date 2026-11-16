@@ -221,11 +221,21 @@ export function MxhConnectionCompact({ youtube, social, onSelectPlatform }) {
   };
 
   return (
-    <section className="mxh-connect-bar" aria-label="Kết nối MXH">
+    <section className={`mxh-connect-bar${linkedCount > 0 ? " has-linked" : ""}`} aria-label="Kết nối MXH">
       <div className="mxh-connect-main">
-        <div className="mxh-connect-title">
-          <strong>Kết nối MXH</strong>
-          <small>{linkedCount > 0 ? `${linkedCount}/3 đã liên kết` : "Chưa liên kết"}</small>
+        <div className="mxh-connect-info">
+          <div className="mxh-connect-title">
+            <strong>Kết nối MXH</strong>
+            <span className={`mxh-count-badge${linkedCount > 0 ? " is-ready" : ""}`}>
+              <span className="mxh-badge-pulse" aria-hidden="true" />
+              {linkedCount > 0 ? `${linkedCount}/3 đã liên kết` : "Chưa liên kết"}
+            </span>
+          </div>
+          <p className="mxh-connect-sub">
+            {linkedCount === 3
+              ? "Tất cả nền tảng đã sẵn sàng · Nhấn vào logo để kiểm tra hoặc đổi tài khoản"
+              : "Nhấn vào từng logo để liên kết hoặc quản lý kênh đăng"}
+          </p>
         </div>
         <div className="mxh-logo-group">
           {PLATFORM_ORDER.map((platform) => {
@@ -238,13 +248,14 @@ export function MxhConnectionCompact({ youtube, social, onSelectPlatform }) {
               <button
                 key={platform}
                 type="button"
-                className={`mxh-logo-btn${st.connected ? " is-connected" : ""}${selected === platform ? " is-selected" : ""}`}
+                className={`mxh-logo-btn is-${platform}${st.connected ? " is-connected" : ""}${selected === platform ? " is-selected" : ""}`}
                 title={tip}
                 aria-label={tip}
                 aria-pressed={selected === platform}
                 onClick={() => handleLogoClick(platform)}
               >
-                <PlatformLogoIcon platform={platform} size={18} />
+                <PlatformLogoIcon platform={platform} size={20} />
+                <span className="mxh-logo-name">{meta.label}</span>
                 <span className={`mxh-logo-dot${st.connected ? " is-connected" : ""}`} aria-hidden="true" />
               </button>
             );
