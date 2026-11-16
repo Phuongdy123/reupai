@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icon";
+import { CatSpinner } from "./cat-loader";
 import { sendFeedback } from "./feedback-provider";
 
 export const JOB_LABELS = { queued: "Đang chờ", processing: "Đang xử lý", running: "Đang xử lý", stopping: "Đang dừng", completed: "Hoàn tất", failed: "Thất bại", interrupted: "Bị gián đoạn", cancelled: "Đã dừng", stopped: "Đã dừng" };
@@ -136,7 +137,7 @@ export function ErrorMessage({ error, retry }) {
 export function Notice({ children }) { return children ? <div className="notice-banner" role="status"><Icon name="check" size={17} />{children}</div> : null; }
 export function Loading({ label = "Đang tải dữ liệu local" }) {
   useEffect(() => { const id = `loading-${crypto.randomUUID()}`; sendFeedback("waiting", label, id); return () => sendFeedback("done", "", id); }, [label]);
-  return <div className="empty-state compact" role="status"><span className="spinner" /> Vui lòng chờ · {label}</div>;
+  return <div className="empty-state compact reupai-cat-inline" role="status"><CatSpinner size="sm" /><span>{label}</span></div>;
 }
 export function Pager({ page, total, pageSize, onChange }) {
   const pagerRef = useRef(null);

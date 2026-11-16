@@ -7998,6 +7998,21 @@ body.theme-xports .btn:active:not(:disabled) {
   width: 96px;
   height: 96px;
 }
+.reupai-cat-stage.is-sm {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+.reupai-cat-stage.is-sm .reupai-cat-svg {
+  width: 24px;
+  height: 24px;
+}
+.reupai-cat-inline {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
 .reupai-cat-track {
   width: 100%;
   height: 100%;
