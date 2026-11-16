@@ -1854,6 +1854,10 @@ function buildCard(
         '.sub-btn'
     )
     .onclick = () => {
+        if (isInstantRunEnabled()) {
+            processVideo(video, card, 'subtitle', processConfigDefaults());
+            return;
+        }
         openProcessConfig(video, card, 'subtitle');
     };
 
@@ -1863,6 +1867,10 @@ function buildCard(
         '.voice-btn'
     )
     .onclick = () => {
+        if (isInstantRunEnabled()) {
+            processVideo(video, card, 'voiceover', processConfigDefaults());
+            return;
+        }
         openProcessConfig(video, card, 'voiceover');
     };
 
@@ -2173,6 +2181,16 @@ function initBoostGpuToggle() {
     });
 }
 
+function isInstantRunEnabled() {
+    const toggle = document.getElementById('sourceInstantRunToggle');
+    if (toggle) return Boolean(toggle.checked);
+    try {
+        return localStorage.getItem('reupai:instant-run') === '1';
+    } catch {
+        return false;
+    }
+}
+
 function getDefaultSourceVoice() {
     const select = document.getElementById('sourceVoiceSelect');
     const fromSelect = select?.value?.trim();
@@ -2214,6 +2232,18 @@ function initSourceVoiceControls() {
                 button: previewBtn,
                 onError: (msg) => alert(msg),
             });
+        });
+    }
+    const instantToggle = document.getElementById('sourceInstantRunToggle');
+    if (instantToggle && !instantToggle.dataset.bound) {
+        instantToggle.dataset.bound = '1';
+        try {
+            instantToggle.checked = localStorage.getItem('reupai:instant-run') === '1';
+        } catch {}
+        instantToggle.addEventListener('change', () => {
+            try {
+                localStorage.setItem('reupai:instant-run', instantToggle.checked ? '1' : '0');
+            } catch {}
         });
     }
 }

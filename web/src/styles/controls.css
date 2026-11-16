@@ -894,6 +894,9 @@ body.theme-xports #videos .compact-video-card .process-details-btn.is-complete {
 }
 
 /* 5-step Wizard + Quick processing switch in Thiết lập video */
+body.theme-xports #processConfigDialog [hidden] {
+  display: none !important;
+}
 body.theme-xports #processConfigDialog .process-flow-switch {
   margin-left: auto;
   display: inline-flex;

@@ -187,7 +187,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const wizardBar = dialog.querySelector('#processWizardBar');
     const wizardPrev = dialog.querySelector('#processWizardPrev');
     const wizardNext = dialog.querySelector('#processWizardNext');
-    const quickExportBtn = dialog.querySelector('#processQuickExportBtn');
     const runBtn = dialog.querySelector('#runProcessConfig');
     const wizardGuideTitle = dialog.querySelector('#processWizardGuideTitle');
     const wizardGuideText = dialog.querySelector('#processWizardGuideText');
@@ -260,7 +259,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (wizardBar) wizardBar.hidden = !isWizard;
         if (wizardPrev) wizardPrev.hidden = !isWizard || wizardStep <= 1;
         if (wizardNext) wizardNext.hidden = !isWizard || wizardStep >= 5;
-        if (quickExportBtn) quickExportBtn.hidden = !isWizard || wizardStep >= 5;
         if (runBtn) {
             runBtn.hidden = isWizard && wizardStep < 5;
             if (isWizard && wizardStep === 5) {
@@ -269,7 +267,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 const hasTranscript = manualOcrRows.some(Boolean);
                 runBtn.textContent = hasTranscript
                     ? (outputFormat?.value === 'srt' ? 'Dịch & xuất SRT' : 'Tiếp tục dịch & xử lý')
-                    : (outputFormat?.value === 'srt' ? 'Xuất file SRT' : 'Xử lý nhanh');
+                    : (outputFormat?.value === 'srt' ? 'Xuất file SRT' : 'Bắt đầu xử lý');
             }
         }
         if (!isWizard) return;
@@ -341,13 +339,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             wizardStep = Math.min(5, wizardStep + 1);
             applyWizardStepFocus();
             syncWizardUi();
-        };
-    }
-    if (quickExportBtn) {
-        quickExportBtn.onclick = () => {
-            flowMode = 'quick';
-            syncWizardUi();
-            dialog.querySelector('form')?.requestSubmit();
         };
     }
     dialog.querySelectorAll('.process-wizard-step').forEach((btn) => {

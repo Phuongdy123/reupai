@@ -442,8 +442,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <button type="button" class="btn secondary" id="cancelProcessConfig">Hủy</button>
                 <button type="button" class="btn secondary" id="processWizardPrev" hidden>← Bước trước</button>
                 <button type="button" class="btn primary" id="processWizardNext" hidden>Bước tiếp →</button>
-                <button type="button" class="btn secondary" id="processQuickExportBtn" hidden>Xử lý nhanh</button>
-                <button type="submit" class="btn primary" id="runProcessConfig">${uiIcon('sparkles', 16)} Xử lý nhanh</button>
+                <button type="submit" class="btn primary" id="runProcessConfig">${uiIcon('sparkles', 16)} Bắt đầu xử lý</button>
                 </div>
             </div>
         </form>
