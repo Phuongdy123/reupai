@@ -149,9 +149,23 @@ const SHORTS_PROFILES = [
   },
 ];
 
-function buildSmartHook(video, isYoutube) {
-  const raw = String(video?.title || "Video nổi bật").replace(/[#@]+/g, "").trim();
-  const shortTitle = raw.length > 68 ? `${raw.slice(0, 65)}...` : raw;
+function needsVietnameseTranslation(text) {
+  return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}]/u.test(String(text || ""));
+}
+
+function cleanHookSourceTitle(text) {
+  return String(text || "")
+    .replace(/【[^】]*】/g, " ")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/[#@]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildSmartHook(video, isYoutube, translatedTitle = "") {
+  const candidate = translatedTitle || video?.title_vi || video?.translated_title || cleanHookSourceTitle(video?.title) || "Video nổi bật";
+  const raw = String(candidate).replace(/[#@]+/g, "").trim();
+  const shortTitle = raw.length > 78 ? `${raw.slice(0, 75)}...` : raw;
   if (isYoutube) {
     return {
       hook: `[Vietsub + Thuyết Minh] ${shortTitle} | Bản Full Đầy Đủ`,
@@ -256,6 +270,42 @@ export function StudioPage({ mode = "youtube" }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const [hookPreviewId, setHookPreviewId] = useState(null);
+  const [translatedTitles, setTranslatedTitles] = useState({});
+  const [translatingHookId, setTranslatingHookId] = useState(null);
+  const [copiedHookId, setCopiedHookId] = useState(null);
+
+  const toggleSmartHook = async (video) => {
+    const id = video?.video_id || video?.platform_video_id;
+    if (!id) return;
+    if (hookPreviewId === id) {
+      setHookPreviewId(null);
+      return;
+    }
+    setHookPreviewId(id);
+    const cleaned = cleanHookSourceTitle(video?.title) || String(video?.title || "").trim();
+    if (!cleaned || !needsVietnameseTranslation(cleaned) || translatedTitles[id] || video?.title_vi || video?.translated_title) {
+      return;
+    }
+    setTranslatingHookId(id);
+    try {
+      const res = await client.json("/api/preview/subtitle-translation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_language: "auto",
+          lines: [{ id: 1, text: cleaned.slice(0, 900) }],
+        }),
+      });
+      const vi = String(res?.translations?.[0]?.text || "").replace(/[#@]+/g, "").trim();
+      if (vi) {
+        setTranslatedTitles((prev) => ({ ...prev, [id]: vi }));
+      }
+    } catch (err) {
+      setError(err?.message || "Chưa dịch được tiêu đề để tạo Hook tiếng Việt.");
+    } finally {
+      setTranslatingHookId((cur) => (cur === id ? null : cur));
+    }
+  };
 
   useEffect(() => {
     try {
@@ -708,7 +758,8 @@ export function StudioPage({ mode = "youtube" }) {
               const isRunning = ACTIVE_JOBS.has(jobState);
               const isDone = Boolean(video.output_exists || video.file_path || jobState === "completed");
               const isSelected = selectedIds.has(id);
-              const smartHook = hookPreviewId === id ? buildSmartHook(video, isYoutube) : null;
+              const smartHook = hookPreviewId === id ? buildSmartHook(video, isYoutube, translatedTitles[id]) : null;
+              const isTranslatingHook = hookPreviewId === id && translatingHookId === id && !translatedTitles[id];
               return (
                 <article className={`studio-card ${isSelected ? "is-selected" : ""}`} key={id}>
                   <VideoCover client={client} video={video}>
@@ -735,8 +786,27 @@ export function StudioPage({ mode = "youtube" }) {
                     )}
                     {smartHook && (
                       <div className="studio-hook-box">
-                        <strong>{smartHook.hook}</strong>
-                        <span>{smartHook.tags}</span>
+                        {isTranslatingHook ? (
+                          <span>Đang dịch tiêu đề sang tiếng Việt &amp; tạo Hook…</span>
+                        ) : (
+                          <>
+                            <strong>{smartHook.hook}</strong>
+                            <span>{smartHook.tags}</span>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              style={{ marginTop: 6, minHeight: 26, height: 26, padding: "0 10px", fontSize: 11, justifySelf: "start" }}
+                              onClick={() => {
+                                navigator.clipboard?.writeText(`${smartHook.hook}\n${smartHook.tags}`).then(() => {
+                                  setCopiedHookId(id);
+                                  setTimeout(() => setCopiedHookId((cur) => (cur === id ? null : cur)), 1600);
+                                }).catch(() => {});
+                              }}
+                            >
+                              {copiedHookId === id ? "Đã sao chép ✓" : "Sao chép Hook"}
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                     {isRunning && (
@@ -757,8 +827,8 @@ export function StudioPage({ mode = "youtube" }) {
                       <button
                         type="button"
                         className="btn secondary"
-                        title="Gợi ý Hook & Hashtag"
-                        onClick={() => setHookPreviewId(hookPreviewId === id ? null : id)}
+                        title="Dịch tiêu đề & gợi ý Hook + Hashtag"
+                        onClick={() => toggleSmartHook(video)}
                       >
                         Hook
                       </button>
