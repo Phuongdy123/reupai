@@ -3717,8 +3717,8 @@ function injectV13Styles() {
             --ui-text: #f8fafc;
             --ui-muted: #94a3b8;
             --ui-muted-2: #64748b;
-            --ui-accent: #7c6cff;
-            --ui-accent-hover: #8c7fff;
+            --ui-accent: #e4e4e7;
+            --ui-accent-hover: #ffffff;
             --ui-success: #1fb981;
             --ui-danger: #ef6461;
             --ui-radius: 14px;
@@ -3758,8 +3758,8 @@ function injectV13Styles() {
         .source-bar input:focus,
         .control-bar input:focus,
         .control-bar select:focus {
-            border-color: var(--ui-accent) !important;
-            box-shadow: 0 0 0 3px rgba(124, 108, 255, .12) !important;
+            border-color: rgba(255, 255, 255, .42) !important;
+            box-shadow: none !important;
         }
 
         .source-bar button,
@@ -3853,8 +3853,8 @@ function injectV13Styles() {
         }
 
         #savedSourceSelect:focus {
-            border-color: var(--ui-accent) !important;
-            box-shadow: 0 0 0 3px rgba(124, 108, 255, .12) !important;
+            border-color: rgba(255, 255, 255, .42) !important;
+            box-shadow: none !important;
         }
 
         #openSavedSource,
@@ -4623,7 +4623,7 @@ function injectV13Styles() {
             --v133-line: #26344a;
             --v133-text: #f4f7fb;
             --v133-muted: #8291a8;
-            --v133-accent: #7b6dff;
+            --v133-accent: #f4f4f5;
             --v133-danger: #ff6b6b;
         }
 
@@ -4816,9 +4816,9 @@ function injectV13Styles() {
         }
 
         .select-control input:checked + .select-visual {
-            background: var(--v133-accent);
-            border-color: var(--v133-accent);
-            box-shadow: 0 0 0 3px rgba(123,109,255,.12);
+            background: #f4f4f5;
+            border-color: #ffffff;
+            box-shadow: none;
         }
 
         .select-control input:checked + .select-visual::after {
@@ -4828,7 +4828,7 @@ function injectV13Styles() {
             top: 2px;
             width: 5px;
             height: 10px;
-            border: solid #fff;
+            border: solid #09090b;
             border-width: 0 2px 2px 0;
             transform: rotate(45deg);
         }
@@ -4858,9 +4858,9 @@ function injectV13Styles() {
         }
 
         .favorite-btn.is-favorite {
-            color: #9a8cff !important;
-            background: rgba(123,109,255,.12) !important;
-            border-color: rgba(123,109,255,.34) !important;
+            color: #ffffff !important;
+            background: rgba(255,255,255,.12) !important;
+            border-color: rgba(255,255,255,.32) !important;
         }
 
         .favorite-btn.is-favorite svg {
@@ -10340,8 +10340,8 @@ function injectTrackedSourcesSidebarStyle() {
 
         #trackedSourcesNav.active
         .tracked-nav-count {
-            background: rgba(123,109,255,.16);
-            color: #b1a8ff;
+            background: rgba(255,255,255,.14);
+            color: #f4f4f5;
         }
 
         #videos.tracked-sources-view {
@@ -10503,10 +10503,10 @@ function injectTrackedSourcesSidebarStyle() {
         .tracked-channel-open {
             min-height: 32px;
             padding: 0 11px;
-            border: 1px solid transparent;
+            border: 1px solid #ffffff;
             border-radius: 8px;
-            background: #7b6dff;
-            color: #fff;
+            background: #f4f4f5;
+            color: #09090b;
             font-size: 10.5px;
             font-weight: 750;
             cursor: pointer;
@@ -12675,9 +12675,9 @@ function injectV135MoreButtonFix() {
         }
 
         #videos .more-menu[open] > .more-trigger {
-            background: rgba(123, 109, 255, .14) !important;
-            border-color: rgba(123, 109, 255, .46) !important;
-            color: #a89dff !important;
+            background: rgba(255, 255, 255, .12) !important;
+            border-color: rgba(255, 255, 255, .36) !important;
+            color: #ffffff !important;
             transform: none !important;
         }
 

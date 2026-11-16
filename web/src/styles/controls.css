@@ -1647,8 +1647,8 @@ body.theme-xports .tracked-channel-delete {
   cursor: pointer;
 }
 body.theme-xports .tracked-channel-edit:hover {
-  border-color: rgba(99, 102, 241, 0.5) !important;
-  background: rgba(99, 102, 241, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.36) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
   color: #ffffff !important;
 }
 body.theme-xports .tracked-channel-delete:hover {
@@ -2055,8 +2055,8 @@ body.theme-xports .unified-platform-tab .mxh-logo-dot {
   box-shadow: none;
 }
 body.theme-xports .unified-platform-tab.is-active {
-  border-color: var(--ds-accent);
-  background: rgba(94, 106, 210, 0.16);
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--ds-text);
 }
 body.theme-xports .social-connected-strip {
@@ -2145,8 +2145,8 @@ body.theme-xports .files-search-field {
   color: var(--ds-text-muted);
 }
 body.theme-xports .files-search-field:focus-within {
-  border-color: var(--ds-accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: none;
   color: var(--ds-text);
 }
 body.theme-xports .files-search-field input {
@@ -2458,51 +2458,57 @@ body.theme-xports #sourceSeriesDrawer [hidden] {
 }
 
 body.theme-xports .library-grid.series-saved-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)) !important;
-  gap: 16px !important;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)) !important;
+  gap: 12px !important;
 }
 body.theme-xports .series-saved-card {
   width: 100% !important;
-  max-width: none !important;
+  max-width: 520px !important;
 }
 body.theme-xports .series-saved-card .library-body {
-  padding: 18px 20px !important;
+  padding: 13px 15px !important;
 }
 body.theme-xports .series-saved-card .card-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 body.theme-xports .series-saved-card h3 {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px !important;
+  gap: 7px;
+  font-size: 14px !important;
   margin: 0 !important;
 }
 body.theme-xports .series-saved-card .library-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 body.theme-xports .series-saved-card .library-meta span {
-  padding: 4px 10px !important;
-  border-radius: 7px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
   border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.1));
   background: rgba(255, 255, 255, 0.04) !important;
   color: var(--ds-text-muted, #a1a1aa) !important;
-  font-size: 12px;
+  font-size: 11px !important;
 }
 body.theme-xports .series-saved-card .library-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   flex-wrap: nowrap;
-  margin-top: 14px !important;
+  margin-top: 10px !important;
+}
+body.theme-xports .series-saved-card .library-actions .btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 11px !important;
+  font-size: 12px !important;
 }
 @media (max-width: 600px) {
   body.theme-xports .series-saved-card .library-actions {

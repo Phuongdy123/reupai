@@ -1,0 +1,104 @@
+:root,
+html[data-theme="dark"] {
+  --ds-accent: #d4d4d8;
+  --ds-accent-hover: #f4f4f5;
+  --ds-accent-pressed: #a1a1aa;
+  --ds-accent-soft: rgb(255 255 255 / 10%);
+  --ds-accent-border: rgba(255, 255, 255, 0.28);
+  --ds-on-accent: #09090b;
+  --ds-focus-color: rgba(255, 255, 255, 0.42);
+}
+
+html[data-theme="light"] {
+  --ds-accent: #18181b;
+  --ds-accent-hover: #27272a;
+  --ds-accent-pressed: #09090b;
+  --ds-accent-soft: #f4f4f5;
+  --ds-accent-border: rgba(15, 23, 42, 0.28);
+  --ds-on-accent: #ffffff;
+  --ds-focus-color: rgba(15, 23, 42, 0.36);
+}
+
+/* Remove all purple focus/hover glows across legacy & React controls. */
+body.theme-xports :is(input, select, textarea):is(:focus, :focus-visible),
+body.theme-xports :is(.search-field, .files-search-field, .auth-input-wrap):focus-within {
+  border-color: var(--ds-focus-color) !important;
+  outline: 1px solid var(--ds-focus-color) !important;
+  outline-offset: 1px;
+  box-shadow: none !important;
+}
+
+body.theme-xports :is(button, a, summary, [role="button"]):focus-visible {
+  outline: 1.5px solid var(--ds-focus-color) !important;
+  outline-offset: 2px;
+}
+
+body.theme-xports :is(input, select, textarea):hover:not(:disabled) {
+  border-color: var(--ds-border-hover) !important;
+  box-shadow: none !important;
+}
+
+body.theme-xports .v13-manager .source-series-drawer {
+  margin-top: 6px;
+  padding: 8px 10px;
+  gap: 6px;
+  border-radius: 10px;
+}
+
+body.theme-xports .v13-manager .source-series-drawer-head {
+  gap: 8px;
+}
+
+body.theme-xports .v13-manager .source-series-drawer-head strong {
+  font-size: 12px;
+}
+
+body.theme-xports .v13-manager .source-series-drawer-head span {
+  font-size: 10.5px;
+}
+
+body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 9px !important;
+  font-size: 11.5px !important;
+  border-radius: 7px !important;
+}
+
+body.theme-xports .v13-manager .source-series-drawer :is(.toolbar-icon-button, .danger-icon-button) {
+  width: 30px !important;
+  min-width: 30px !important;
+  padding: 0 !important;
+}
+
+body.theme-xports .v13-manager .source-series-name-row {
+  gap: 6px;
+  margin-top: 4px;
+}
+
+body.theme-xports .v13-manager .source-series-drawer-status {
+  margin-top: 4px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
+body.theme-xports .series-list {
+  gap: 8px;
+}
+
+body.theme-xports .series-card {
+  padding: 11px 13px;
+  gap: 8px;
+}
+
+body.theme-xports .series-card h3 {
+  margin: 2px 0;
+  font-size: 13.5px;
+}
+
+@media (pointer: coarse) {
+  body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+    height: 40px !important;
+    min-height: 40px !important;
+  }
+}

@@ -73,13 +73,13 @@
   --ds-primary: var(--ds-gray-18);
   --ds-primary-hover: var(--ds-white);
   --ds-on-primary: var(--ds-gray-0);
-  /* Accent = brand indigo for progress, selection, focus, links. */
-  --ds-accent: var(--ds-indigo-500);
-  --ds-accent-hover: var(--ds-indigo-400);
-  --ds-accent-pressed: var(--ds-indigo-600);
-  --ds-accent-soft: rgb(94 106 210 / 16%);
-  --ds-accent-border: rgb(124 133 232 / 42%);
-  --ds-on-accent: var(--ds-white);
+  /* Accent = monochrome white/zinc for focus, selection, active states. */
+  --ds-accent: #d4d4d8;
+  --ds-accent-hover: #f4f4f5;
+  --ds-accent-pressed: #a1a1aa;
+  --ds-accent-soft: rgb(255 255 255 / 10%);
+  --ds-accent-border: rgb(255 255 255 / 28%);
+  --ds-on-accent: var(--ds-gray-0);
 
   /* ---------- Semantic: status ---------- */
   --ds-success: var(--ds-green-500);
@@ -92,8 +92,8 @@
   --ds-info-soft: rgb(78 167 252 / 14%);
 
   /* ---------- Focus ---------- */
-  --ds-focus-color: var(--ds-indigo-400);
-  --ds-focus-ring: 0 0 0 2px var(--ds-bg), 0 0 0 4px var(--ds-focus-color);
+  --ds-focus-color: rgba(255, 255, 255, 0.42);
+  --ds-focus-ring: 0 0 0 2px rgba(255, 255, 255, 0.24);
 
   /* ---------- Typography ---------- */
   --ds-font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -4336,8 +4336,8 @@ body.theme-xports .login-card label {
 
         #trackedSourcesNav.active
         .tracked-nav-count {
-            background: rgba(123,109,255,.16);
-            color: #b1a8ff;
+            background: rgba(255,255,255,.14);
+            color: #f4f4f5;
         }
 
         #videos.tracked-sources-view {
@@ -10627,8 +10627,8 @@ body.theme-xports .tracked-channel-delete {
   cursor: pointer;
 }
 body.theme-xports .tracked-channel-edit:hover {
-  border-color: rgba(99, 102, 241, 0.5) !important;
-  background: rgba(99, 102, 241, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.36) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
   color: #ffffff !important;
 }
 body.theme-xports .tracked-channel-delete:hover {
@@ -11035,8 +11035,8 @@ body.theme-xports .unified-platform-tab .mxh-logo-dot {
   box-shadow: none;
 }
 body.theme-xports .unified-platform-tab.is-active {
-  border-color: var(--ds-accent);
-  background: rgba(94, 106, 210, 0.16);
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--ds-text);
 }
 body.theme-xports .social-connected-strip {
@@ -11125,8 +11125,8 @@ body.theme-xports .files-search-field {
   color: var(--ds-text-muted);
 }
 body.theme-xports .files-search-field:focus-within {
-  border-color: var(--ds-accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.14);
+  border-color: rgba(255, 255, 255, 0.38);
+  box-shadow: none;
   color: var(--ds-text);
 }
 body.theme-xports .files-search-field input {
@@ -11438,51 +11438,57 @@ body.theme-xports #sourceSeriesDrawer [hidden] {
 }
 
 body.theme-xports .library-grid.series-saved-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)) !important;
-  gap: 16px !important;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)) !important;
+  gap: 12px !important;
 }
 body.theme-xports .series-saved-card {
   width: 100% !important;
-  max-width: none !important;
+  max-width: 520px !important;
 }
 body.theme-xports .series-saved-card .library-body {
-  padding: 18px 20px !important;
+  padding: 13px 15px !important;
 }
 body.theme-xports .series-saved-card .card-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 body.theme-xports .series-saved-card h3 {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px !important;
+  gap: 7px;
+  font-size: 14px !important;
   margin: 0 !important;
 }
 body.theme-xports .series-saved-card .library-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  margin-bottom: 2px;
 }
 body.theme-xports .series-saved-card .library-meta span {
-  padding: 4px 10px !important;
-  border-radius: 7px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
   border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.1));
   background: rgba(255, 255, 255, 0.04) !important;
   color: var(--ds-text-muted, #a1a1aa) !important;
-  font-size: 12px;
+  font-size: 11px !important;
 }
 body.theme-xports .series-saved-card .library-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   flex-wrap: nowrap;
-  margin-top: 14px !important;
+  margin-top: 10px !important;
+}
+body.theme-xports .series-saved-card .library-actions .btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 11px !important;
+  font-size: 12px !important;
 }
 @media (max-width: 600px) {
   body.theme-xports .series-saved-card .library-actions {
@@ -12737,104 +12743,106 @@ html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-dot.is-con
 
 
 /* === neutral-focus-series.css === */
+:root,
 html[data-theme="dark"] {
-  --ds-accent: #c5c8d0;
-  --ds-accent-hover: #e4e6eb;
-  --ds-accent-pressed: #a6abb6;
-  --ds-accent-soft: rgb(197 200 208 / 12%);
-  --ds-accent-border: #626670;
-  --ds-on-accent: #18191c;
-  --ds-focus-color: #b7bcc6;
+  --ds-accent: #d4d4d8;
+  --ds-accent-hover: #f4f4f5;
+  --ds-accent-pressed: #a1a1aa;
+  --ds-accent-soft: rgb(255 255 255 / 10%);
+  --ds-accent-border: rgba(255, 255, 255, 0.28);
+  --ds-on-accent: #09090b;
+  --ds-focus-color: rgba(255, 255, 255, 0.42);
 }
 
 html[data-theme="light"] {
-  --ds-accent: #4b5563;
-  --ds-accent-hover: #303a48;
-  --ds-accent-pressed: #303a48;
-  --ds-accent-soft: #edf0f3;
-  --ds-accent-border: #a7afb9;
-  --ds-focus-color: #596575;
+  --ds-accent: #18181b;
+  --ds-accent-hover: #27272a;
+  --ds-accent-pressed: #09090b;
+  --ds-accent-soft: #f4f4f5;
+  --ds-accent-border: rgba(15, 23, 42, 0.28);
+  --ds-on-accent: #ffffff;
+  --ds-focus-color: rgba(15, 23, 42, 0.36);
 }
 
-/* Legacy controls include hard-coded purple shadows and local accent aliases. */
-html[data-theme] body.theme-xports :is(input, select, textarea):is(:focus, :focus-visible),
-html[data-theme] body.theme-xports :is(.search-field, .files-search-field, .auth-input-wrap):focus-within {
+/* Remove all purple focus/hover glows across legacy & React controls. */
+body.theme-xports :is(input, select, textarea):is(:focus, :focus-visible),
+body.theme-xports :is(.search-field, .files-search-field, .auth-input-wrap):focus-within {
   border-color: var(--ds-focus-color) !important;
-  outline: 2px solid var(--ds-focus-color) !important;
-  outline-offset: 2px;
+  outline: 1px solid var(--ds-focus-color) !important;
+  outline-offset: 1px;
   box-shadow: none !important;
 }
 
-html[data-theme] body.theme-xports :is(button, a, summary, [role="button"]):focus-visible {
-  outline: 2px solid var(--ds-focus-color) !important;
-  outline-offset: 3px;
+body.theme-xports :is(button, a, summary, [role="button"]):focus-visible {
+  outline: 1.5px solid var(--ds-focus-color) !important;
+  outline-offset: 2px;
 }
 
-html[data-theme] body.theme-xports :is(input, select, textarea):hover:not(:disabled) {
+body.theme-xports :is(input, select, textarea):hover:not(:disabled) {
   border-color: var(--ds-border-hover) !important;
   box-shadow: none !important;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer {
+body.theme-xports .v13-manager .source-series-drawer {
   margin-top: 6px;
-  padding: 9px 11px;
-  gap: 7px;
+  padding: 8px 10px;
+  gap: 6px;
   border-radius: 10px;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head {
+body.theme-xports .v13-manager .source-series-drawer-head {
   gap: 8px;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head strong {
+body.theme-xports .v13-manager .source-series-drawer-head strong {
   font-size: 12px;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head span {
-  font-size: 10px;
+body.theme-xports .v13-manager .source-series-drawer-head span {
+  font-size: 10.5px;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
   height: 30px !important;
   min-height: 30px !important;
   padding: 0 9px !important;
-  font-size: 11px !important;
+  font-size: 11.5px !important;
   border-radius: 7px !important;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(.toolbar-icon-button, .danger-icon-button) {
+body.theme-xports .v13-manager .source-series-drawer :is(.toolbar-icon-button, .danger-icon-button) {
   width: 30px !important;
   min-width: 30px !important;
   padding: 0 !important;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-name-row {
+body.theme-xports .v13-manager .source-series-name-row {
   gap: 6px;
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
-html[data-theme] body.theme-xports .v13-manager .source-series-drawer-status {
-  margin-top: 5px;
-  padding: 6px 9px;
+body.theme-xports .v13-manager .source-series-drawer-status {
+  margin-top: 4px;
+  padding: 5px 9px;
   font-size: 11px;
 }
 
-html[data-theme] body.theme-xports .series-list {
+body.theme-xports .series-list {
   gap: 8px;
 }
 
-html[data-theme] body.theme-xports .series-card {
-  padding: 12px 14px;
-  gap: 10px;
+body.theme-xports .series-card {
+  padding: 11px 13px;
+  gap: 8px;
 }
 
-html[data-theme] body.theme-xports .series-card h3 {
-  margin: 3px 0;
-  font-size: 14px;
+body.theme-xports .series-card h3 {
+  margin: 2px 0;
+  font-size: 13.5px;
 }
 
 @media (pointer: coarse) {
-  html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+  body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
     height: 40px !important;
     min-height: 40px !important;
   }

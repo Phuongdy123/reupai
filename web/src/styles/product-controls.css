@@ -928,8 +928,8 @@
 
         #trackedSourcesNav.active
         .tracked-nav-count {
-            background: rgba(123,109,255,.16);
-            color: #b1a8ff;
+            background: rgba(255,255,255,.14);
+            color: #f4f4f5;
         }
 
         #videos.tracked-sources-view {
