@@ -9407,6 +9407,19 @@ body.theme-xports .v13-manager .compact-popover-panel {
   border-radius: var(--ds-radius-lg) !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text) !important;
+  padding: 12px 14px !important;
+  min-width: 280px !important;
+  max-width: 360px !important;
+}
+body.theme-xports .v13-manager .compact-popover-panel .panel-heading {
+  margin-bottom: 8px !important;
+  padding-bottom: 8px !important;
+}
+body.theme-xports .v13-manager .compact-popover-panel .panel-title {
+  font-size: 13.5px !important;
+}
+body.theme-xports .v13-manager .compact-popover-panel .panel-subtitle {
+  font-size: 11.5px !important;
 }
 
 body.theme-xports .source-panel {

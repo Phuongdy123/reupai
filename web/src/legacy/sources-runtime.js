@@ -8292,6 +8292,22 @@ function bindV13Manager() {
         );
     }
 
+    document.addEventListener('pointerdown', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest('#v13Manager .compact-popover') || target.closest('#sourceSeriesBtn')) return;
+        for (const details of document.querySelectorAll('#v13Manager .compact-popover[open]')) {
+            details.open = false;
+        }
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        for (const details of document.querySelectorAll('#v13Manager .compact-popover[open]')) {
+            details.open = false;
+        }
+    });
+
     bind(
         'directVideoUrl',
         'change',
