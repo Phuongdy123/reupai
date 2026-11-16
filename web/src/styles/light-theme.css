@@ -881,3 +881,8 @@ html[data-theme="light"] body.theme-xports .v13-manager .source-series-page-link
   border-color: rgba(99, 102, 241, 0.35);
   color: #4338ca;
 }
+html[data-theme="light"] body.theme-xports #batchBar .batch-collection-select {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+}

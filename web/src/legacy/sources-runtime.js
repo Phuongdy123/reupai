@@ -1534,7 +1534,7 @@ function collectionOptionsHtml(
 
     let html = `
         <option value="">
-            Chọn danh mục
+            Chọn Collection
         </option>
     `;
 
@@ -1672,17 +1672,18 @@ function buildCard(
                                 <span>Tải video gốc</span>
                             </button>
                             <div class="menu-section">
-                                <div class="menu-section-title">Danh mục</div>
+                                <div class="menu-section-title">Lưu vào Collections</div>
                                 <div class="collection-inline">
-                                    <select class="card-collection-select">
+                                    <select class="card-collection-select" aria-label="Chọn Collection">
                                         ${collectionOptionsHtml(video.collection_ids || [])}
                                     </select>
                                     <button
+                                        type="button"
                                         class="collection-inline-add modern-icon-btn"
-                                        title="Thêm vào danh mục"
-                                        aria-label="Thêm vào danh mục"
+                                        title="Lưu vào Collection đã chọn"
+                                        aria-label="Lưu vào Collection đã chọn"
                                     >
-                                        ${uiIcon('plus', 16)}
+                                        <span>Lưu</span>
                                     </button>
                                 </div>
                             </div>
@@ -4184,8 +4185,9 @@ function injectV13Styles() {
         .more-menu-panel {
             position: absolute;
             right: 0;
-            bottom: calc(100% + 7px);
-            z-index: 90;
+            top: calc(100% + 6px);
+            bottom: auto;
+            z-index: 120;
             width: 220px;
             padding: 7px;
             border: 1px solid var(--ui-border);
@@ -6019,66 +6021,46 @@ async function loadCollections() {
                 'collectionSelect'
             )
         );
-
-        if (!select) {
-            return;
-        }
-
+        const batchSelect = (
+            document.getElementById(
+                'batchCollectionSelect'
+            )
+        );
         const state = (
             readUiState()
         );
 
-        const previous = (
-            select.value
-            || state
-                ?.selectedCollection
-            || ''
-        );
-
-        select.innerHTML = `
-            <option value="">
-                Chọn danh mục
-            </option>
-        `;
-
-        for (
-            const item
-            of collections
-        ) {
-
-            const option = (
-                document.createElement(
-                    'option'
-                )
+        const populateSelect = (targetSelect, placeholder) => {
+            if (!targetSelect) return;
+            const previous = (
+                targetSelect.value
+                || state?.selectedCollection
+                || ''
             );
+            targetSelect.innerHTML = `<option value="">${placeholder}</option>`;
+            for (const item of collections) {
+                const option = document.createElement('option');
+                option.value = String(item.id);
+                option.textContent = `${item.name} · ${Number(item.video_count || 0)} video`;
+                targetSelect.appendChild(option);
+            }
+            if (previous && targetSelect.querySelector(`option[value="${CSS.escape(String(previous))}"]`)) {
+                targetSelect.value = String(previous);
+            }
+        };
 
-            option.value =
-                String(
-                    item.id
-                );
+        populateSelect(select, 'Chọn danh mục');
+        populateSelect(batchSelect, 'Chọn Collection');
 
-            option.textContent =
-                (
-                    `${item.name}`
-                    + ` · ${Number(item.video_count || 0)} video`
-                );
-
-            select.appendChild(
-                option
-            );
-        }
-
-        if (
-            previous
-            && select.querySelector(
-                `option[value="${CSS.escape(String(previous))}"]`
-            )
-        ) {
-
-            select.value =
-                String(
-                    previous
-                );
+        for (const cardSelect of document.querySelectorAll('#videos .card-collection-select')) {
+            const cardEl = cardSelect.closest('.compact-video-card');
+            const vidId = cardEl?.dataset?.videoId;
+            const vidObj = currentVideos.find((v) => String(v.video_id) === String(vidId));
+            const currentVal = cardSelect.value;
+            cardSelect.innerHTML = collectionOptionsHtml(vidObj?.collection_ids || []);
+            if (currentVal && cardSelect.querySelector(`option[value="${CSS.escape(String(currentVal))}"]`)) {
+                cardSelect.value = currentVal;
+            }
         }
 
     } catch (
@@ -7529,6 +7511,24 @@ function ensureBatchBar() {
             Tải
         </button>
 
+        <select
+            id="batchCollectionSelect"
+            class="batch-collection-select"
+            aria-label="Chọn Collection để lưu"
+        >
+            ${collectionOptionsHtml([])}
+        </select>
+
+        <button
+            type="button"
+            class="secondary batch-action"
+            id="batchAddCollection"
+            title="Lưu các video đã chọn vào Collection"
+        >
+            ${PROCESSING_STAR_BORDER}
+            Lưu Collection
+        </button>
+
         <button
             type="button"
             class="secondary"
@@ -7542,6 +7542,13 @@ function ensureBatchBar() {
     document.body.appendChild(
         bar
     );
+
+    if (collections.length) {
+        const batchSelect = document.getElementById('batchCollectionSelect');
+        if (batchSelect) {
+            batchSelect.innerHTML = collectionOptionsHtml([]);
+        }
+    }
 
     document
     .getElementById(
@@ -7574,6 +7581,16 @@ function ensureBatchBar() {
     .onclick = () => {
 
         downloadSelectedVideos();
+    };
+
+
+    document
+    .getElementById(
+        'batchAddCollection'
+    )
+    .onclick = () => {
+
+        addSelectedToCollection();
     };
 
 
@@ -7921,21 +7938,17 @@ async function runSelectedQueue(
 
 async function addSelectedToCollection() {
 
-    const collectionId = Number(
-        document
-        .getElementById(
-            'collectionSelect'
-        )
-        ?.value
-        || 0
-    );
+    const batchSelect = document.getElementById('batchCollectionSelect');
+    const fallbackSelect = document.getElementById('collectionSelect');
+    const collectionId = Number(batchSelect?.value || fallbackSelect?.value || 0);
 
     if (!collectionId) {
-
+        if (batchSelect) batchSelect.focus();
         alert(
-            'Chọn danh mục trong menu Thư viện trước.'
+            collections.length
+                ? 'Hãy chọn Collection muốn lưu ở thanh chọn nhanh.'
+                : 'Chưa có Collection nào. Hãy tạo ở trang Collections trước.'
         );
-
         return;
     }
 
