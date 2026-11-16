@@ -5086,12 +5086,31 @@ function simplifySourceManager(manager) {
     const rowControls = document.createElement('div');
     rowControls.className = 'source-series-drawer-controls';
     rowControls.appendChild(seriesRow);
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'source-series-name-row';
+    nameRow.innerHTML = `
+        <input id="seriesCustomNameInput" type="text" class="source-series-name-input" placeholder="Đặt tên Series muốn lưu (ví dụ: Đại hội Hoạt hình)..." aria-label="Tên Series để lưu">
+        <button type="button" class="panel-primary source-series-save-btn" id="saveSeriesWithNameBtn" title="Lưu Series vào mục Series đã lưu">${uiIcon('plus', 15)}<span>Lưu vào Series đã lưu</span></button>
+        <button type="button" class="danger-icon-button" id="deleteSavedSeriesBtn" title="Xóa Series này khỏi danh sách đã lưu" aria-label="Xóa Series đã lưu" hidden>${uiIcon('trash', 16)}</button>
+    `;
+    rowControls.appendChild(nameRow);
     drawer.appendChild(rowControls);
     manager.appendChild(drawer);
 
     drawer.querySelector('#closeSeriesDrawerBtn')?.addEventListener('click', () => {
         drawer.hidden = true;
         document.getElementById('seriesQuickBtn')?.classList.remove('active');
+    });
+    drawer.querySelector('#seriesSelect')?.addEventListener('change', () => {
+        prefillSeriesCustomName();
+        syncSaveSeriesButton();
+    });
+    drawer.querySelector('#saveSeriesWithNameBtn')?.addEventListener('click', () => {
+        saveSeriesWithCustomName();
+    });
+    drawer.querySelector('#deleteSavedSeriesBtn')?.addEventListener('click', () => {
+        deleteCurrentSavedSeries();
     });
 }
 
@@ -7178,24 +7197,52 @@ function mergeCurrentVideoSeries() {
 
 let savedSeriesKeys = new Set();
 
+let savedSeriesMap = new Map();
+
+function prefillSeriesCustomName() {
+    const input = document.getElementById('seriesCustomNameInput');
+    const select = document.getElementById('seriesSelect');
+    if (!input || !select) return;
+    const key = select.value || '';
+    if (!key) {
+        input.value = '';
+        return;
+    }
+    const savedEntry = savedSeriesMap.get(key) || _readLocalSavedSeries().find((s) => s.series_key === key);
+    const detected = seriesGroups.find((g) => g.series_key === key);
+    input.value = savedEntry?.name || detected?.name || '';
+}
+
 function syncSaveSeriesButton() {
     const btn = document.getElementById('saveOrDeleteSeriesBtn');
+    const namedSaveBtn = document.getElementById('saveSeriesWithNameBtn');
+    const delBtn = document.getElementById('deleteSavedSeriesBtn');
     const select = document.getElementById('seriesSelect');
-    if (!btn) return;
     const key = select?.value || '';
-    if (!key) {
+    const hasCheckedVideos = selectedVideos().length > 0;
+    const saved = Boolean(key && savedSeriesKeys.has(key));
+
+    if (delBtn) {
+        delBtn.hidden = !saved;
+    }
+    if (namedSaveBtn) {
+        namedSaveBtn.disabled = !key && !hasCheckedVideos;
+        const label = namedSaveBtn.querySelector('span');
+        if (label) label.textContent = saved ? 'Cập nhật tên Series' : 'Lưu vào Series đã lưu';
+    }
+    if (!btn) return;
+    if (!key && !hasCheckedVideos) {
         btn.disabled = true;
         btn.classList.remove('is-saved-delete');
         btn.innerHTML = uiIcon('plus', 17);
-        btn.title = 'Chọn series để lưu';
-        btn.setAttribute('aria-label', 'Chọn series để lưu');
+        btn.title = 'Chọn Series hoặc tích chọn video rồi bấm + để đặt tên và lưu';
+        btn.setAttribute('aria-label', btn.title);
         return;
     }
-    const saved = savedSeriesKeys.has(key);
     btn.disabled = false;
-    btn.classList.toggle('is-saved-delete', saved);
-    btn.innerHTML = saved ? uiIcon('trash', 17) : uiIcon('plus', 17);
-    btn.title = saved ? 'Xóa Series đã lưu' : 'Lưu Series này';
+    btn.classList.remove('is-saved-delete');
+    btn.innerHTML = uiIcon('plus', 17);
+    btn.title = saved ? 'Cập nhật tên & lưu lại Series' : 'Đặt tên và lưu vào Series đã lưu';
     btn.setAttribute('aria-label', btn.title);
 }
 
@@ -7218,77 +7265,148 @@ function _writeLocalSavedSeries(list) {
 }
 
 async function refreshSavedSeriesKeys() {
-    const localKeys = _readLocalSavedSeries().map((s) => s.series_key).filter(Boolean);
-    savedSeriesKeys = new Set(localKeys);
+    const nextMap = new Map();
+    for (const s of _readLocalSavedSeries()) {
+        if (s?.series_key) nextMap.set(s.series_key, s);
+    }
     try {
         const data = await apiJson('/api/library/series/saved');
         for (const s of (data?.series || [])) {
-            if (s?.series_key) savedSeriesKeys.add(s.series_key);
+            if (s?.series_key) nextMap.set(s.series_key, s);
         }
     } catch {
         // fallback to localStorage when Local Engine lacks /api/library/series/saved
     }
+    savedSeriesMap = nextMap;
+    savedSeriesKeys = new Set(nextMap.keys());
+    prefillSeriesCustomName();
     syncSaveSeriesButton();
 }
 
-async function toggleSaveCurrentSeries() {
+async function saveSeriesWithCustomName() {
     const select = document.getElementById('seriesSelect');
-    const key = select?.value || '';
-    if (!key) return;
-    const btn = document.getElementById('saveOrDeleteSeriesBtn');
-    if (btn) btn.disabled = true;
-    try {
-        if (savedSeriesKeys.has(key)) {
-            try {
-                await apiJson(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
-            } catch (err) {
-                if (!/not found|404/i.test(String(err?.message || ''))) throw err;
-            }
-            _writeLocalSavedSeries(_readLocalSavedSeries().filter((s) => s.series_key !== key));
-            savedSeriesKeys.delete(key);
-            updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
-        } else {
-            const item = seriesGroups.find((value) => value.series_key === key);
-            const allCandidates = Array.from(
-                new Map(
-                    [...Object.values(pageCache).flat(), ...currentVideos]
-                        .filter((v) => v && v.video_id && v.series_key === key)
-                        .map((v) => [v.video_id, v])
-                ).values()
-            );
-            const videoIds = allCandidates.map((v) => v.video_id);
-            const payload = {
-                series_key: key,
-                name: item?.name || key,
-                source_key: item?.source_key || allCandidates[0]?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
-                source_label: item?.source_label || '',
-                sort_mode: 'episode_asc',
-                video_ids: videoIds,
-                videos: allCandidates.slice(0, 500).map(videoLibraryPayload),
-            };
-            let savedEntry = null;
-            try {
-                const res = await apiJson('/api/library/series/saved', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                savedEntry = res?.series || null;
-            } catch (err) {
-                if (!/not found|404/i.test(String(err?.message || ''))) throw err;
-            }
-            const next = _readLocalSavedSeries().filter((s) => s.series_key !== key);
-            const { videos: _omitVideos, ...localMeta } = payload;
-            next.unshift({ ...(savedEntry || localMeta), saved_at: Date.now() });
-            _writeLocalSavedSeries(next);
-            savedSeriesKeys.add(key);
-            updateSourceInfo(`Đã lưu Series "${item?.name || key}" (${videoIds.length} tập).`);
+    const nameInput = document.getElementById('seriesCustomNameInput');
+    const saveBtn = document.getElementById('saveOrDeleteSeriesBtn');
+    const namedBtn = document.getElementById('saveSeriesWithNameBtn');
+
+    let key = select?.value || '';
+    const customName = (nameInput?.value || '').trim();
+    const detected = key ? seriesGroups.find((value) => value.series_key === key) : null;
+
+    let allCandidates = [];
+    if (key) {
+        allCandidates = Array.from(
+            new Map(
+                [...Object.values(pageCache).flat(), ...currentVideos]
+                    .filter((v) => v && v.video_id && v.series_key === key)
+                    .map((v) => [v.video_id, v])
+            ).values()
+        );
+    } else {
+        allCandidates = selectedVideos();
+        if (!allCandidates.length) {
+            alert('Hãy chọn Series trong danh sách hoặc tích chọn ít nhất 1 video trên trang rồi nhập tên Series để lưu.');
+            nameInput?.focus();
+            return;
         }
+        if (!customName) {
+            alert('Nhập tên Series bạn muốn đặt trước khi lưu.');
+            nameInput?.focus();
+            return;
+        }
+        key = clientSeriesKeyFromName(customName) || `custom_${Date.now()}`;
+    }
+
+    const finalName = customName || detected?.name || key;
+    const videoIds = allCandidates.map((v) => v.video_id);
+    const payload = {
+        series_key: key,
+        name: finalName,
+        source_key: detected?.source_key || allCandidates[0]?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
+        source_label: detected?.source_label || allCandidates[0]?.source_name || document.getElementById('sourceUrl')?.value?.trim() || '',
+        sort_mode: 'episode_asc',
+        video_ids: videoIds,
+        videos: allCandidates.slice(0, 500).map((v) => ({
+            ...videoLibraryPayload(v),
+            series_key: key,
+            series_name: finalName,
+        })),
+    };
+
+    if (saveBtn) saveBtn.disabled = true;
+    if (namedBtn) namedBtn.disabled = true;
+    try {
+        let savedEntry = null;
+        try {
+            const res = await apiJson('/api/library/series/saved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            savedEntry = res?.series || null;
+        } catch (err) {
+            if (!/not found|404/i.test(String(err?.message || ''))) throw err;
+        }
+        const { videos: _omitVideos, ...localMeta } = payload;
+        const entry = { ...(savedEntry || localMeta), name: finalName, saved_at: Date.now() };
+        const next = _readLocalSavedSeries().filter((s) => s.series_key !== key);
+        next.unshift(entry);
+        _writeLocalSavedSeries(next);
+        savedSeriesKeys.add(key);
+        savedSeriesMap.set(key, entry);
+
+        // Also update detected series cache so /series displays videos for custom-named series too.
+        try {
+            const cache = JSON.parse(localStorage.getItem('reupai:detected-series-cache-v1') || '{}');
+            const videosByKey = { ...(cache.videosByKey || {}), [key]: payload.videos };
+            localStorage.setItem('reupai:detected-series-cache-v1', JSON.stringify({
+                updatedAt: Date.now(),
+                groups: Array.isArray(cache.groups) ? cache.groups : [],
+                videosByKey,
+            }));
+        } catch {}
+
+        updateSourceInfo(`Đã lưu Series "${finalName}" (${videoIds.length} tập) vào Series đã lưu.`);
     } catch (err) {
-        alert(err?.message || 'Không thể cập nhật Series.');
+        alert(err?.message || 'Không thể lưu Series.');
     } finally {
         syncSaveSeriesButton();
     }
+}
+
+async function deleteCurrentSavedSeries() {
+    const select = document.getElementById('seriesSelect');
+    const key = select?.value || '';
+    if (!key || !savedSeriesKeys.has(key)) return;
+    const delBtn = document.getElementById('deleteSavedSeriesBtn');
+    if (delBtn) delBtn.disabled = true;
+    try {
+        try {
+            await apiJson(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
+        } catch (err) {
+            if (!/not found|404/i.test(String(err?.message || ''))) throw err;
+        }
+        _writeLocalSavedSeries(_readLocalSavedSeries().filter((s) => s.series_key !== key));
+        savedSeriesKeys.delete(key);
+        savedSeriesMap.delete(key);
+        updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
+    } catch (err) {
+        alert(err?.message || 'Không thể xóa Series đã lưu.');
+    } finally {
+        if (delBtn) delBtn.disabled = false;
+        syncSaveSeriesButton();
+    }
+}
+
+async function toggleSaveCurrentSeries() {
+    const nameInput = document.getElementById('seriesCustomNameInput');
+    if (nameInput && !nameInput.value.trim()) {
+        prefillSeriesCustomName();
+        nameInput.focus();
+        nameInput.select?.();
+        return;
+    }
+    await saveSeriesWithCustomName();
 }
 
 function focusSeriesPicker(toggle = true) {
@@ -7774,6 +7892,7 @@ function renderBatchBar(
                 `${count} video`
             );
     }
+    syncSaveSeriesButton();
 
     const progress = (
         document.getElementById(

@@ -11120,6 +11120,35 @@ body.theme-xports .v13-manager .source-series-drawer-controls select {
   min-width: 0;
   height: 36px;
 }
+body.theme-xports .v13-manager .source-series-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+body.theme-xports .v13-manager .source-series-name-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  height: 36px !important;
+  padding: 0 12px !important;
+  border: 1px solid var(--ds-border-strong) !important;
+  border-radius: 9px !important;
+  background: var(--ds-surface-sunken) !important;
+  color: var(--ds-text) !important;
+  font-size: 12.5px !important;
+}
+body.theme-xports .v13-manager .source-series-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
 body.theme-xports #seriesQuickBtn.active {
   border-color: var(--ds-accent) !important;
   background: rgba(99, 102, 241, 0.16) !important;
@@ -12223,6 +12252,11 @@ html[data-theme="light"] body.theme-xports .v13-manager .source-series-page-link
   color: #4338ca;
 }
 html[data-theme="light"] body.theme-xports #batchBar .batch-collection-select {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+}
+html[data-theme="light"] body.theme-xports .v13-manager .source-series-name-input {
   background: #ffffff !important;
   color: #0f172a !important;
   border-color: rgba(15, 23, 42, 0.2) !important;

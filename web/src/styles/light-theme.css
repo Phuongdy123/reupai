@@ -886,3 +886,8 @@ html[data-theme="light"] body.theme-xports #batchBar .batch-collection-select {
   color: #0f172a !important;
   border-color: rgba(15, 23, 42, 0.2) !important;
 }
+html[data-theme="light"] body.theme-xports .v13-manager .source-series-name-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+}
