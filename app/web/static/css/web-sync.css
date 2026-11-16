@@ -2399,7 +2399,7 @@ body.theme-xports {
     width: 42px;
     height: 42px;
     border: 1px solid rgba(255, 255, 255, .22);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: linear-gradient(145deg, #ff303e, #bc0818);
     box-shadow: 0 8px 26px rgba(242, 27, 45, .25);
     font-size: 18px;
@@ -2678,7 +2678,7 @@ body.theme-xports {
     min-height: 126px;
     padding: 17px 18px;
     border: 1px solid rgba(148, 160, 181, .15);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: linear-gradient(145deg, #171c27, #10141d);
     box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
 }
@@ -2958,7 +2958,7 @@ body.theme-xports {
 
 .theme-xports #videos .compact-cover {
     border-color: rgba(255, 255, 255, .1) !important;
-    border-radius: 12px !important;
+    border-radius: 7px 2px 7px 2px !important;
 }
 
 .theme-xports #videos .compact-title { color: #f3f4f7 !important; }
@@ -3077,7 +3077,7 @@ body.theme-xports {
 .theme-xports #followSourceDialog,
 .theme-xports #processConfigDialog {
     border-color: rgba(148, 160, 181, .23);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: #111620;
     box-shadow: 0 28px 92px rgba(0, 0, 0, .56);
 }
@@ -7970,7 +7970,7 @@ body.theme-xports .btn:active:not(:disabled) {
   justify-items: center;
   gap: 10px;
   padding: 18px 24px;
-  border-radius: 16px;
+  border-radius: 12px 4px 12px 4px;
   background: rgba(16, 17, 23, 0.88);
   border: 1px solid rgba(239, 68, 68, 0.38);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
@@ -8908,7 +8908,7 @@ body.theme-xports #batchBar > button:is(:hover, :focus-visible):not(:disabled) {
 
 .theme-xports .output-transcript-search { flex: none; position: relative; display: flex; align-items: center; }
 .theme-xports .output-transcript-search svg { position: absolute; left: 10px; color: #6e7380; pointer-events: none; }
-.theme-xports .output-transcript-search input { width: 100%; height: 32px; padding: 0 10px 0 30px; border: 1px solid #262832; border-radius: 12px; background: #0a0b0e; color: #f2f2f4; font: inherit; font-size: 12px; }
+.theme-xports .output-transcript-search input { width: 100%; height: 32px; padding: 0 10px 0 30px; border: 1px solid #262832; border-radius: 7px 2px 7px 2px; background: #0a0b0e; color: #f2f2f4; font: inherit; font-size: 12px; }
 .theme-xports .output-transcript-search input:focus { outline: none; border-color: rgba(239, 68, 68, 0.6); }
 
 .theme-xports .output-transcript-cues { flex: 1; min-height: 0; display: grid; align-content: start; gap: 8px; overflow: auto; scrollbar-width: thin; scrollbar-color: #2c2f38 transparent; padding-right: 4px; }
@@ -8999,7 +8999,7 @@ body.theme-xports :is(
   min-height: var(--btn-h);
   padding-block: 0;
   padding-inline: var(--btn-px);
-  border-radius: 12px;
+  border-radius: 7px 2px 7px 2px;
   font-size: var(--btn-fs);
   font-weight: var(--ds-weight-medium);
   line-height: 1.2;
@@ -9368,7 +9368,7 @@ body.theme-xports :is(#openSavedSource, #selectVisibleBtn, #seriesQuickBtn, .v13
   min-height: var(--ds-control-h) !important;
   padding: 0 12px !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text) !important;
   font-size: var(--ds-text-sm) !important;
@@ -9452,10 +9452,10 @@ body.theme-xports .source-bar :is(input, select, button) {
   font-size: var(--ds-text-base) !important;
 }
 body.theme-xports .source-bar button {
-  border-radius: 9999px !important;
+  border-radius: 8px 2px 8px 2px !important;
 }
 body.theme-xports .source-bar #syncSourceBtn {
-  border-radius: 9999px !important;
+  border-radius: 8px 2px 8px 2px !important;
   border: 1px solid rgb(255 255 255 / 85%) !important;
   background: linear-gradient(135deg, #ffffff 0%, #dcdce4 100%) !important;
   color: #09090a !important;
@@ -9524,7 +9524,7 @@ body.theme-xports .toolbar button {
   font-size: var(--ds-text-sm) !important;
 }
 body.theme-xports .toolbar button {
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
 }
 body.theme-xports .source-filter-row .toolbar button {
   display: inline-flex !important;
@@ -9604,7 +9604,7 @@ body.theme-xports .compact-video-card .compact-cover {
   width: 158px !important;
   height: 98px !important;
   min-height: 98px !important;
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
   border: 1px solid var(--ds-border) !important;
 }
 body.theme-xports .compact-video-card .compact-head {
@@ -9673,7 +9673,7 @@ body.theme-xports .compact-video-card .favorite-btn {
   height: 30px !important;
   min-height: 30px !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
   background: var(--ds-surface-sunken) !important;
   color: var(--ds-text-muted) !important;
 }
@@ -9762,7 +9762,7 @@ body.theme-xports .workspace-account-actions :is(.quick-nav-trigger, .workspace-
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -9864,7 +9864,7 @@ body.theme-xports .workspace-account-actions .plan-status-badge {
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.06em !important;
@@ -9898,7 +9898,7 @@ body.theme-xports :is(
   .assistant-send, .assistant-new-chat, .assistant-history-toggle,
   .process-config-start, .bottom-page-btn, .batch-bar button
 ):not(.topbar-avatar) {
-  border-radius: 12px !important;
+  border-radius: 7px 2px 7px 2px !important;
 }
 body.theme-xports :is(.btn.btn-lg, .btn.lg, .btn.button-large, .button-primary.button-large, .button-secondary.button-large, .dashboard-create) {
   border-radius: 8px 2px 8px 2px !important;
@@ -9919,7 +9919,7 @@ body.theme-xports .feedback-modal {
   align-items: center;
   padding: 20px 22px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 16px;
+  border-radius: 12px 4px 12px 4px;
   background: linear-gradient(160deg, var(--ds-surface-raised), var(--ds-surface));
   color: var(--ds-text);
   box-shadow: 0 24px 64px rgb(0 0 0 / 56%), inset 0 1px 0 rgb(255 255 255 / 6%);
@@ -10052,7 +10052,7 @@ body.theme-xports .result-card-icon {
   height: 28px;
   flex: 0 0 28px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 12px;
+  border-radius: 7px 2px 7px 2px;
   background: var(--ds-surface-sunken);
   color: var(--ds-text-secondary);
 }
@@ -10159,7 +10159,7 @@ body.theme-xports .boost-gpu-toggle {
   min-height: var(--ds-control-h);
   padding: 0 12px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 12px;
+  border-radius: 7px 2px 7px 2px;
   background: var(--ds-surface-raised);
   color: var(--ds-text-secondary);
   font-size: var(--ds-text-sm);
@@ -10193,11 +10193,6 @@ body.theme-xports .boost-gpu-toggle:has(input:checked) {
 
 
 
-
-/* Smooth pill radius for buttons and pills */
-body.theme-xports :is(.btn, .theme-toggle-btn, .quick-nav-trigger, .boost-gpu-toggle, .studio-profile-btn, .studio-check-pill, .studio-aspect-pill, .plan-status-badge, .reupai-support-chip, .reupai-support-tabs button) {
-  border-radius: 9999px !important;
-}
 
 
 /* === studio.css === */
@@ -10281,7 +10276,7 @@ body.theme-xports :is(.btn, .theme-toggle-btn, .quick-nav-trigger, .boost-gpu-to
   gap: 6px;
   height: 30px;
   padding: 0 10px;
-  border-radius: 12px;
+  border-radius: 7px 2px 7px 2px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--ds-border);
   font-size: 12px;
@@ -10383,7 +10378,7 @@ body.theme-xports :is(.btn, .theme-toggle-btn, .quick-nav-trigger, .boost-gpu-to
 .theme-xports .studio-job-progress { padding: 5px 8px; border-radius: 6px 2px 6px 2px; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.35); color: #fecaca; font-size: 11.5px; font-weight: 600; }
 .theme-xports .studio-hook-box {
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: 7px 2px 7px 2px;
   background: rgba(245, 158, 11, 0.08);
   border: 1px solid rgba(245, 158, 11, 0.3);
   font-size: 11.5px;

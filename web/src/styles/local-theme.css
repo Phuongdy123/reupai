@@ -84,7 +84,7 @@ body.theme-xports {
     width: 42px;
     height: 42px;
     border: 1px solid rgba(255, 255, 255, .22);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: linear-gradient(145deg, #ff303e, #bc0818);
     box-shadow: 0 8px 26px rgba(242, 27, 45, .25);
     font-size: 18px;
@@ -363,7 +363,7 @@ body.theme-xports {
     min-height: 126px;
     padding: 17px 18px;
     border: 1px solid rgba(148, 160, 181, .15);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: linear-gradient(145deg, #171c27, #10141d);
     box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
 }
@@ -643,7 +643,7 @@ body.theme-xports {
 
 .theme-xports #videos .compact-cover {
     border-color: rgba(255, 255, 255, .1) !important;
-    border-radius: 12px !important;
+    border-radius: 7px 2px 7px 2px !important;
 }
 
 .theme-xports #videos .compact-title { color: #f3f4f7 !important; }
@@ -762,7 +762,7 @@ body.theme-xports {
 .theme-xports #followSourceDialog,
 .theme-xports #processConfigDialog {
     border-color: rgba(148, 160, 181, .23);
-    border-radius: 16px;
+    border-radius: 12px 4px 12px 4px;
     background: #111620;
     box-shadow: 0 28px 92px rgba(0, 0, 0, .56);
 }

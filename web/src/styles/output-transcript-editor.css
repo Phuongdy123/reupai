@@ -53,7 +53,7 @@
 
 .theme-xports .output-transcript-search { flex: none; position: relative; display: flex; align-items: center; }
 .theme-xports .output-transcript-search svg { position: absolute; left: 10px; color: #6e7380; pointer-events: none; }
-.theme-xports .output-transcript-search input { width: 100%; height: 32px; padding: 0 10px 0 30px; border: 1px solid #262832; border-radius: 12px; background: #0a0b0e; color: #f2f2f4; font: inherit; font-size: 12px; }
+.theme-xports .output-transcript-search input { width: 100%; height: 32px; padding: 0 10px 0 30px; border: 1px solid #262832; border-radius: 7px 2px 7px 2px; background: #0a0b0e; color: #f2f2f4; font: inherit; font-size: 12px; }
 .theme-xports .output-transcript-search input:focus { outline: none; border-color: rgba(239, 68, 68, 0.6); }
 
 .theme-xports .output-transcript-cues { flex: 1; min-height: 0; display: grid; align-content: start; gap: 8px; overflow: auto; scrollbar-width: thin; scrollbar-color: #2c2f38 transparent; padding-right: 4px; }
