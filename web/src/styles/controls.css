@@ -37,7 +37,7 @@ body.theme-xports :is(
   min-height: var(--btn-h);
   padding-block: 0;
   padding-inline: var(--btn-px);
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   font-size: var(--btn-fs);
   font-weight: var(--ds-weight-medium);
   line-height: 1.2;
@@ -406,7 +406,7 @@ body.theme-xports :is(#openSavedSource, #selectVisibleBtn, #seriesQuickBtn, .v13
   min-height: var(--ds-control-h) !important;
   padding: 0 12px !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
   background: var(--ds-surface-raised) !important;
   color: var(--ds-text) !important;
   font-size: var(--ds-text-sm) !important;
@@ -562,7 +562,7 @@ body.theme-xports .toolbar button {
   font-size: var(--ds-text-sm) !important;
 }
 body.theme-xports .toolbar button {
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
 }
 body.theme-xports .source-filter-row .toolbar button {
   display: inline-flex !important;
@@ -642,7 +642,7 @@ body.theme-xports .compact-video-card .compact-cover {
   width: 158px !important;
   height: 98px !important;
   min-height: 98px !important;
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
   border: 1px solid var(--ds-border) !important;
 }
 body.theme-xports .compact-video-card .compact-head {
@@ -711,7 +711,7 @@ body.theme-xports .compact-video-card .favorite-btn {
   height: 30px !important;
   min-height: 30px !important;
   border: 1px solid var(--ds-border-strong) !important;
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
   background: var(--ds-surface-sunken) !important;
   color: var(--ds-text-muted) !important;
 }
@@ -800,7 +800,7 @@ body.theme-xports .workspace-account-actions :is(.quick-nav-trigger, .workspace-
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
   display: inline-flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -902,7 +902,7 @@ body.theme-xports .workspace-account-actions .plan-status-badge {
   height: 36px !important;
   min-height: 36px !important;
   padding: 0 12px !important;
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.06em !important;
@@ -936,7 +936,7 @@ body.theme-xports :is(
   .assistant-send, .assistant-new-chat, .assistant-history-toggle,
   .process-config-start, .bottom-page-btn, .batch-bar button
 ):not(.topbar-avatar) {
-  border-radius: 7px 2px 7px 2px !important;
+  border-radius: 12px !important;
 }
 body.theme-xports :is(.btn.btn-lg, .btn.lg, .btn.button-large, .button-primary.button-large, .button-secondary.button-large, .dashboard-create) {
   border-radius: 8px 2px 8px 2px !important;
@@ -957,7 +957,7 @@ body.theme-xports .feedback-modal {
   align-items: center;
   padding: 20px 22px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 12px 4px 12px 4px;
+  border-radius: 16px;
   background: linear-gradient(160deg, var(--ds-surface-raised), var(--ds-surface));
   color: var(--ds-text);
   box-shadow: 0 24px 64px rgb(0 0 0 / 56%), inset 0 1px 0 rgb(255 255 255 / 6%);
@@ -1090,7 +1090,7 @@ body.theme-xports .result-card-icon {
   height: 28px;
   flex: 0 0 28px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   background: var(--ds-surface-sunken);
   color: var(--ds-text-secondary);
 }
@@ -1197,7 +1197,7 @@ body.theme-xports .boost-gpu-toggle {
   min-height: var(--ds-control-h);
   padding: 0 12px;
   border: 1px solid var(--ds-border-strong);
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   background: var(--ds-surface-raised);
   color: var(--ds-text-secondary);
   font-size: var(--ds-text-sm);
@@ -1231,3 +1231,8 @@ body.theme-xports .boost-gpu-toggle:has(input:checked) {
 
 
 
+
+/* Smooth pill radius for buttons and pills */
+body.theme-xports :is(.btn, .theme-toggle-btn, .quick-nav-trigger, .boost-gpu-toggle, .studio-profile-btn, .studio-check-pill, .studio-aspect-pill, .plan-status-badge, .reupai-support-chip, .reupai-support-tabs button) {
+  border-radius: 9999px !important;
+}

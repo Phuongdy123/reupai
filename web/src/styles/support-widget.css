@@ -52,7 +52,7 @@
   max-height: min(560px, calc(100vh - 96px));
   display: flex;
   flex-direction: column;
-  border-radius: 12px 4px 12px 4px;
+  border-radius: 16px;
   border: 1px solid rgba(239, 68, 68, 0.35);
   background: rgba(15, 16, 22, 0.9);
   backdrop-filter: blur(16px) saturate(140%);
@@ -74,7 +74,7 @@
 .reupai-support-close {
   width: 28px;
   height: 28px;
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: transparent;
   color: #cbd5e1;
@@ -95,7 +95,7 @@
   justify-content: center;
   gap: 6px;
   height: 32px;
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.03);
   color: #9ca3af;
@@ -171,7 +171,7 @@
   min-width: 0;
   height: 34px;
   padding: 0 10px;
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(10, 11, 15, 0.9);
   color: #f8fafc;
@@ -198,7 +198,7 @@
 .reupai-ticket-form textarea {
   width: 100%;
   padding: 7px 9px;
-  border-radius: 7px 2px 7px 2px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(10, 11, 15, 0.9);
   color: #f8fafc;
