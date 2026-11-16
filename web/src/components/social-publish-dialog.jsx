@@ -33,10 +33,61 @@ export function SocialPublishDialog({ client, item, onClose }) {
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState(null);
   const [error, setError] = useState("");
+  const [oauthConfig, setOauthConfig] = useState({ facebook: false, tiktok: false, redirectUri: "" });
+  const [fbPages, setFbPages] = useState([]);
   const working = busy || job?.state === "uploading";
   const supported = Boolean(client.health?.capabilities?.social_publish);
   const label = labels[provider];
   const endpoint = `social/${provider}`;
+
+  useEffect(() => {
+    fetch("/api/social/oauth/config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data && live.current) setOauthConfig(data); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(`reupai:social-saved:${provider}`) || "null");
+      if (saved?.token) {
+        setToken(saved.token);
+        if (saved.target?.id) setTarget(saved.target);
+        if (Array.isArray(saved.pages)) setFbPages(saved.pages);
+      }
+    } catch {}
+  }, [provider]);
+
+  useEffect(() => {
+    const onMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== "reupai:social-oauth") return;
+      if (data.error) { setError(data.error); return; }
+      try {
+        const accountId = await signedInAccount();
+        if (data.provider === "facebook" && Array.isArray(data.pages) && data.pages.length) {
+          const first = data.pages[0];
+          const nextTarget = { id: first.id, name: first.name, accountId };
+          setFbPages(data.pages);
+          setToken(first.token);
+          setTarget(nextTarget);
+          setError("");
+          try { window.localStorage.setItem("reupai:social-saved:facebook", JSON.stringify({ token: first.token, target: nextTarget, pages: data.pages })); } catch {}
+        } else if (data.provider === "tiktok" && data.token && data.target) {
+          const nextTarget = { ...data.target, accountId };
+          setToken(data.token);
+          setTarget(nextTarget);
+          setError("");
+          try { window.localStorage.setItem("reupai:social-saved:tiktok", JSON.stringify({ token: data.token, target: nextTarget })); } catch {}
+        }
+      } catch (err) {
+        setError(err?.message || "Chưa xác minh được tài khoản ReupAI.");
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   useEffect(() => {
     if (target && (job?.state === "sent" || job?.state === "complete")) {
@@ -84,7 +135,9 @@ export function SocialPublishDialog({ client, item, onClose }) {
       const accountId = await signedInAccount();
       const result = await youtubeRequest(client, `${endpoint}/destination`, { method: "POST", body: JSON.stringify({ token: token.trim() }) });
       if (live.current) {
-        setTarget({ ...result, accountId });
+        const nextTarget = { ...result, accountId };
+        setTarget(nextTarget);
+        try { window.localStorage.setItem(`reupai:social-saved:${provider}`, JSON.stringify({ token: token.trim(), target: nextTarget, pages: fbPages })); } catch {}
         recordChannelActivity(accountId, provider, result);
       }
     } catch (failure) { if (live.current) setError(failure.message); }
@@ -139,10 +192,61 @@ export function SocialPublishDialog({ client, item, onClose }) {
             {job.error && <p>{job.error}</p>}
             {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer">Mở bài trên Facebook</a>}
           </section> : <fieldset disabled={working} className="youtube-publish-fields">
-            <div className="library-actions" aria-label="Nền tảng đăng">{Object.entries(labels).map(([key, name]) => <button type="button" key={key} aria-pressed={key === provider} className={`btn ${key === provider ? "primary" : "secondary"}`} onClick={() => { if (key !== provider) { setProvider(key); setToken(""); resetTarget(); } }}>{name}</button>)}</div>
+            <div className="library-actions" aria-label="Nền tảng đăng">{Object.entries(labels).map(([key, name]) => <button type="button" key={key} aria-pressed={key === provider} className={`btn ${key === provider ? "primary" : "secondary"}`} onClick={() => { if (key !== provider) { setProvider(key); setToken(""); setFbPages([]); resetTarget(); } }}>{name}</button>)}</div>
             <section className="youtube-ai-draft">
+              <div className="library-actions" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={!oauthConfig[provider]}
+                  onClick={() => {
+                    setError("");
+                    window.open(`/api/social/oauth/start?provider=${provider}`, "reupai_social_oauth", "width=560,height=700");
+                  }}
+                >
+                  {oauthConfig[provider] ? `Kết nối tự động ${label}` : `Tự liên kết ${label} (cần cấu hình App)`}
+                </button>
+                {token && (
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => {
+                      setToken("");
+                      setFbPages([]);
+                      resetTarget();
+                      try { window.localStorage.removeItem(`reupai:social-saved:${provider}`); } catch {}
+                    }}
+                  >
+                    Ngắt kết nối
+                  </button>
+                )}
+              </div>
+              {!oauthConfig[provider] && (
+                <small>
+                  Để bật kết nối 1 chạm, thêm <code>{provider === "facebook" ? "META_APP_ID & META_APP_SECRET" : "TIKTOK_CLIENT_KEY & TIKTOK_CLIENT_SECRET"}</code> trên server và gắn Redirect URI: <code>{oauthConfig.redirectUri || "/api/social/oauth/callback"}</code>. Hoặc dán token thủ công bên dưới (được lưu lại trên máy):
+                </small>
+              )}
+              {provider === "facebook" && fbPages.length > 1 && (
+                <label>Chọn Fanpage muốn đăng
+                  <select
+                    value={target?.id || ""}
+                    onChange={async (e) => {
+                      const picked = fbPages.find((p) => p.id === e.target.value);
+                      if (!picked) return;
+                      const accountId = await signedInAccount().catch(() => target?.accountId || "");
+                      const nextTarget = { id: picked.id, name: picked.name, accountId };
+                      setToken(picked.token);
+                      setTarget(nextTarget);
+                      setConfirmed(false);
+                      try { window.localStorage.setItem("reupai:social-saved:facebook", JSON.stringify({ token: picked.token, target: nextTarget, pages: fbPages })); } catch {}
+                    }}
+                  >
+                    {fbPages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+              )}
               <label>{provider === "facebook" ? "Page access token" : "TikTok access token"}<input type="password" autoComplete="off" spellCheck={false} value={token} maxLength={4096} onChange={event => { setToken(event.target.value); resetTarget(); }} /></label>
-              <small>{provider === "facebook" ? "Dùng token của trang có quyền đăng bài." : "Dùng token được cấp quyền video.upload và user.info.basic."} Token dùng cho phiên hiện tại.</small>
+              <small>{provider === "facebook" ? "Dùng token của trang có quyền đăng bài." : "Dùng token được cấp quyền video.upload và user.info.basic."}</small>
               <button type="button" className="btn secondary" disabled={!token.trim()} onClick={checkDestination}>Kiểm tra tài khoản đích</button>
             </section>
             {target && <div className="youtube-publish-target"><span>TÀI KHOẢN ĐÍCH</span><strong>{target.name}</strong></div>}
