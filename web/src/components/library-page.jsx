@@ -44,33 +44,36 @@ export function LibraryPage({ kind }) {
         const data = await client.json("/api/library/history?limit=200", { cache: "no-store" });
         setItems(data.history || []);
       } else {
-        const [listData, downloaded, rendered, savedSeriesRes] = await Promise.all([
+        const [listData, downloaded, rendered, savedSeriesRes, uiSavedRes] = await Promise.all([
           client.json("/api/library/collections"),
           client.json("/api/library/downloads"),
           client.json("/api/library/outputs"),
           kind === "collections" ? client.json("/api/library/series/saved").catch(() => ({ series: [] })) : Promise.resolve({ series: [] }),
+          kind === "collections" ? client.json("/api/library/ui-state/saved_series_v1").catch(() => ({ value: { series: [] } })) : Promise.resolve({ value: { series: [] } }),
         ]);
         const list = listData.collections || [];
         setCollections(list); setDownloads(downloaded.videos || []); setOutputs(rendered.outputs || []);
         if (kind === "collections") {
           const byKey = new Map();
-          for (const item of (savedSeriesRes.series || [])) {
-            if (item?.series_key) byKey.set(item.series_key, item);
-          }
+          const mergeItem = (item, fromServer = false) => {
+            if (!item?.series_key) return;
+            const prev = byKey.get(item.series_key) || {};
+            const total = fromServer ? (item.total_count ?? (item.video_ids?.length || 0)) : Math.max(Number(item.total_count ?? (item.video_ids?.length || 0)), Number(prev.total_count || 0));
+            byKey.set(item.series_key, {
+              ...prev,
+              ...item,
+              total_count: total,
+              processed_count: item.processed_count ?? prev.processed_count ?? 0,
+              pending_count: item.pending_count ?? prev.pending_count ?? total,
+              processing_count: item.processing_count ?? prev.processing_count ?? 0,
+            });
+          };
           try {
             const localRaw = JSON.parse(window.localStorage.getItem("reupai:saved-series-v1") || "[]");
-            for (const item of (Array.isArray(localRaw) ? localRaw : [])) {
-              if (item?.series_key && !byKey.has(item.series_key)) {
-                byKey.set(item.series_key, {
-                  ...item,
-                  total_count: item.total_count ?? (item.video_ids?.length || 0),
-                  processed_count: item.processed_count ?? 0,
-                  pending_count: item.pending_count ?? (item.video_ids?.length || 0),
-                  processing_count: item.processing_count ?? 0,
-                });
-              }
-            }
+            for (const item of (Array.isArray(localRaw) ? localRaw : [])) mergeItem(item, false);
           } catch {}
+          for (const item of (uiSavedRes?.value?.series || [])) mergeItem(item, false);
+          for (const item of (savedSeriesRes.series || [])) mergeItem(item, true);
           setSavedSeries(Array.from(byKey.values()));
         }
         if (kind === "collections") {
@@ -254,11 +257,20 @@ export function LibraryPage({ kind }) {
       } catch (err) {
         if (!/not found|404/i.test(String(err?.message || ""))) throw err;
       }
+      let nextLocal = [];
       try {
         const localRaw = JSON.parse(window.localStorage.getItem("reupai:saved-series-v1") || "[]");
         if (Array.isArray(localRaw)) {
-          window.localStorage.setItem("reupai:saved-series-v1", JSON.stringify(localRaw.filter((item) => item?.series_key !== seriesKey)));
+          nextLocal = localRaw.filter((item) => item?.series_key !== seriesKey);
+          window.localStorage.setItem("reupai:saved-series-v1", JSON.stringify(nextLocal));
         }
+      } catch {}
+      try {
+        await client.json("/api/library/ui-state/saved_series_v1", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: { series: nextLocal } }),
+        });
       } catch {}
       setSavedSeries((prev) => prev.filter((item) => item.series_key !== seriesKey));
       setNotice("Đã xóa Series khỏi danh mục tiến độ.");

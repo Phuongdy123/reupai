@@ -62,11 +62,14 @@ class VideoBody(BaseModel):
     source_id: Optional[int] = None
     source_name: Optional[str] = None
     channel_key: Optional[str] = None
-    published_at: Optional[str] = None
+    published_at: Optional[Any] = None
     play_count: int = 0
     like_count: int = 0
     comment_count: int = 0
     share_count: int = 0
+    series_key: Optional[str] = None
+    series_name: Optional[str] = None
+    episode_number: Optional[int] = None
 
 
 class FavoriteBody(VideoBody):
@@ -1407,6 +1410,8 @@ def api_save_series(body: SavedSeriesBody, request: Request):
         seen_ids = set(ordered_ids)
         for video in body.videos[:500]:
             payload = video.model_dump()
+            if payload.get("published_at") is not None:
+                payload["published_at"] = str(payload["published_at"])
             upsert_video_dict(
                 payload,
                 source_type="source" if video.source_id else "direct",

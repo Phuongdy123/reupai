@@ -7475,10 +7475,30 @@ function _writeLocalSavedSeries(list) {
     }
 }
 
+async function _syncSavedSeriesToUiState(list) {
+    try {
+        await apiJson('/api/library/ui-state/saved_series_v1', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: { series: Array.isArray(list) ? list : [] } }),
+        });
+    } catch {
+        // ignore ui-state sync failure
+    }
+}
+
 async function refreshSavedSeriesKeys() {
     const nextMap = new Map();
     for (const s of _readLocalSavedSeries()) {
         if (s?.series_key) nextMap.set(s.series_key, s);
+    }
+    try {
+        const uiRes = await apiJson('/api/library/ui-state/saved_series_v1');
+        for (const s of (uiRes?.value?.series || [])) {
+            if (s?.series_key) nextMap.set(s.series_key, s);
+        }
+    } catch {
+        // ignore missing ui-state key
     }
     try {
         const data = await apiJson('/api/library/series/saved');
@@ -7486,8 +7506,10 @@ async function refreshSavedSeriesKeys() {
             if (s?.series_key) nextMap.set(s.series_key, s);
         }
     } catch {
-        // fallback to localStorage when Local Engine lacks /api/library/series/saved
+        // fallback to ui-state / localStorage when Local Engine lacks /api/library/series/saved
     }
+    const merged = Array.from(nextMap.values());
+    if (merged.length) _writeLocalSavedSeries(merged);
     savedSeriesMap = nextMap;
     savedSeriesKeys = new Set(nextMap.keys());
     prefillSeriesCustomName();
@@ -7564,14 +7586,23 @@ async function saveSeriesWithCustomName() {
                 body: JSON.stringify(payload),
             });
             savedEntry = res?.series || null;
-        } catch (err) {
-            if (!/not found|404/i.test(String(err?.message || ''))) throw err;
+        } catch {
+            // Fall back cleanly to /api/library/ui-state + localStorage on older Local Engine builds
         }
         const { videos: _omitVideos, ...localMeta } = payload;
-        const entry = { ...(savedEntry || localMeta), name: finalName, saved_at: Date.now() };
+        const compactVideos = (payload.videos || []).slice(0, 120);
+        const entry = {
+            ...(savedEntry || localMeta),
+            name: finalName,
+            total_count: savedEntry?.total_count ?? videoIds.length,
+            pending_count: savedEntry?.pending_count ?? videoIds.length,
+            videos: compactVideos,
+            saved_at: Date.now(),
+        };
         const next = _readLocalSavedSeries().filter((s) => s.series_key !== key);
         next.unshift(entry);
         _writeLocalSavedSeries(next);
+        await _syncSavedSeriesToUiState(next);
         savedSeriesKeys.add(key);
         savedSeriesMap.set(key, entry);
 
@@ -7650,7 +7681,9 @@ async function deleteCurrentSavedSeries() {
         } catch (err) {
             if (!/not found|404/i.test(String(err?.message || ''))) throw err;
         }
-        _writeLocalSavedSeries(_readLocalSavedSeries().filter((s) => s.series_key !== key));
+        const nextList = _readLocalSavedSeries().filter((s) => s.series_key !== key);
+        _writeLocalSavedSeries(nextList);
+        await _syncSavedSeriesToUiState(nextList);
         savedSeriesKeys.delete(key);
         savedSeriesMap.delete(key);
         setSeriesDrawerStatus('Đã xóa Series khỏi danh sách đã lưu.', 'warn');

@@ -136,22 +136,41 @@ function _mergeDetectedSeries(serverList = [], cache = null) {
   return Array.from(byKey.values()).sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
 }
 
-function _mergeSavedSeries(serverList = []) {
+async function _syncSavedSeriesToUiState(client, list) {
+  try {
+    await client.json("/api/library/ui-state/saved_series_v1", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: { series: Array.isArray(list) ? list : [] } }),
+    });
+  } catch {
+    // ignore ui-state backup failure
+  }
+}
+
+function _mergeSavedSeries(serverList = [], uiStateList = []) {
   const byKey = new Map();
-  for (const item of serverList) {
-    if (item?.series_key) byKey.set(item.series_key, item);
-  }
-  for (const item of _readLocalSavedSeries()) {
-    if (item?.series_key && !byKey.has(item.series_key)) {
-      byKey.set(item.series_key, {
-        ...item,
-        total_count: item.total_count ?? (item.video_ids?.length || 0),
-        processed_count: item.processed_count ?? 0,
-        pending_count: item.pending_count ?? (item.video_ids?.length || 0),
-        processing_count: item.processing_count ?? 0,
-      });
-    }
-  }
+  const applyEntry = (item, fromServer = false) => {
+    if (!item?.series_key) return;
+    const prev = byKey.get(item.series_key) || {};
+    const videoIds = item.video_ids || prev.video_ids || [];
+    const totalCount = fromServer
+      ? (item.total_count ?? videoIds.length ?? 0)
+      : Math.max(Number(item.total_count ?? videoIds.length ?? 0), Number(prev.total_count || 0));
+    byKey.set(item.series_key, {
+      ...prev,
+      ...item,
+      videos: item.videos?.length ? item.videos : prev.videos,
+      video_ids: videoIds,
+      total_count: totalCount,
+      processed_count: item.processed_count ?? prev.processed_count ?? 0,
+      pending_count: item.pending_count ?? prev.pending_count ?? totalCount,
+      processing_count: item.processing_count ?? prev.processing_count ?? 0,
+    });
+  };
+  for (const item of _readLocalSavedSeries()) applyEntry(item, false);
+  for (const item of uiStateList || []) applyEntry(item, false);
+  for (const item of serverList || []) applyEntry(item, true);
   return Array.from(byKey.values());
 }
 
@@ -203,15 +222,18 @@ export function SeriesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [result, savedRes, files, rendered, groups] = await Promise.all([
+      const [result, savedRes, uiSavedRes, files, rendered, groups] = await Promise.all([
         client.json("/api/library/series"),
         client.json("/api/library/series/saved").catch(() => ({ series: [] })),
+        client.json("/api/library/ui-state/saved_series_v1").catch(() => ({ value: { series: [] } })),
         client.json("/api/library/downloads"),
         client.json("/api/library/outputs"),
         client.json("/api/library/collections"),
       ]);
+      const mergedSaved = _mergeSavedSeries(savedRes.series || [], uiSavedRes?.value?.series || []);
+      if (mergedSaved.length) _writeLocalSavedSeries(mergedSaved);
       setSeries(_mergeDetectedSeries(result.series || []));
-      setSavedSeries(_mergeSavedSeries(savedRes.series || []));
+      setSavedSeries(mergedSaved);
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
       setCollections(groups.collections || []);
@@ -233,23 +255,41 @@ export function SeriesPage() {
     try {
       const params = new URLSearchParams({ series: selected.series_key, limit: "2000" });
       if (currentSource?.source_id != null) params.set("source_id", currentSource.source_id);
-      const [data, files, rendered, savedRes] = await Promise.all([
+      const [data, files, rendered, savedRes, uiSavedRes] = await Promise.all([
         client.json(`/api/library/videos?${params}`),
         client.json("/api/library/downloads"),
         client.json("/api/library/outputs"),
         client.json("/api/library/series/saved").catch(() => ({ series: [] })),
+        client.json("/api/library/ui-state/saved_series_v1").catch(() => ({ value: { series: [] } })),
       ]);
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
-      setSavedSeries(_mergeSavedSeries(savedRes.series || []));
+      const mergedSaved = _mergeSavedSeries(savedRes.series || [], uiSavedRes?.value?.series || []);
+      setSavedSeries(mergedSaved);
+      const matchedSaved = mergedSaved.find((s) => s.series_key === selected.series_key);
+      const savedEntryVideos = Array.isArray(selected.videos) && selected.videos.length
+        ? selected.videos
+        : (Array.isArray(matchedSaved?.videos) ? matchedSaved.videos : []);
       const serverVideos = (data.videos || []).filter((video) => fromSource(video, currentSource));
-      const cachedVideos = (_readDetectedSeriesCache().videosByKey?.[selected.series_key] || []).filter((video) => fromSource(video, currentSource));
+      const cachedVideos = (_readDetectedSeriesCache().videosByKey?.[selected.series_key] || []);
       const mergedVideosMap = new Map();
+      for (const v of savedEntryVideos) {
+        if (v?.video_id) mergedVideosMap.set(String(v.video_id), v);
+      }
       for (const v of cachedVideos) {
         if (v?.video_id) mergedVideosMap.set(String(v.video_id), v);
       }
       for (const v of serverVideos) {
         if (v?.video_id) mergedVideosMap.set(String(v.video_id), v);
+      }
+      if (!mergedVideosMap.size && Array.isArray(selected.video_ids) && selected.video_ids.length) {
+        const wanted = new Set(selected.video_ids.map(String));
+        const libAll = await client.json("/api/library/videos?limit=2000").catch(() => ({ videos: [] }));
+        for (const v of (libAll.videos || [])) {
+          if (v?.video_id && wanted.has(String(v.video_id))) {
+            mergedVideosMap.set(String(v.video_id), v);
+          }
+        }
       }
       setVideos(Array.from(mergedVideosMap.values()));
     } catch (requestError) {
@@ -502,11 +542,13 @@ export function SeriesPage() {
       nextLocal.unshift({
         ...(res?.series || localMeta),
         total_count: res?.series?.total_count ?? orderedIds.length,
+        videos: targetList.slice(0, 120),
         saved_at: Date.now(),
       });
       _writeLocalSavedSeries(nextLocal);
+      await _syncSavedSeriesToUiState(client, nextLocal);
       const updated = await client.json("/api/library/series/saved").catch(() => ({ series: [] }));
-      setSavedSeries(_mergeSavedSeries(updated.series || []));
+      setSavedSeries(_mergeSavedSeries(updated.series || [], nextLocal));
       setNotice(`Đã lưu Series "${selected.name}" (${seriesProgress.done}/${seriesProgress.total}).`);
       return res?.series || localMeta;
     } catch (requestError) {
@@ -658,7 +700,9 @@ export function SeriesPage() {
       } catch (err) {
         if (!/not found|404/i.test(String(err?.message || ""))) throw err;
       }
-      _writeLocalSavedSeries(_readLocalSavedSeries().filter((item) => item.series_key !== seriesKey));
+      const nextLocal = _readLocalSavedSeries().filter((item) => item.series_key !== seriesKey);
+      _writeLocalSavedSeries(nextLocal);
+      await _syncSavedSeriesToUiState(client, nextLocal);
       setSavedSeries((prev) => prev.filter((item) => item.series_key !== seriesKey));
       setNotice("Đã xóa Series khỏi danh mục quản lý.");
     } catch (requestError) {
@@ -682,7 +726,7 @@ export function SeriesPage() {
       <ErrorMessage error={error} retry={selected ? loadEpisodes : loadSeries} />
       <Notice>{notice}</Notice>
 
-      {!selected && savedSeries.length > 0 && (
+      {!selected && (
         <section className="panel" style={{ marginBottom: 18 }}>
           <div className="panel-head">
             <div>
@@ -691,6 +735,11 @@ export function SeriesPage() {
             </div>
             <span className="status">{savedSeries.length} series đã lưu</span>
           </div>
+          {!savedSeries.length ? (
+            <div className="empty-state">
+              Chưa có Series nào được lưu. Mở <Link href="/sources">Nguồn video</Link> bấm nút <strong>Series</strong> → nhập tên và bấm <strong>Lưu vào Series đã lưu</strong>, hoặc mở một Series bên dưới để lưu.
+            </div>
+          ) : (
           <div className="library-grid">
             {savedSeries.map((item) => {
               const total = item.total_count || 0;
@@ -769,6 +818,7 @@ export function SeriesPage() {
               );
             })}
           </div>
+          )}
         </section>
       )}
 
