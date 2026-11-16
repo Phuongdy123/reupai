@@ -1,37 +1,29 @@
 export const VIETNAMESE_TTS_VOICES = [
-  // VieNeu v3 Turbo — Offline 100% Free (25 giọng chuẩn Bắc · Trung · Nam)
-  { value: "Trúc Ly", label: "⭐ Trúc Ly — Nữ · Bắc · Tự nhiên (Mặc định)" },
-  { value: "Hải Đăng", label: "⭐ Hải Đăng — Nam · Bắc · Tự nhiên" },
-  { value: "Adam bựa", label: "⭐ Adam bựa — Nam · Bắc · Tự nhiên hài hước" },
-  { value: "Thiện Minh", label: "⭐ Thiện Minh — Nam · Bắc · Kể chuyện" },
-  { value: "Mai Anh", label: "⭐ Mai Anh — Nữ · Bắc · Tin tức" },
-  { value: "Thùy Dung", label: "⭐ Thùy Dung — Nữ · Nam · Tin tức" },
-  { value: "Thiền Tâm Đức", label: "⭐ Thiền Tâm Đức — Nam · Bắc · Kể chuyện" },
-  { value: "Ngọc Huyền", label: "⭐ Ngọc Huyền — Nữ · Bắc · Tự nhiên" },
-  { value: "Quang Sơn", label: "⭐ Quang Sơn — Nam · Trung · Tự nhiên" },
-  { value: "Ngọc Trân", label: "⭐ Ngọc Trân — Nữ · Trung · Tự nhiên" },
-  { value: "Minh Đức", label: "Minh Đức — Nam · Bắc · Tin tức" },
-  { value: "Phạm Tuyên", label: "Phạm Tuyên — Nam · Bắc · Tự nhiên" },
-  { value: "Thái Sơn", label: "Thái Sơn — Nam · Nam · Kể chuyện" },
-  { value: "Xuân Vĩnh", label: "Xuân Vĩnh — Nam · Bắc · Tự nhiên" },
-  { value: "Thanh Bình", label: "Thanh Bình — Nam · Bắc · Kể chuyện" },
-  { value: "Ngọc Linh", label: "Ngọc Linh — Nữ · Bắc · Kể chuyện" },
-  { value: "Đoan Trang", label: "Đoan Trang — Nữ · Bắc · Tự nhiên" },
-  { value: "Thục Đoan", label: "Thục Đoan — Nữ · Nam · Kể chuyện" },
-  { value: "Minh Triết", label: "Minh Triết — Nam · Nam · Tin tức" },
-  { value: "Mỹ Duyên", label: "Mỹ Duyên — Nữ · Nam · Đọc truyện" },
-  { value: "Quỳnh Anh", label: "Quỳnh Anh — Nữ · Bắc · Đọc truyện" },
-  { value: "Đức Trí", label: "Đức Trí — Nam · Nam · Đọc truyện" },
-  { value: "Kim Thanh", label: "Kim Thanh — Nữ · Nam · Đọc truyện" },
-  { value: "Adam", label: "Adam — Nam · Nam · Tự nhiên" },
-  { value: "Quốc Tuấn", label: "Quốc Tuấn — Nam · Bắc · Tự nhiên" },
-  // Edge-TTS — Online 100% Free
-  { value: "vi-VN-HoaiMyNeural", label: "Hoài My — Nữ · Edge-TTS Free" },
-  { value: "vi-VN-NamMinhNeural", label: "Nam Minh — Nam · Edge-TTS Free" },
-  { value: "hoai_my_tram", label: "Hoài My · Trầm ấm (Review/Truyện)" },
-  { value: "nam_minh_tram", label: "Nam Minh · Trầm ấm (Review/Tin tức)" },
-  { value: "hoai_my_shorts", label: "Hoài My · Nhanh trẻ trung (Shorts)" },
-  { value: "nam_minh_shorts", label: "Nam Minh · Nhanh cuốn hút (Shorts)" },
+  { value: "Trúc Ly", slug: "truc_ly", label: "⭐ Trúc Ly — Nữ · Bắc · Tự nhiên (Mặc định)" },
+  { value: "Hải Đăng", slug: "hai_dang", label: "⭐ Hải Đăng — Nam · Bắc · Tự nhiên" },
+  { value: "Adam bựa", slug: "adam_bua", label: "⭐ Adam bựa — Nam · Bắc · Tự nhiên hài hước" },
+  { value: "Thiện Minh", slug: "thien_minh", label: "⭐ Thiện Minh — Nam · Bắc · Kể chuyện" },
+  { value: "Mai Anh", slug: "mai_anh", label: "⭐ Mai Anh — Nữ · Bắc · Tin tức" },
+  { value: "Thùy Dung", slug: "thuy_dung", label: "⭐ Thùy Dung — Nữ · Nam · Tin tức" },
+  { value: "Thiền Tâm Đức", slug: "thien_tam_duc", label: "⭐ Thiền Tâm Đức — Nam · Bắc · Kể chuyện" },
+  { value: "Ngọc Huyền", slug: "ngoc_huyen", label: "⭐ Ngọc Huyền — Nữ · Bắc · Tự nhiên" },
+  { value: "Quang Sơn", slug: "quang_son", label: "⭐ Quang Sơn — Nam · Trung · Tự nhiên" },
+  { value: "Ngọc Trân", slug: "ngoc_tran", label: "⭐ Ngọc Trân — Nữ · Trung · Tự nhiên" },
+  { value: "Minh Đức", slug: "minh_duc", label: "Minh Đức — Nam · Bắc · Tin tức" },
+  { value: "Phạm Tuyên", slug: "pham_tuyen", label: "Phạm Tuyên — Nam · Bắc · Tự nhiên" },
+  { value: "Thái Sơn", slug: "thai_son", label: "Thái Sơn — Nam · Nam · Kể chuyện" },
+  { value: "Xuân Vĩnh", slug: "xuan_vinh", label: "Xuân Vĩnh — Nam · Bắc · Tự nhiên" },
+  { value: "Thanh Bình", slug: "thanh_binh", label: "Thanh Bình — Nam · Bắc · Kể chuyện" },
+  { value: "Ngọc Linh", slug: "ngoc_linh", label: "Ngọc Linh — Nữ · Bắc · Kể chuyện" },
+  { value: "Đoan Trang", slug: "doan_trang", label: "Đoan Trang — Nữ · Bắc · Tự nhiên" },
+  { value: "Thục Đoan", slug: "thuc_doan", label: "Thục Đoan — Nữ · Nam · Kể chuyện" },
+  { value: "Minh Triết", slug: "minh_triet", label: "Minh Triết — Nam · Nam · Tin tức" },
+  { value: "Mỹ Duyên", slug: "my_duyen", label: "Mỹ Duyên — Nữ · Nam · Đọc truyện" },
+  { value: "Quỳnh Anh", slug: "quynh_anh", label: "Quỳnh Anh — Nữ · Bắc · Đọc truyện" },
+  { value: "Đức Trí", slug: "duc_tri", label: "Đức Trí — Nam · Nam · Đọc truyện" },
+  { value: "Kim Thanh", slug: "kim_thanh", label: "Kim Thanh — Nữ · Nam · Đọc truyện" },
+  { value: "Adam", slug: "adam", label: "Adam — Nam · Nam · Tự nhiên" },
+  { value: "Quốc Tuấn", slug: "quoc_tuan", label: "Quốc Tuấn — Nam · Bắc · Tự nhiên" },
 ];
 
 export function renderVoiceOptionsHtml() {
@@ -60,7 +52,6 @@ export function stopVoicePreview() {
 }
 
 export async function playVoicePreview(voice, { button = null, text = DEFAULT_PREVIEW_TEXT, onError = null } = {}) {
-  const client = typeof window !== "undefined" ? window.reupEngineClient : null;
   const previousHtml = button ? button.innerHTML : "";
   stopVoicePreview();
   if (button) {
@@ -68,56 +59,34 @@ export async function playVoicePreview(voice, { button = null, text = DEFAULT_PR
     button.textContent = "Đang đọc…";
   }
   try {
-    let res = null;
-    if (client && typeof client.request === "function") {
-      try {
-        const localRes = await client.request("/api/tts/preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
-        });
-        if (localRes.ok) res = localRes;
-      } catch {
-        // Fallback to web preview route if Local Engine doesn't have /api/tts/preview yet
-      }
+    const chosen = VIETNAMESE_TTS_VOICES.find((v) => v.value === voice) || VIETNAMESE_TTS_VOICES[0];
+    if (text === DEFAULT_PREVIEW_TEXT && chosen?.slug) {
+      const audio = new Audio(`/audio/voice-previews/${chosen.slug}.mp3`);
+      _activePreviewAudio = audio;
+      audio.onended = () => stopVoicePreview();
+      audio.onerror = () => stopVoicePreview();
+      await audio.play();
+      return;
     }
-    if (!res) {
-      res = await fetch("/api/tts/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
-      });
+    const client = typeof window !== "undefined" ? window.reupEngineClient : null;
+    if (!client || typeof client.request !== "function") {
+      throw new Error("Hãy kết nối Local Engine để nghe thử nội dung tùy chỉnh.");
     }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.detail || data.error || "Không thể tạo âm thanh nghe thử.");
-    }
+    const res = await client.request("/api/tts/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice: chosen.value, text }),
+    });
+    if (!res.ok) throw new Error("Không thể tạo âm thanh nghe thử.");
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     _activePreviewUrl = url;
     const audio = new Audio(url);
-    const chosen = VIETNAMESE_TTS_VOICES.find((v) => v.value === voice);
-    if (String(voice || "").includes("shorts")) {
-      audio.playbackRate = 1.12;
-    } else if (String(voice || "").includes("tram")) {
-      audio.playbackRate = 0.94;
-    } else if (chosen?.label?.includes("Nam")) {
-      audio.playbackRate = 0.96;
-    }
     _activePreviewAudio = audio;
     audio.onended = () => stopVoicePreview();
     audio.onerror = () => stopVoicePreview();
     await audio.play();
   } catch (err) {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      try {
-        window.speechSynthesis.cancel();
-        const utter = new SpeechSynthesisUtterance(text);
-        utter.lang = "vi-VN";
-        window.speechSynthesis.speak(utter);
-        return;
-      } catch {}
-    }
     onError?.(err?.message || "Chưa phát được âm thanh nghe thử.");
   } finally {
     if (button) {
