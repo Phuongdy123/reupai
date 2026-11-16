@@ -3515,7 +3515,7 @@ def pipeline(
 
         offline_mode = bool(config.get("offline_mode"))
         boost_gpu = bool(config.get("boost_gpu"))
-        stability_mode = bool(config.get("stability_mode", True))
+        stability_mode = bool(config.get("stability_mode", False))
         _saved_env = {}
         _env_updates = {
             "LOCAL_TRANSLATION_FALLBACK": "1",

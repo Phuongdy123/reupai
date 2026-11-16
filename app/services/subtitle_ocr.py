@@ -38,6 +38,7 @@ def _paddle_language(language: str) -> str:
 def _get_ocr(language: str, threads: int, use_gpu: bool):
     global _OCR, _OCR_KEY
 
+    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
     import paddle
     from paddleocr import PaddleOCR
 
@@ -316,13 +317,22 @@ def extract_subtitle_srt(
     started = time.monotonic()
     last_report = started
     last_saved = start_index
+    prev_thumb = None
+    prev_result = None
     try:
         for index in range(start_index, total):
             timestamp = min(index * interval, max(0, duration - 0.01))
             cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
             ok, frame = cap.read()
             if ok and frame is not None:
-                text, score = _frame_text(ocr, frame, confidence)
+                crop = frame[int(frame.shape[0] * 0.25):, :]
+                thumb = cv2.resize(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), (96, 36), interpolation=cv2.INTER_AREA)
+                if prev_thumb is not None and float(cv2.absdiff(thumb, prev_thumb).mean()) < 1.1:
+                    text, score = prev_result
+                else:
+                    text, score = _frame_text(ocr, frame, confidence)
+                    prev_thumb = thumb
+                    prev_result = (text, score)
                 if text:
                     detections.append({"time": timestamp, "text": text, "confidence": score})
             now = time.monotonic()

@@ -126,6 +126,7 @@ def _configure_utf8_streams() -> None:
 def _prepare_environment() -> None:
     _configure_utf8_streams()
     os.environ["REUP_ENV"] = "production"
+    os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
     from runtime_paths import get_runtime_root
 
     runtime_root = get_runtime_root()

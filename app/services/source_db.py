@@ -51,9 +51,14 @@ def get_connection():
 
 
 def init_db():
-
     conn = get_connection()
+    try:
+        _init_db_with_connection(conn)
+    finally:
+        conn.close()
 
+
+def _init_db_with_connection(conn):
     cursor = conn.cursor()
 
     # Authentication is kept in the same local database so every browser
@@ -308,8 +313,6 @@ def init_db():
     )
 
     conn.commit()
-
-    conn.close()
 
     print(
         f"Database ready: {DB_PATH}"

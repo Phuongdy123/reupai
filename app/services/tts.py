@@ -1119,6 +1119,31 @@ def create_tts_clips(
             with ThreadPoolExecutor(max_workers=min(workers, len(pending_edge))) as pool:
                 list(pool.map(lambda item: generate_edge_fallback(item[0], item[1]), pending_edge))
 
+    fit_cache = {}
+    if not _is_stability_mode() and len(subtitles) > 1:
+        from collections import Counter
+        id_counts = Counter(item["id"] for item in subtitles)
+        fit_pending = []
+        for subtitle in subtitles:
+            subtitle_id = subtitle["id"]
+            if id_counts[subtitle_id] != 1:
+                continue
+            raw_wav, fitted_wav = _tts_file_paths(subtitle_id, voice_slug)
+            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+                continue
+            if reuse_fitted and os.path.isfile(fitted_wav) and os.path.getsize(fitted_wav) > 44:
+                continue
+            fit_pending.append((subtitle_id, raw_wav, fitted_wav, subtitle["duration_ms"] / 1000.0))
+        if len(fit_pending) > 1:
+            workers = min(6, max(2, os.cpu_count() or 4), len(fit_pending))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(fit_audio, r_wav, f_wav, tgt_s): sid
+                    for sid, r_wav, f_wav, tgt_s in fit_pending
+                }
+                for future in as_completed(futures):
+                    fit_cache[futures[future]] = future.result()
+
     for index, subtitle in enumerate(
         subtitles,
         start=1,
@@ -1178,8 +1203,8 @@ def create_tts_clips(
             / 1000.0
         )
 
-        fit_info = None
-        if reuse_fitted and raw_existed and os.path.isfile(fitted_wav) and os.path.getsize(fitted_wav) > 44:
+        fit_info = fit_cache.get(subtitle_id)
+        if fit_info is None and reuse_fitted and raw_existed and os.path.isfile(fitted_wav) and os.path.getsize(fitted_wav) > 44:
             try:
                 original_duration = get_audio_duration(raw_wav)
                 final_duration = get_audio_duration(fitted_wav)

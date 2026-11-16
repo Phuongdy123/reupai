@@ -276,6 +276,12 @@ SUB_MAX_WIDTH_RATIO = 0.92
 
 MAX_SUB_LINES = 2
 
+# Gioi han ky tu toi da tren moi dong de chu khong bi ep nho hay tran man hinh.
+try:
+    SUB_MAX_LINE_CHARS = min(60, max(24, int(os.getenv("REUP_SUB_MAX_LINE_CHARS", "38") or 38)))
+except (TypeError, ValueError):
+    SUB_MAX_LINE_CHARS = 38
+
 
 
 
@@ -2017,268 +2023,20 @@ def read_srt(path):
 
 
 
-def srt_to_ass_time(value):
-
-
-
-
-
-
-
+def srt_time_to_seconds(value):
     match = re.match(
-
-
-
-        r"(\d+):"
-
-
-
-        r"(\d+):"
-
-
-
-        r"(\d+)[,.]"
-
-
-
-        r"(\d+)",
-
-
-
-        value.strip(),
-
-
-
+        r"(\d+):(\d+):(\d+)[,.](\d+)",
+        str(value or "").strip(),
     )
-
-
-
-
-
-
-
     if not match:
+        raise ValueError("SRT time khong hop le: " + str(value))
+    hours, minutes, seconds = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    milliseconds = int(match.group(4).ljust(3, "0")[:3])
+    return hours * 3600.0 + minutes * 60.0 + seconds + milliseconds / 1000.0
 
 
-
-        raise ValueError(
-
-
-
-            "SRT time khong hop le: "
-
-
-
-            + str(value)
-
-
-
-        )
-
-
-
-
-
-
-
-    hours = int(
-
-
-
-        match.group(1)
-
-
-
-    )
-
-
-
-
-
-
-
-    minutes = int(
-
-
-
-        match.group(2)
-
-
-
-    )
-
-
-
-
-
-
-
-    seconds = int(
-
-
-
-        match.group(3)
-
-
-
-    )
-
-
-
-
-
-
-
-    milliseconds = int(
-
-
-
-        match.group(4)
-
-
-
-        .ljust(
-
-
-
-            3,
-
-
-
-            "0",
-
-
-
-        )[:3]
-
-
-
-    )
-
-
-
-
-
-
-
-    centiseconds = int(
-
-
-
-        round(
-
-
-
-            milliseconds / 10
-
-
-
-        )
-
-
-
-    )
-
-
-
-
-
-
-
-    if centiseconds >= 100:
-
-
-
-        seconds += 1
-
-
-
-        centiseconds = 0
-
-
-
-
-
-
-
-    if seconds >= 60:
-
-
-
-        minutes += (
-
-
-
-            seconds // 60
-
-
-
-        )
-
-
-
-        seconds %= 60
-
-
-
-
-
-
-
-    if minutes >= 60:
-
-
-
-        hours += (
-
-
-
-            minutes // 60
-
-
-
-        )
-
-
-
-        minutes %= 60
-
-
-
-
-
-
-
-    return (
-
-
-
-        f"{hours}:"
-
-
-
-        f"{minutes:02d}:"
-
-
-
-        f"{seconds:02d}."
-
-
-
-        f"{centiseconds:02d}"
-
-
-
-    )
-
-
-
-
-
-
-
-
-
+def srt_to_ass_time(value):
+    return _format_ass_time(srt_time_to_seconds(value))
 
 
 def escape_ass_text(value):
@@ -4983,6 +4741,172 @@ def fit_subtitle(
     )
 
 
+_PAGE_BREAK_PUNCT = (".", "!", "?", ";", ":", "…", ",", "—")
+
+
+def _max_sub_lines_for_layout(font_size: int, blur_height: float) -> int:
+    if blur_height > 0 and MAX_SUB_LINES > 1 and (2 * font_size * 1.10) > (blur_height * 0.98):
+        return 1
+    return max(1, MAX_SUB_LINES)
+
+
+def subtitle_page_char_limit(font_size: int, max_width: float, max_lines: int) -> int:
+    """Cap rendered characters per subtitle screen so font size stays fixed and readable."""
+    width_chars = max(14, int(max_width / max(font_size * 0.58, 1.0)))
+    per_line_chars = min(width_chars, SUB_MAX_LINE_CHARS if max_lines > 1 else SUB_MAX_LINE_CHARS + 4)
+    return max(14, per_line_chars * max(1, max_lines))
+
+
+def _balance_two_lines(words: list[str], font_size: int, max_width: float, per_line_chars: int) -> list[str]:
+    joined = " ".join(words)
+    if (
+        len(words) <= 1
+        or (
+            len(joined) <= per_line_chars
+            and estimate_text_width(joined, font_size) <= max_width
+        )
+    ):
+        return [joined]
+
+    best = None
+    best_score = None
+    for index in range(1, len(words)):
+        left = " ".join(words[:index])
+        right = " ".join(words[index:])
+        left_w = estimate_text_width(left, font_size)
+        right_w = estimate_text_width(right, font_size)
+        overflow = max(0.0, left_w - max_width) + max(0.0, right_w - max_width)
+        char_overflow = max(0, len(left) - per_line_chars) + max(0, len(right) - per_line_chars)
+        balance = abs(left_w - right_w)
+        punct_bonus = 36.0 if words[index - 1].endswith(_PAGE_BREAK_PUNCT) else 0.0
+        score = overflow * 20.0 + char_overflow * 40.0 + balance - punct_bonus
+        if best_score is None or score < best_score:
+            best_score = score
+            best = [left, right]
+    return best or [joined]
+
+
+def _page_fits(words: list[str], font_size: int, max_width: float, max_lines: int, char_limit: int) -> bool:
+    candidate = " ".join(words)
+    if len(candidate) > char_limit:
+        return False
+    return len(split_words_to_lines(candidate, font_size, max_width)) <= max_lines
+
+
+def _split_words_into_pages(
+    words: list[str],
+    font_size: int,
+    max_width: float,
+    max_lines: int,
+    char_limit: int,
+) -> list[list[str]]:
+    pages: list[list[str]] = []
+    idx = 0
+    total = len(words)
+    while idx < total:
+        end = idx + 1
+        while end < total and _page_fits(words[idx : end + 1], font_size, max_width, max_lines, char_limit):
+            end += 1
+        # When more text follows, break cleanly at a clause/sentence punctuation mark
+        # inside the back half of the page if available.
+        if end < total and end - idx >= 4:
+            min_cut = idx + max(2, (end - idx) // 2)
+            for probe in range(end - 1, min_cut - 1, -1):
+                if words[probe].endswith(_PAGE_BREAK_PUNCT):
+                    end = probe + 1
+                    break
+        pages.append(words[idx:end])
+        idx = end
+
+    # Avoid an awkward 1-2 word orphan on the final flash by rebalancing from the prior page.
+    if len(pages) >= 2 and len(pages[-1]) <= 2:
+        prev_words = pages[-2]
+        last_words = pages[-1]
+        while len(prev_words) > 3 and len(last_words) < len(prev_words) - 1:
+            candidate_last = [prev_words[-1], *last_words]
+            if not _page_fits(candidate_last, font_size, max_width, max_lines, char_limit):
+                break
+            last_words = candidate_last
+            prev_words = prev_words[:-1]
+            if len(last_words) >= 3:
+                break
+        pages[-2] = prev_words
+        pages[-1] = last_words
+
+    return pages
+
+
+def paginate_subtitle_cue(
+    raw_text: str,
+    start_seconds: float,
+    end_seconds: float,
+    *,
+    font_size: int,
+    max_width: float,
+    blur_height: float,
+) -> list[dict]:
+    """Keep font size fixed and split dense cues into sequential rapid pages."""
+    start_cs = max(0, int(round(float(start_seconds) * 100)))
+    end_cs = max(start_cs + 1, int(round(float(end_seconds) * 100)))
+    max_lines = _max_sub_lines_for_layout(font_size, blur_height)
+    char_limit = subtitle_page_char_limit(font_size, max_width, max_lines)
+    per_line_chars = max(14, char_limit // max(1, max_lines))
+
+    explicit_lines = [" ".join(line.split()) for line in str(raw_text or "").splitlines() if line.strip()]
+    normalized = " ".join(explicit_lines)
+    if not normalized:
+        return []
+
+    if (
+        1 <= len(explicit_lines) <= max_lines
+        and len(normalized) <= char_limit
+        and all(
+            len(line) <= per_line_chars and estimate_text_width(line, font_size) <= max_width
+            for line in explicit_lines
+        )
+    ):
+        return [{"start": start_cs / 100.0, "end": end_cs / 100.0, "lines": explicit_lines}]
+
+    words = normalized.split()
+    pages = _split_words_into_pages(words, font_size, max_width, max_lines, char_limit)
+
+    total_cs = end_cs - start_cs
+    if len(pages) == 1 or total_cs < len(pages):
+        # Too short to split into distinct centisecond frames; emit as one chunk safely.
+        lines = (
+            _balance_two_lines(words, font_size, max_width, per_line_chars)
+            if max_lines >= 2
+            else [normalized]
+        )
+        return [{"start": start_cs / 100.0, "end": end_cs / 100.0, "lines": lines}]
+
+    weights = [max(1, sum(len(w) for w in page)) for page in pages]
+    total_weight = sum(weights)
+    cursor_cs = start_cs
+    accum_weight = 0
+    chunks = []
+    for index, page_words in enumerate(pages):
+        accum_weight += weights[index]
+        if index == len(pages) - 1:
+            chunk_end_cs = end_cs
+        else:
+            remaining_pages = len(pages) - 1 - index
+            target_cs = start_cs + int(round(total_cs * (accum_weight / total_weight)))
+            chunk_end_cs = max(cursor_cs + 1, min(end_cs - remaining_pages, target_cs))
+        lines = (
+            _balance_two_lines(page_words, font_size, max_width, per_line_chars)
+            if max_lines >= 2
+            else [" ".join(page_words)]
+        )
+        chunks.append({
+            "start": cursor_cs / 100.0,
+            "end": chunk_end_cs / 100.0,
+            "lines": lines,
+        })
+        cursor_cs = chunk_end_cs
+    return chunks
+
+
 
 
 
@@ -5954,302 +5878,30 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
 
 
     for item in subtitles:
-
-
-
-
-
-
-
-        start = (
-
-
-
-            srt_to_ass_time(
-
-
-
-                item[
-
-
-
-                    "start"
-
-
-
-                ]
-
-
-
-            )
-
-
-
-        )
-
-
-
-
-
-
-
-        end = (
-
-
-
-            srt_to_ass_time(
-
-
-
-                item[
-
-
-
-                    "end"
-
-
-
-                ]
-
-
-
-            )
-
-
-
-        )
-
-
-
-
-
-
-
-        raw_text = (
-
-
-
-            item[
-
-
-
-                "text"
-
-
-
-            ]
-
-
-
-        )
-
-
-
-
-
-
-
-        (
-
-
-
-            item_font_size,
-
-
-
-            lines,
-
-
-
-        ) = fit_subtitle(
-
-
-
+        start_seconds = srt_time_to_seconds(item["start"])
+        end_seconds = srt_time_to_seconds(item["end"])
+        raw_text = item["text"]
+        pages = paginate_subtitle_cue(
             raw_text,
-
-
-
-            base_size=
-
-
-
-                font_size,
-
-
-
-            max_width=
-
-
-
-                max_text_width,
-
-
-
-            blur_height=
-
-
-
-                blur_height,
-
-
-
+            start_seconds,
+            end_seconds,
+            font_size=font_size,
+            max_width=max_text_width,
+            blur_height=blur_height,
         )
-
-
-
-
-
-
-
-        escaped_lines = [
-
-
-
-            escape_ass_text(
-
-
-
-                line
-
-
-
+        for page in pages:
+            start = _format_ass_time(page["start"])
+            end = _format_ass_time(page["end"])
+            escaped_lines = [escape_ass_text(line) for line in page["lines"]]
+            text = r"\N".join(escaped_lines)
+            # \an5 = center, \q2 = explicit balanced wrapping at fixed \fs{font_size}.
+            override = (
+                r"{\an5"
+                f"\\pos({sub_x},{sub_y})"
+                f"\\fs{font_size}"
+                r"\q2}"
             )
-
-
-
-            for line in lines
-
-
-
-        ]
-
-
-
-
-
-
-
-        text = (
-
-
-
-            r"\N".join(
-
-
-
-                escaped_lines
-
-
-
-            )
-
-
-
-        )
-
-
-
-
-
-
-
-        # \an5 = center.
-
-
-
-        # \pos = toa do absolute theo PlayRes.
-
-
-
-        # \q2 = no smart wrap; minh da wrap chu dong bang \N.
-
-
-
-        override = (
-
-
-
-            r"{\an5"
-
-
-
-            f"\\pos("
-
-
-
-            f"{sub_x},"
-
-
-
-            f"{sub_y}"
-
-
-
-            f")"
-
-
-
-            f"\\fs{item_font_size}"
-
-
-
-            r"\q2}"
-
-
-
-        )
-
-
-
-
-
-
-
-        event = (
-
-
-
-            "Dialogue: 0,"
-
-
-
-            f"{start},"
-
-
-
-            f"{end},"
-
-
-
-            "Default,,0,0,0,,"
-
-
-
-            f"{override}"
-
-
-
-            f"{text}"
-
-
-
-        )
-
-
-
-
-
-
-
-        events.append(
-
-
-
-            event
-
-
-
-        )
+            events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{override}{text}")
 
 
 
@@ -6706,8 +6358,7 @@ def _replace_video_encoder_with_cpu(command):
 
 
         "-preset",
-
-        "superfast" if os.getenv("REUP_BOOST_GPU", "").strip() == "1" else "veryfast",
+        "superfast" if os.getenv("REUP_BOOST_GPU", "").strip() == "1" or not _is_stability_mode() else "veryfast",
 
 
 
