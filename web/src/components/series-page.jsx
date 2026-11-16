@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
 import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
+import { releaseBillingToken, reserveBillingToken } from "../lib/billing-reserve";
 import {
   EngineGate,
   ErrorMessage,
@@ -598,9 +599,12 @@ export function SeriesPage() {
       const apiMode = finalCfg.mode === "subtitle" ? "subtitle" : "voiceover";
       const aspectRatio = finalCfg.aspect_ratio && finalCfg.aspect_ratio !== "auto" ? finalCfg.aspect_ratio : null;
 
+      let lastProcessError = "";
       for (const video of targetVideos) {
         if (!video?.video_id) continue;
+        let billingToken = null;
         try {
+          billingToken = await reserveBillingToken({ videoId: video.video_id, mode: apiMode });
           await client.json("/api/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -618,15 +622,16 @@ export function SeriesPage() {
               ocr_use_gpu: Boolean(finalCfg.boost_gpu),
               ocr_parallelism: finalCfg.boost_gpu ? 4 : 2,
               stability_mode: true,
+              ...(billingToken ? { billing_token: billingToken } : {}),
             }),
           });
           queuedCount += 1;
         } catch (err) {
-          // Bỏ qua nếu video đang xử lý sẵn (HTTP 409)
-          if (String(err?.message || "").includes("đang được xử lý")) {
-            skippedCount += 1;
-          } else {
-            skippedCount += 1;
+          await releaseBillingToken(billingToken);
+          lastProcessError = err?.message || lastProcessError;
+          skippedCount += 1;
+          if ([401, 402, 403].includes(Number(err?.status))) {
+            break;
           }
         }
       }
@@ -636,11 +641,15 @@ export function SeriesPage() {
       if (selected) await loadEpisodes();
       else await loadSeries();
 
-      setNotice(
-        `Đã đẩy ${queuedCount} tập vào hàng chờ Series theo thứ tự${
-          skippedCount ? ` (bỏ qua ${skippedCount} tập đang chạy/lỗi)` : ""
-        }.`
-      );
+      if (queuedCount === 0 && lastProcessError) {
+        setError(lastProcessError);
+      } else {
+        setNotice(
+          `Đã đẩy ${queuedCount} tập vào hàng chờ Series theo thứ tự${
+            skippedCount ? ` (bỏ qua ${skippedCount} tập đang chạy/lỗi)` : ""
+          }.`
+        );
+      }
     } catch (requestError) {
       setError(requestError.message || "Không thể đẩy hàng loạt vào hàng chờ.");
     } finally {

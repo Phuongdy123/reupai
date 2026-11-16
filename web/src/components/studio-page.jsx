@@ -10,6 +10,7 @@ import { OutputEditor } from "./output-editor";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
 import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
 import { prepareSourceInput, videoUrlForIdentity } from "../lib/source-url-input";
+import { releaseBillingToken, reserveBillingToken } from "../lib/billing-reserve";
 
 function isDouyinLink(value) {
   return /(?:^|\.)?(?:douyin\.com|v\.douyin\.com|iesdouyin\.com)/i.test(String(value || ""));
@@ -593,7 +594,9 @@ export function StudioPage({ mode = "youtube" }) {
     setSubmittingIds((prev) => ({ ...prev, [id]: true }));
     setError(null);
     setNotice(null);
+    let billingToken = null;
     try {
+      billingToken = await reserveBillingToken({ videoId: id, mode: processMode });
       const payload = {
         video_id: id,
         url: video.url || video.video_url || videoUrlForIdentity(id) || (video.platform === "douyin" ? `https://www.douyin.com/video/${id}` : `https://www.bilibili.com/video/${id}`),
@@ -613,6 +616,7 @@ export function StudioPage({ mode = "youtube" }) {
         boost_gpu: boostGpu,
         ocr_use_gpu: boostGpu,
         ocr_parallelism: boostGpu ? 4 : 2,
+        ...(billingToken ? { billing_token: billingToken } : {}),
       };
       await client.json("/api/process", {
         method: "POST",
@@ -622,6 +626,7 @@ export function StudioPage({ mode = "youtube" }) {
       setNotice(`Đã đưa "${video.title || id}" vào hàng đợi ${isYoutube ? "YouTube 16:9" : "Shorts 9:16"}.`);
       await loadJobs();
     } catch (err) {
+      await releaseBillingToken(billingToken);
       setError(err.message || "Không thể bắt đầu xử lý video.");
     } finally {
       setSubmittingIds((prev) => ({ ...prev, [id]: false }));
