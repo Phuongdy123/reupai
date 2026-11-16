@@ -1637,20 +1637,19 @@ function buildCard(
     card.innerHTML = `
         ${PROCESSING_STAR_BORDER}
 
-        <label
-            class="select-control"
-            title="Chọn video"
-        >
-            <input
-                type="checkbox"
-                class="video-select"
-                ${checked ? 'checked' : ''}
-            >
-            <span class="select-visual"></span>
-        </label>
-
-
         <div class="cover-wrap compact-cover">
+
+            <label
+                class="select-control"
+                title="Chọn video"
+            >
+                <input
+                    type="checkbox"
+                    class="video-select"
+                    ${checked ? 'checked' : ''}
+                >
+                <span class="select-visual"></span>
+            </label>
 
             <div class="cover-fallback">
                 No image
@@ -2465,6 +2464,18 @@ function openProcessDetailsPopup(
 }
 
 
+function _shortInlineLabel(label, state) {
+    if (state === 'error') return 'Lỗi';
+    if (state === 'complete') return 'Xong';
+    const raw = String(label || '').trim();
+    if (/nhận diện|lời thoại|whisper/i.test(raw)) return 'Nhận diện';
+    if (/dịch|sub|phụ đề/i.test(raw)) return 'Dịch sub';
+    if (/voice|giọng/i.test(raw)) return 'Tạo Voice';
+    if (/ghép|render|xuất/i.test(raw)) return 'Đang ghép';
+    if (/tải/i.test(raw)) return 'Đang tải';
+    return raw.length > 10 ? raw.slice(0, 10) + '…' : (raw || 'Xử lý');
+}
+
 function updateInlineProcessStatus(
     card,
     percent,
@@ -2476,8 +2487,9 @@ function updateInlineProcessStatus(
     if (!button) return;
 
     button.hidden = false;
+    button.title = label || 'Xem tiến trình xử lý';
     button.querySelector('.process-inline-percent').textContent = percent;
-    button.querySelector('.process-inline-label').textContent = label;
+    button.querySelector('.process-inline-label').textContent = _shortInlineLabel(label, state);
     button.classList.toggle('is-error', state === 'error');
     button.classList.toggle('is-complete', state === 'complete');
 }
