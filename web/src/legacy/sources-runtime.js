@@ -7222,7 +7222,7 @@ function syncSaveSeriesButton() {
 
 async function refreshSavedSeriesKeys() {
     try {
-        const data = await api('/api/library/series/saved');
+        const data = await apiJson('/api/library/series/saved');
         savedSeriesKeys = new Set((data?.series || []).map((s) => s.series_key).filter(Boolean));
     } catch {
         // ignore network errors when checking saved status
@@ -7238,13 +7238,13 @@ async function toggleSaveCurrentSeries() {
     if (btn) btn.disabled = true;
     try {
         if (savedSeriesKeys.has(key)) {
-            await api(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            await apiJson(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
             savedSeriesKeys.delete(key);
             updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
         } else {
             const item = seriesGroups.find((value) => value.series_key === key);
             const videoIds = currentVideos.filter((v) => v.series_key === key).map((v) => v.video_id);
-            await api('/api/library/series/saved', {
+            await apiJson('/api/library/series/saved', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
