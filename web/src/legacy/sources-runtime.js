@@ -1691,21 +1691,58 @@ function buildCard(
 
                 </div>
 
-                <button
-                    class="favorite-btn modern-icon-btn ${
-                        video.favorite
-                        ? 'is-favorite'
-                        : ''
-                    }"
-                    title="${
-                        video.favorite
-                        ? 'Bỏ yêu thích'
-                        : 'Yêu thích'
-                    }"
-                    aria-label="Yêu thích"
-                >
-                    ${uiIcon('heart', 19)}
-                </button>
+                <div class="card-header-actions" style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                    <details class="more-menu">
+                        <summary
+                            class="more-trigger"
+                            title="Tùy chọn"
+                            aria-label="Tùy chọn"
+                        >
+                            ${uiIcon('more', 19)}
+                        </summary>
+                        <div class="more-menu-panel">
+                            <button class="menu-action open-btn">
+                                ${uiIcon('external', 16)}
+                                <span>Mở video gốc</span>
+                            </button>
+                            <button class="menu-action download-btn">
+                                ${uiIcon('download', 16)}
+                                <span>Tải video gốc</span>
+                            </button>
+                            <div class="menu-section">
+                                <div class="menu-section-title">Danh mục</div>
+                                <div class="collection-inline">
+                                    <select class="card-collection-select">
+                                        ${collectionOptionsHtml(video.collection_ids || [])}
+                                    </select>
+                                    <button
+                                        class="collection-inline-add modern-icon-btn"
+                                        title="Thêm vào danh mục"
+                                        aria-label="Thêm vào danh mục"
+                                    >
+                                        ${uiIcon('plus', 16)}
+                                    </button>
+                                </div>
+                            </div>
+                            <input type="hidden" class="channel" value="${escapeHtml(channel || 'default')}">
+                        </div>
+                    </details>
+                    <button
+                        class="favorite-btn modern-icon-btn ${
+                            video.favorite
+                            ? 'is-favorite'
+                            : ''
+                        }"
+                        title="${
+                            video.favorite
+                            ? 'Bỏ yêu thích'
+                            : 'Yêu thích'
+                        }"
+                        aria-label="Yêu thích"
+                    >
+                        ${uiIcon('heart', 19)}
+                    </button>
+                </div>
 
             </div>
 
@@ -1747,61 +1784,6 @@ function buildCard(
                 </button>
 
                 <div class="result-actions dynamic-results"></div>
-
-                <details class="more-menu">
-
-                    <summary
-                        class="more-trigger"
-                        title="Tùy chọn"
-                        aria-label="Tùy chọn"
-                    >
-                        ${uiIcon('more', 19)}
-                    </summary>
-
-                    <div class="more-menu-panel">
-
-                        <button
-                            class="menu-action open-btn"
-                        >
-                            ${uiIcon('external', 16)}
-                            <span>Mở video gốc</span>
-                        </button>
-
-                        <button
-                            class="menu-action download-btn"
-                        >
-                            ${uiIcon('download', 16)}
-                            <span>Tải video gốc</span>
-                        </button>
-
-                        <div class="menu-section">
-
-                            <div class="menu-section-title">
-                                Danh mục
-                            </div>
-
-                            <div class="collection-inline">
-                                <select
-                                    class="card-collection-select"
-                                >
-                                    ${collectionOptionsHtml(video.collection_ids || [])}
-                                </select>
-
-                                <button
-                                    class="collection-inline-add modern-icon-btn"
-                                    title="Thêm vào danh mục"
-                                    aria-label="Thêm vào danh mục"
-                                >
-                                    ${uiIcon('plus', 16)}
-                                </button>
-                            </div>
-
-                        </div>
-
-                    <input type="hidden" class="channel" value="${escapeHtml(channel || 'default')}">
-                    </div>
-
-                </details>
 
             </div>
 

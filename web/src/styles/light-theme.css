@@ -405,7 +405,7 @@ html[data-theme="light"] body.theme-xports #videos .compact-video-card.is-proces
 }
 
 html[data-theme="light"] body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn, .process-details-btn) {
-  border-radius: 9999px !important;
+  border-radius: 8px 2px 8px 2px !important;
   background: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #0f172a !important;
