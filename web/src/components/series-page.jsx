@@ -716,13 +716,6 @@ export function SeriesPage() {
 
   return (
     <>
-      <div className="panel" style={{ marginBottom: 16, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/series" className="btn primary">Bộ Series đã lưu</Link>
-          <Link href="/collections" className="btn secondary">Kênh nguồn &amp; Danh mục</Link>
-        </div>
-        <small className="muted">Series quản lý bộ tập theo thứ tự · Collections quản lý kênh nguồn &amp; nhóm video</small>
-      </div>
       <ErrorMessage error={error} retry={selected ? loadEpisodes : loadSeries} />
       <Notice>{notice}</Notice>
 
