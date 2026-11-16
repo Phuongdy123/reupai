@@ -4677,6 +4677,12 @@ function injectV13Styles() {
             box-shadow: none !important;
         }
 
+        [hidden],
+        .danger-icon-button[hidden],
+        #sourceSeriesDrawer [hidden] {
+            display: none !important;
+        }
+
         .toolbar-button,
         .toolbar-icon-button {
             border: 1px solid var(--v133-line) !important;
@@ -5249,7 +5255,12 @@ function simplifySourceManager(manager) {
         <button type="button" class="panel-primary source-series-save-btn" id="saveSeriesWithNameBtn" title="Lưu Series vào mục Series đã lưu">${uiIcon('plus', 15)}<span>Lưu vào Series đã lưu</span></button>
         <button type="button" class="danger-icon-button" id="deleteSavedSeriesBtn" title="Xóa Series này khỏi danh sách đã lưu" aria-label="Xóa Series đã lưu" hidden>${uiIcon('trash', 16)}</button>
     `;
+    const drawerStatus = document.createElement('div');
+    drawerStatus.id = 'seriesDrawerStatus';
+    drawerStatus.className = 'source-series-drawer-status';
+    drawerStatus.hidden = true;
     rowControls.appendChild(nameRow);
+    rowControls.appendChild(drawerStatus);
     drawer.appendChild(rowControls);
     manager.appendChild(drawer);
 
@@ -7376,13 +7387,32 @@ let savedSeriesKeys = new Set();
 
 let savedSeriesMap = new Map();
 
-function prefillSeriesCustomName() {
+function setSeriesDrawerStatus(message = '', tone = 'ok', includeSeriesLink = false) {
+    const statusEl = document.getElementById('seriesDrawerStatus');
+    if (!statusEl) return;
+    const text = String(message || '').trim();
+    if (!text) {
+        statusEl.hidden = true;
+        statusEl.innerHTML = '';
+        return;
+    }
+    statusEl.hidden = false;
+    statusEl.className = `source-series-drawer-status is-${tone}`;
+    statusEl.innerHTML = `<span>${escapeHtml(text)}</span>${includeSeriesLink ? ' <a href="/series">Xem trang Series →</a>' : ''}`;
+}
+
+function prefillSeriesCustomName(force = false) {
     const input = document.getElementById('seriesCustomNameInput');
     const select = document.getElementById('seriesSelect');
     if (!input || !select) return;
     const key = select.value || '';
+    const prevKey = input.dataset.lastSeriesKey || '';
+    if (!force && key === prevKey) {
+        return;
+    }
+    input.dataset.lastSeriesKey = key;
     if (!key) {
-        input.value = '';
+        if (prevKey) input.value = '';
         return;
     }
     const savedEntry = savedSeriesMap.get(key) || _readLocalSavedSeries().find((s) => s.series_key === key);
@@ -7403,9 +7433,13 @@ function syncSaveSeriesButton() {
         delBtn.hidden = !saved;
     }
     if (namedSaveBtn) {
-        namedSaveBtn.disabled = !key && !hasCheckedVideos;
+        namedSaveBtn.disabled = false;
         const label = namedSaveBtn.querySelector('span');
-        if (label) label.textContent = saved ? 'Cập nhật tên Series' : 'Lưu vào Series đã lưu';
+        if (label) {
+            label.textContent = saved
+                ? 'Cập nhật tên Series'
+                : (hasCheckedVideos && !key ? 'Lưu video đã chọn thành Series' : 'Lưu vào Series đã lưu');
+        }
     }
     if (!btn) return;
     if (!key && !hasCheckedVideos) {
@@ -7466,29 +7500,38 @@ async function saveSeriesWithCustomName() {
     const saveBtn = document.getElementById('saveOrDeleteSeriesBtn');
     const namedBtn = document.getElementById('saveSeriesWithNameBtn');
 
+    setSeriesDrawerStatus('');
     let key = select?.value || '';
     const customName = (nameInput?.value || '').trim();
     const detected = key ? seriesGroups.find((value) => value.series_key === key) : null;
 
+    const allLoaded = Array.from(
+        new Map(
+            [...Object.values(pageCache).flat(), ...currentVideos]
+                .filter((v) => v && v.video_id)
+                .map((v) => [v.video_id, v])
+        ).values()
+    );
+
     let allCandidates = [];
     if (key) {
-        allCandidates = Array.from(
-            new Map(
-                [...Object.values(pageCache).flat(), ...currentVideos]
-                    .filter((v) => v && v.video_id && v.series_key === key)
-                    .map((v) => [v.video_id, v])
-            ).values()
-        );
+        allCandidates = allLoaded.filter((v) => v.series_key === key);
+        if (!allCandidates.length) {
+            allCandidates = selectedVideos();
+        }
     } else {
         allCandidates = selectedVideos();
-        if (!allCandidates.length) {
-            alert('Hãy chọn Series trong danh sách hoặc tích chọn ít nhất 1 video trên trang rồi nhập tên Series để lưu.');
+        if (!customName) {
+            setSeriesDrawerStatus('Hãy nhập tên Series bạn muốn đặt trước khi lưu.', 'warn');
             nameInput?.focus();
             return;
         }
-        if (!customName) {
-            alert('Nhập tên Series bạn muốn đặt trước khi lưu.');
-            nameInput?.focus();
+        if (!allCandidates.length) {
+            // If user typed a Series name without ticking checkboxes, save all loaded videos of the current source.
+            allCandidates = allLoaded;
+        }
+        if (!allCandidates.length) {
+            setSeriesDrawerStatus('Chưa có video nào đang mở để lưu vào Series. Hãy mở nguồn video hoặc tích chọn video trước.', 'warn');
             return;
         }
         key = clientSeriesKeyFromName(customName) || `custom_${Date.now()}`;
@@ -7532,20 +7575,64 @@ async function saveSeriesWithCustomName() {
         savedSeriesKeys.add(key);
         savedSeriesMap.set(key, entry);
 
+        // Ensure saved custom series appears in seriesGroups & select dropdown immediately.
+        const existingGroup = seriesGroups.find((g) => g.series_key === key);
+        if (existingGroup) {
+            existingGroup.name = finalName;
+            existingGroup.count = Math.max(Number(existingGroup.count || 0), videoIds.length);
+        } else {
+            seriesGroups.unshift({
+                series_key: key,
+                name: finalName,
+                source_key: payload.source_key,
+                source_label: payload.source_label,
+                count: videoIds.length,
+                episodes: [],
+                sources: [],
+            });
+        }
+
         // Also update detected series cache so /series displays videos for custom-named series too.
         try {
             const cache = JSON.parse(localStorage.getItem('reupai:detected-series-cache-v1') || '{}');
+            const prevGroups = Array.isArray(cache.groups) ? cache.groups.filter((g) => g?.series_key !== key) : [];
+            prevGroups.unshift({
+                series_key: key,
+                name: finalName,
+                source_key: payload.source_key,
+                source_label: payload.source_label,
+                count: videoIds.length,
+                episodes: [],
+                sources: [],
+            });
             const videosByKey = { ...(cache.videosByKey || {}), [key]: payload.videos };
             localStorage.setItem('reupai:detected-series-cache-v1', JSON.stringify({
                 updatedAt: Date.now(),
-                groups: Array.isArray(cache.groups) ? cache.groups : [],
+                groups: prevGroups,
                 videosByKey,
             }));
         } catch {}
 
+        if (select) {
+            let opt = Array.from(select.options).find((o) => o.value === key);
+            const optText = `${finalName} · ${videoIds.length} phần${payload.source_label ? ` · ${payload.source_label}` : ''}`;
+            if (!opt) {
+                opt = document.createElement('option');
+                opt.value = key;
+                select.appendChild(opt);
+            }
+            opt.textContent = optText;
+            select.value = key;
+        }
+        const quickCount = document.getElementById('seriesQuickCount');
+        if (quickCount) quickCount.textContent = String(seriesGroups.length);
+        if (nameInput) nameInput.dataset.lastSeriesKey = key;
+        setSeriesDrawerStatus(`Đã lưu Series "${finalName}" (${videoIds.length} tập) vào Series đã lưu.`, 'ok', true);
         updateSourceInfo(`Đã lưu Series "${finalName}" (${videoIds.length} tập) vào Series đã lưu.`);
     } catch (err) {
-        alert(err?.message || 'Không thể lưu Series.');
+        const msg = err?.message || 'Không thể lưu Series.';
+        setSeriesDrawerStatus(msg, 'warn');
+        updateSourceInfo(`Lỗi lưu Series: ${msg}`);
     } finally {
         syncSaveSeriesButton();
     }
@@ -7566,9 +7653,10 @@ async function deleteCurrentSavedSeries() {
         _writeLocalSavedSeries(_readLocalSavedSeries().filter((s) => s.series_key !== key));
         savedSeriesKeys.delete(key);
         savedSeriesMap.delete(key);
+        setSeriesDrawerStatus('Đã xóa Series khỏi danh sách đã lưu.', 'warn');
         updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
     } catch (err) {
-        alert(err?.message || 'Không thể xóa Series đã lưu.');
+        setSeriesDrawerStatus(err?.message || 'Không thể xóa Series đã lưu.', 'warn');
     } finally {
         if (delBtn) delBtn.disabled = false;
         syncSaveSeriesButton();

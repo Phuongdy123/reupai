@@ -2405,6 +2405,37 @@ body.theme-xports #seriesQuickBtn.active {
   white-space: nowrap;
 }
 
+body.theme-xports .v13-manager .source-series-drawer-status {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+body.theme-xports .v13-manager .source-series-drawer-status.is-ok {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+  color: #86efac;
+}
+body.theme-xports .v13-manager .source-series-drawer-status.is-warn {
+  border: 1px solid rgba(251, 191, 36, 0.38);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}
+body.theme-xports .v13-manager .source-series-drawer-status a {
+  color: #fff;
+  font-weight: 700;
+  text-decoration: underline;
+}
+body.theme-xports .v13-manager .danger-icon-button[hidden],
+body.theme-xports #sourceSeriesDrawer [hidden] {
+  display: none !important;
+}
+
 
 
 
