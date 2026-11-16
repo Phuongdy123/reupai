@@ -1,17 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.54",
+    "version": "0.2.55",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.54/ReupAI-Setup-0.2.54.exe",
-    "sha256": "a2c939450e6bff2b70b91cbd2f697b7295e12e6022a1d9bef27943ef5e654ba0",
-    "size": 469223938,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.55/ReupAI-Setup-0.2.55.exe",
+    "sha256": "e29050636ecba018d5e07d9a7a4ae1c755dd4489bd8a47f478d98842305548f4",
+    "size": 468317094,
     "notes": [
-      "Sửa lỗi HTTP 400 do cấu hình tạo ảnh Nano Banana gửi sai định dạng.",
-      "Chọn model dịch trong Phụ đề. Mặc định Gemini 3.1 Flash Lite; tự chuyển về model này khi model đã chọn hết quota."
+      "Cố định cỡ chữ phụ đề dịch và tự chia trang nhanh khi câu dài.",
+      "Khôi phục đa luồng mặc định cho TTS/Whisper/FFmpeg và song song hóa fit audio để tăng tốc xử lý.",
+      "Đồng bộ Saved Series/Collections, tối ưu đăng nhập Douyin tab mới và ổn định Local Engine."
     ],
-    "publishedAt": "2026-11-15T16:10:49+00:00"
+    "publishedAt": "2026-11-16T10:04:46+00:00"
   },
-  "signature": "Yzb3Y5oo068NGbXoMW/RQLeQ/XJI8giGGDBEVZ2t5JEv01GqmVz/XQJsFLtwJ24RmgBYBjbNUmqh+xc884IBCg=="
+  "signature": "DWfhk6aASOmRFqU68Lb0XkSla+C3XirAuo5J5+qYgz2Z0GrOM3XFL0Lnjw9wovbnFTWPU5lHFNsS7P6AgYtlBA=="
 }
