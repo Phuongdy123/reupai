@@ -182,7 +182,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <nav class="process-inspector-rail" role="tablist" aria-label="Nhóm thiết lập video" aria-orientation="vertical">
                     <button type="button" class="process-inspector-tab active" id="processInspectorTabVideo" role="tab" data-inspector-tab="video" aria-controls="processInspectorVideo" aria-selected="true" tabindex="0"><span class="process-inspector-tab-icon">${uiIcon('video', 18)}</span><span>Video</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabSubtitles" role="tab" data-inspector-tab="subtitles" aria-controls="processInspectorSubtitles" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>Phụ đề</span></button>
-                    <button type="button" class="process-inspector-tab" id="processInspectorTabOcr" role="tab" data-inspector-tab="ocr" aria-controls="processInspectorOcr" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>OCR → SRT</span></button>
+                    <button type="button" class="process-inspector-tab" id="processInspectorTabOcr" role="tab" data-inspector-tab="ocr" aria-controls="processInspectorOcr" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>SRT</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabManualSrt" role="tab" data-inspector-tab="manual-srt" aria-controls="processInspectorManualSrt" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>Phụ đề</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabAudio" role="tab" data-inspector-tab="audio" aria-controls="processInspectorAudio" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('voice', 18)}</span><span>Âm thanh</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabPresets" role="tab" data-inspector-tab="presets" aria-controls="processInspectorPresets" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('save', 18)}</span><span>Cấu hình</span></button>
@@ -281,7 +281,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </div>
             </section>
             <section class="process-settings-card process-inspector-panel process-ocr-settings-panel" id="processInspectorOcr" data-inspector-panel="ocr" role="tabpanel" aria-labelledby="processInspectorTabOcr" tabindex="0" hidden>
-                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>OCR → SRT</strong><small>Đọc chữ, dịch và xuất phụ đề</small></div>
+                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>SRT</strong><small>Đọc chữ, dịch và xuất phụ đề</small></div>
                 <p class="process-recognition-hint">Mặc định AI tự nhận diện. Chỉ điều chỉnh các mục dưới đây khi bạn muốn chọn cách lấy phụ đề.</p>
                 <div class="process-config-grid process-recognition-controls">
                 <label class="process-source-language-field">Kết quả cần xuất
