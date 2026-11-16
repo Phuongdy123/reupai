@@ -828,6 +828,154 @@ function updateSourceInfo(
 }
 
 
+function isDouyinUrlText(value) {
+    return /(?:douyin\.com|v\.douyin\.com|iesdouyin\.com)/i.test(String(value || ''));
+}
+
+function isDouyinLoginMessage(message) {
+    return /\[?DOUYIN_LOGIN_REQUIRED\]?|douyin.*(?:đăng nhập|xác minh|captcha|cookie|login)|yêu cầu đăng nhập/i.test(
+        String(message || '')
+    );
+}
+
+function cleanDouyinMessage(message) {
+    return String(message || '').replace(/\[DOUYIN_LOGIN_REQUIRED\]\s*/gi, '').trim();
+}
+
+function hideDouyinAuthPrompt() {
+    const prompt = document.getElementById('douyinAuthPrompt');
+    if (prompt) {
+        prompt.remove();
+    }
+}
+
+function syncQuickDouyinButton() {
+    const bar = document.querySelector('.source-bar');
+    if (!bar) return;
+    let btn = document.getElementById('douyinQuickLoginBtn');
+    const url = currentSourceUrl();
+    const isDouyin = isDouyinUrlText(url);
+    if (!isDouyin) {
+        if (btn) btn.hidden = true;
+        return;
+    }
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'douyinQuickLoginBtn';
+        btn.className = 'btn secondary douyin-quick-tab-btn';
+        btn.title = 'Mở Douyin ở tab mới của trình duyệt hiện tại để đăng nhập';
+        btn.textContent = 'Tab Douyin';
+        btn.addEventListener('click', () => {
+            const target = isDouyinUrlText(currentSourceUrl())
+                ? prepareSourceInput(currentSourceUrl())
+                : 'https://www.douyin.com/';
+            window.open(target || 'https://www.douyin.com/', '_blank', 'noopener,noreferrer');
+            showDouyinAuthPrompt(
+                target,
+                'Đã mở Douyin trong tab mới. Đăng nhập / xác minh xong hãy bấm "Thử đồng bộ lại" (hoặc dán Cookie).'
+            );
+        });
+        const syncBtn = document.getElementById('syncSourceBtn');
+        if (syncBtn && syncBtn.parentElement === bar) {
+            bar.insertBefore(btn, syncBtn);
+        } else {
+            bar.appendChild(btn);
+        }
+    }
+    btn.hidden = false;
+}
+
+function showDouyinAuthPrompt(sourceUrl, message = '') {
+    const info = document.getElementById('info');
+    if (!info || !info.parentElement) return;
+    hideDouyinAuthPrompt();
+
+    const targetUrl = isDouyinUrlText(sourceUrl)
+        ? prepareSourceInput(sourceUrl)
+        : 'https://www.douyin.com/';
+
+    const box = document.createElement('div');
+    box.id = 'douyinAuthPrompt';
+    box.className = 'douyin-auth-bar';
+    box.innerHTML = `
+        <div class="douyin-auth-copy">
+            <strong>Cần đăng nhập / xác minh Douyin</strong>
+            <span>${escapeHtml(cleanDouyinMessage(message) || 'Mở Douyin trong tab mới của trình duyệt hiện tại để đăng nhập rồi bấm Thử đồng bộ lại.')}</span>
+        </div>
+        <div class="douyin-auth-actions">
+            <button type="button" class="btn primary" data-dy-action="open-tab">Mở tab Douyin đăng nhập</button>
+            <button type="button" class="btn secondary" data-dy-action="retry">Thử đồng bộ lại</button>
+            <button type="button" class="btn secondary" data-dy-action="login-win">Cửa sổ tự động</button>
+            <button type="button" class="btn secondary" data-dy-action="toggle-cookie">Dán Cookie</button>
+        </div>
+        <div class="douyin-cookie-drawer" hidden>
+            <input type="text" data-dy-cookie-input placeholder="Dán Cookie header hoặc JSON cookie từ tab Douyin...">
+            <button type="button" class="btn primary" data-dy-action="save-cookie">Lưu &amp; đồng bộ lại</button>
+        </div>
+    `;
+
+    const drawer = box.querySelector('.douyin-cookie-drawer');
+    const cookieInput = box.querySelector('[data-dy-cookie-input]');
+
+    box.querySelector('[data-dy-action="open-tab"]')?.addEventListener('click', () => {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    });
+    box.querySelector('[data-dy-action="retry"]')?.addEventListener('click', () => {
+        loadVideos(true);
+    });
+    box.querySelector('[data-dy-action="toggle-cookie"]')?.addEventListener('click', () => {
+        if (!drawer) return;
+        drawer.hidden = !drawer.hidden;
+        if (!drawer.hidden) cookieInput?.focus();
+    });
+    box.querySelector('[data-dy-action="save-cookie"]')?.addEventListener('click', async () => {
+        const raw = cookieInput?.value?.trim() || '';
+        if (!raw) {
+            cookieInput?.focus();
+            return;
+        }
+        try {
+            const btn = box.querySelector('[data-dy-action="save-cookie"]');
+            if (btn) btn.disabled = true;
+            await apiJson('/api/douyin/cookies', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cookies: raw }),
+            });
+            hideDouyinAuthPrompt();
+            await loadVideos(true);
+        } catch (err) {
+            updateSourceInfo('Lỗi lưu cookie: ' + (err?.message || err));
+        } finally {
+            const btn = box.querySelector('[data-dy-action="save-cookie"]');
+            if (btn) btn.disabled = false;
+        }
+    });
+    box.querySelector('[data-dy-action="login-win"]')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        try {
+            btn.disabled = true;
+            btn.textContent = 'Đang chờ đăng nhập...';
+            await apiJson('/api/douyin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: targetUrl }),
+            });
+            hideDouyinAuthPrompt();
+            await loadVideos(true);
+        } catch (err) {
+            updateSourceInfo('Lỗi cửa sổ đăng nhập: ' + cleanDouyinMessage(err?.message || err));
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Cửa sổ tự động';
+        }
+    });
+
+    info.insertAdjacentElement('afterend', box);
+}
+
+
 function renderVideoLoadingState() {
 
     const root = document.getElementById('videos');
@@ -1165,6 +1313,9 @@ async function loadVideos(refresh = false) {
         ? 'Đang kiểm tra video mới...'
         : 'Đang tải video nguồn...';
 
+    hideDouyinAuthPrompt();
+    syncQuickDouyinButton();
+
     if (!canReuseCurrent) {
         currentVideos = [];
         renderVideoLoadingState();
@@ -1369,7 +1520,10 @@ async function loadVideos(refresh = false) {
             currentVideos = [];
             renderVideos();
             info.className = 'info-line warning';
-            info.textContent = 'Lỗi: ' + error.message;
+            info.textContent = 'Lỗi: ' + cleanDouyinMessage(error.message);
+        }
+        if (isDouyinLoginMessage(error?.message) || isDouyinUrlText(sourceUrl)) {
+            showDouyinAuthPrompt(sourceUrl, error?.message || '');
         }
     }
 }
@@ -8713,6 +8867,7 @@ function sourceDisplayNameFromContext(
 
 
 function updateFollowSourceButton() {
+    syncQuickDouyinButton();
 
     const button = (
         document.getElementById(

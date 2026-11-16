@@ -37,6 +37,34 @@ class DouyinUnavailable(
     pass
 
 
+DOUYIN_LOGIN_PREFIX = "[DOUYIN_LOGIN_REQUIRED] "
+
+_DOUYIN_SESSION_COOKIE_NAMES = {
+    "sessionid",
+    "sessionid_ss",
+    "sid_tt",
+    "sid_guard",
+    "uid_tt",
+    "uid_tt_ss",
+    "passport_csrf_token",
+    "passport_auth_status",
+    "ttwid",
+}
+
+_LOGIN_WALL_MARKERS = (
+    "扫码登录",
+    "验证码登录",
+    "短信登录",
+    "请先登录",
+    "拖动滑块",
+    "安全验证",
+    "人机验证",
+    "captcha",
+    "verify",
+    "passport",
+)
+
+
 def _browser_profile_dir() -> Path:
     """Return the persistent, user-owned Chrome profile for Douyin.
 
@@ -49,6 +77,296 @@ def _browser_profile_dir() -> Path:
     """
 
     return get_browser_dir() / "douyin"
+
+
+def _cookies_file_path() -> Path:
+    return get_browser_dir() / "douyin_cookies.json"
+
+
+def _normalize_cookie_item(raw_item: dict) -> dict | None:
+    if not isinstance(raw_item, dict):
+        return None
+    name = str(raw_item.get("name") or "").strip()
+    value = str(raw_item.get("value") or "")
+    if not name:
+        return None
+    domain = str(raw_item.get("domain") or ".douyin.com").strip() or ".douyin.com"
+    if "douyin.com" not in domain.lower():
+        return None
+    if not domain.startswith(".") and domain.count(".") == 1:
+        domain = "." + domain
+    path = str(raw_item.get("path") or "/").strip() or "/"
+    cookie: dict = {
+        "name": name,
+        "value": value,
+        "domain": domain,
+        "path": path,
+        "secure": bool(raw_item.get("secure", True)),
+        "httpOnly": bool(raw_item.get("httpOnly", False)),
+    }
+    expires = raw_item.get("expires") or raw_item.get("expirationDate")
+    if expires is not None:
+        try:
+            exp_val = float(expires)
+            if exp_val > 0:
+                cookie["expires"] = int(exp_val)
+        except (TypeError, ValueError):
+            pass
+    same_site = str(raw_item.get("sameSite") or "").strip().lower()
+    if same_site in {"strict", "lax", "none"}:
+        cookie["sameSite"] = "None" if same_site == "none" else same_site.capitalize()
+    return cookie
+
+
+def parse_cookie_input(raw_cookies) -> list[dict]:
+    """Parse JSON cookie lists, Netscape cookies.txt lines, or Cookie header text."""
+    if isinstance(raw_cookies, list):
+        parsed = [_normalize_cookie_item(item) for item in raw_cookies]
+        return [item for item in parsed if item is not None]
+
+    text = str(raw_cookies or "").strip()
+    if not text:
+        return []
+
+    if text.startswith("[") or text.startswith("{"):
+        try:
+            loaded = json.loads(text)
+            items = loaded if isinstance(loaded, list) else loaded.get("cookies") or []
+            if isinstance(items, list):
+                parsed = [_normalize_cookie_item(item) for item in items]
+                cleaned = [item for item in parsed if item is not None]
+                if cleaned:
+                    return cleaned
+        except Exception:
+            pass
+
+    cookies_by_key: dict[tuple[str, str, str], dict] = {}
+    lines = [line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    netscape_found = False
+    for line in lines:
+        parts = line.split("\t")
+        if len(parts) >= 7:
+            netscape_found = True
+            domain, _flag, path, secure, expires, name, value = parts[:7]
+            item = _normalize_cookie_item({
+                "name": name,
+                "value": value,
+                "domain": domain,
+                "path": path,
+                "secure": secure.upper() == "TRUE",
+                "expires": expires,
+            })
+            if item:
+                cookies_by_key[(item["name"], item["domain"], item["path"])] = item
+
+    if netscape_found:
+        return list(cookies_by_key.values())
+
+    header = re.sub(r"^cookie\s*:\s*", "", text, flags=re.IGNORECASE).strip()
+    for pair in header.split(";"):
+        chunk = pair.strip()
+        if "=" not in chunk:
+            continue
+        name, value = chunk.split("=", 1)
+        item = _normalize_cookie_item({"name": name.strip(), "value": value.strip()})
+        if item:
+            cookies_by_key[(item["name"], item["domain"], item["path"])] = item
+
+    return list(cookies_by_key.values())
+
+
+def load_douyin_cookies() -> list[dict]:
+    path = _cookies_file_path()
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        items = payload.get("cookies") if isinstance(payload, dict) else payload
+        if not isinstance(items, list):
+            return []
+        return [c for c in (_normalize_cookie_item(item) for item in items) if c is not None]
+    except Exception:
+        return []
+
+
+def _write_cookie_store(cookies: list[dict], *, source: str = "manual") -> dict:
+    path = _cookies_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deduped: dict[tuple[str, str, str], dict] = {}
+    for existing in load_douyin_cookies():
+        deduped[(existing["name"], existing["domain"], existing["path"])] = existing
+    for item in cookies:
+        norm = _normalize_cookie_item(item)
+        if norm:
+            deduped[(norm["name"], norm["domain"], norm["path"])] = norm
+    merged = list(deduped.values())
+    now = int(time.time())
+    path.write_text(
+        json.dumps({"updated_at": now, "source": source, "cookies": merged}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    names = [c["name"] for c in merged]
+    has_session = any(name.lower() in _DOUYIN_SESSION_COOKIE_NAMES for name in names)
+    return {
+        "ok": True,
+        "count": len(merged),
+        "has_session": has_session,
+        "updated_at": now,
+        "source": source,
+    }
+
+
+def save_douyin_cookies(raw_cookies, *, source: str = "manual") -> dict:
+    parsed = parse_cookie_input(raw_cookies)
+    if not parsed:
+        raise ValueError("Không nhận diện được cookie Douyin hợp lệ.")
+    return _write_cookie_store(parsed, source=source)
+
+
+def douyin_session_status() -> dict:
+    cookies = load_douyin_cookies()
+    names = [c["name"] for c in cookies]
+    has_session = any(name.lower() in _DOUYIN_SESSION_COOKIE_NAMES for name in names)
+    path = _cookies_file_path()
+    updated_at = None
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            updated_at = data.get("updated_at")
+        except Exception:
+            updated_at = int(path.stat().st_mtime)
+    profile_exists = (_browser_profile_dir() / "Default").exists()
+    return {
+        "cookie_count": len(cookies),
+        "has_session": has_session,
+        "profile_exists": profile_exists,
+        "ready": has_session or profile_exists,
+        "updated_at": updated_at,
+    }
+
+
+def _apply_saved_cookies(context) -> None:
+    cookies = load_douyin_cookies()
+    if not cookies:
+        return
+    try:
+        context.add_cookies(cookies)
+    except Exception:
+        pass
+
+
+def _save_context_cookies(context, *, source: str = "playwright") -> None:
+    try:
+        items = context.cookies(["https://www.douyin.com"])
+        if items:
+            cleaned = [c for c in (_normalize_cookie_item(item) for item in items) if c is not None]
+            if cleaned:
+                _write_cookie_store(cleaned, source=source)
+    except Exception:
+        pass
+
+
+def try_import_browser_cookies() -> dict:
+    """Best-effort import of .douyin.com cookies from local browsers via yt-dlp."""
+    try:
+        import yt_dlp.cookies as ytdlp_cookies
+    except Exception as err:
+        return {"ok": False, "imported": 0, "reason": str(err)}
+
+    last_reason = ""
+    preferred = os.getenv("REUP_COOKIE_BROWSER", "").strip().lower()
+    candidates = [preferred] if preferred else []
+    for browser_name in ("chrome", "edge", "firefox", "brave"):
+        if browser_name not in candidates:
+            candidates.append(browser_name)
+
+    for browser_name in candidates:
+        try:
+            jar = ytdlp_cookies.extract_cookies_from_browser(browser_name)
+            found = []
+            for cookie in jar:
+                domain = str(getattr(cookie, "domain", "") or "")
+                if "douyin.com" not in domain.lower():
+                    continue
+                found.append({
+                    "name": cookie.name,
+                    "value": cookie.value,
+                    "domain": domain,
+                    "path": getattr(cookie, "path", "/") or "/",
+                    "secure": bool(getattr(cookie, "secure", True)),
+                    "expires": getattr(cookie, "expires", None),
+                })
+            if found:
+                res = _write_cookie_store(found, source=f"browser:{browser_name}")
+                return {**res, "imported": len(found), "browser": browser_name}
+        except Exception as err:
+            last_reason = str(err)
+
+    return {
+        "ok": False,
+        "imported": 0,
+        "reason": last_reason or "Trình duyệt đang khóa file cookie (Chrome/Edge).",
+    }
+
+
+def _wait_until(page, predicate, *, timeout_ms: int, step_ms: int = 150) -> bool:
+    deadline = time.monotonic() + (max(step_ms, timeout_ms) / 1000.0)
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        page.wait_for_timeout(step_ms)
+    return bool(predicate())
+
+
+def _looks_like_login_or_captcha(page) -> bool:
+    try:
+        current_url = (page.url or "").lower()
+        if any(token in current_url for token in ("login", "passport", "captcha", "verify")):
+            return True
+        text = page.locator("body").inner_text(timeout=1200) or ""
+        low = text[:1200].lower()
+        return any(marker in low for marker in _LOGIN_WALL_MARKERS)
+    except Exception:
+        return False
+
+
+def open_login_session(target_url: str = "https://www.douyin.com/", *, timeout_ms: int = VISIBLE_LOGIN_WAIT_MS) -> dict:
+    """Open visible browser explicitly so user can log in to Douyin and persist cookies."""
+    url = str(target_url or "").strip() or "https://www.douyin.com/"
+    if "douyin.com" not in url.lower():
+        url = "https://www.douyin.com/"
+    playwright = None
+    context = None
+    try:
+        playwright, context = _open_context(headless=False)
+        page = context.pages[0] if context.pages else context.new_page()
+        page.goto(url, wait_until="domcontentloaded", timeout=DEFAULT_TIMEOUT_MS)
+
+        def logged_in_now() -> bool:
+            try:
+                cks = context.cookies(["https://www.douyin.com"])
+                names = {str(c.get("name") or "").lower() for c in cks}
+                if names & {"sessionid", "sessionid_ss", "sid_tt", "uid_tt"}:
+                    return True
+            except Exception:
+                pass
+            return False
+
+        ok = _wait_until(page, logged_in_now, timeout_ms=timeout_ms, step_ms=800)
+        _save_context_cookies(context, source="login-window")
+        status = douyin_session_status()
+        return {**status, "ok": True, "logged_in": bool(ok or status.get("has_session"))}
+    finally:
+        try:
+            if context is not None:
+                context.close()
+        except Exception:
+            pass
+        try:
+            if playwright is not None:
+                playwright.stop()
+        except Exception:
+            pass
 
 
 # =========================================================
@@ -565,6 +883,8 @@ def _open_context(
             "Không thể khởi động trình duyệt để đọc Douyin. Hãy đóng các cửa sổ ReupAI đang dùng rồi thử lại."
         ) from error
 
+    _apply_saved_cookies(context)
+
     return (
         playwright,
         context
@@ -792,10 +1112,16 @@ def _browser_profile_scan(
                 DEFAULT_TIMEOUT_MS,
         )
 
-        # Cho request danh sach bai viet dau tien.
-        page.wait_for_timeout(
-            2500
+        # Cho nhanh response dau tien: dung ngay khi da du limit hoac het trang.
+        _wait_until(
+            page,
+            lambda: len(order) >= limit or (len(order) > 0 and not state["has_more"]),
+            timeout_ms=2200,
+            step_ms=150,
         )
+        if not order:
+            # Neu chua thay, cho them ngan de tranh fail som voi mang cham.
+            _wait_until(page, lambda: len(order) > 0, timeout_ms=800, step_ms=150)
 
         if not headless:
             print()
@@ -949,7 +1275,7 @@ def _browser_profile_scan(
             # Khong dung som qua vi Douyin co lazy load cham.
             if (
                 stable_rounds
-                >= 6
+                >= 4
                 and current_count > 0
             ):
                 break
@@ -968,8 +1294,11 @@ def _browser_profile_scan(
                 """
             )
 
-            page.wait_for_timeout(
-                DEFAULT_SCROLL_WAIT_MS
+            _wait_until(
+                page,
+                lambda prev=current_count: len(order) > prev and (len(order) >= limit or not state["has_more"]),
+                timeout_ms=min(DEFAULT_SCROLL_WAIT_MS, 900),
+                step_ms=150,
             )
 
         result = [
@@ -990,7 +1319,7 @@ def _browser_profile_scan(
                         "body"
                     )
                     .inner_text(
-                        timeout=3000
+                        timeout=2500
                     )
                 )
 
@@ -998,21 +1327,22 @@ def _browser_profile_scan(
                 pass
 
             hint = (
-                body_text[:300]
+                body_text[:240]
                 .replace(
                     "\n",
                     " "
                 )
             )
 
+            login_needed = _looks_like_login_or_captcha(page) or state["captured_responses"] == 0
+            prefix = DOUYIN_LOGIN_PREFIX if login_needed else ""
             raise DouyinUnavailable(
-                "Khong bat duoc response "
-                "/aweme/v1/web/aweme/post/. "
-                "Co the Douyin yeu cau captcha/login "
-                "hoac chan headless. "
-                "Chay --login mot lan. "
-                f"Page hint: {hint}"
+                f"{prefix}Douyin đang yêu cầu đăng nhập hoặc xác minh để đọc kênh này. "
+                "Hãy mở tab Douyin trên trình duyệt hiện tại để đăng nhập (hoặc dán Cookie / mở cửa sổ đăng nhập) rồi bấm Thử lại."
+                + (f" ({hint[:120]})" if hint else "")
             )
+
+        _save_context_cookies(context, source="profile-scan")
 
         return {
             "videos":
@@ -1660,9 +1990,10 @@ def fetch_latest_meta(
         )
     )
 
-    # Thu headless truoc de web chay ngam.
-    # Neu Douyin redirect/chan headless thi tu dong
-    # fallback sang Chrome visible.
+    # Thu headless truoc de web chay ngam nhanh.
+    # Mac dinh khong tu bat cua so Chrome ngoai chan 90s trong web request;
+    # UI se moi nguoi dung dang nhap ngay trong tab moi cua trinh duyet hien tai
+    # (hoac mo cua so dang nhap theo yeu cau).
     try:
         return (
             _browser_profile_scan(
@@ -1672,33 +2003,26 @@ def fetch_latest_meta(
             )
         )
 
-    except DouyinUnavailable as first_error:
+    except DouyinUnavailable:
+        auto_visible = os.getenv("DOUYIN_AUTO_VISIBLE_LOGIN", "0").strip().lower() in {
+            "1", "true", "yes", "on",
+        }
+        if not auto_visible:
+            raise
 
         print(
             "\n[DOUYIN] Headless khong lay duoc profile."
         )
-
         print(
             "[DOUYIN] Tu dong fallback sang Chrome visible..."
         )
-
-        try:
-            return (
-                _browser_profile_scan(
-                    canonical,
-                    limit,
-                    headless=False,
-                )
+        return (
+            _browser_profile_scan(
+                canonical,
+                limit,
+                headless=False,
             )
-
-        except Exception as second_error:
-
-            raise DouyinUnavailable(
-                "Headless loi: "
-                + str(first_error)
-                + " | Visible Chrome loi: "
-                + str(second_error)
-            ) from second_error
+        )
 
 
 def fetch_latest(
@@ -2568,41 +2892,48 @@ def _download_video_browser_once(
                 DEFAULT_TIMEOUT_MS,
         )
 
-        page.wait_for_timeout(
-            2500
+        _wait_until(
+            page,
+            lambda: len(network_candidates) > 0,
+            timeout_ms=2200,
+            step_ms=150,
         )
 
         # Mot so trang chi load media sau khi video vao viewport.
-        try:
-            video_locator = (
-                page.locator(
-                    "video"
-                )
-                .first
-            )
-
-            if (
-                video_locator.count()
-                > 0
-            ):
-                video_locator.scroll_into_view_if_needed(
-                    timeout=3000
-                )
-
-                try:
-                    video_locator.click(
-                        timeout=1500,
-                        force=True,
+        if not network_candidates:
+            try:
+                video_locator = (
+                    page.locator(
+                        "video"
                     )
-                except Exception:
-                    pass
-
-                page.wait_for_timeout(
-                    1200
+                    .first
                 )
 
-        except Exception:
-            pass
+                if (
+                    video_locator.count()
+                    > 0
+                ):
+                    video_locator.scroll_into_view_if_needed(
+                        timeout=3000
+                    )
+
+                    try:
+                        video_locator.click(
+                            timeout=1500,
+                            force=True,
+                        )
+                    except Exception:
+                        pass
+
+                    _wait_until(
+                        page,
+                        lambda: len(network_candidates) > 0,
+                        timeout_ms=1200,
+                        step_ms=150,
+                    )
+
+            except Exception:
+                pass
 
         candidates = (
             _media_candidates_from_page(
@@ -2732,6 +3063,7 @@ def _download_video_browser_once(
                         "[DOUYIN] Found muxed "
                         "video + audio."
                     )
+                    _save_context_cookies(context, source="download")
 
                     return output_path
 
@@ -2793,6 +3125,7 @@ def _download_video_browser_once(
                             "[DOUYIN] Da ghep "
                             "video + audio adaptive."
                         )
+                        _save_context_cookies(context, source="download")
 
                         return Path(
                             output_path

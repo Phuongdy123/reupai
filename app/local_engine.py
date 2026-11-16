@@ -806,6 +806,15 @@ def gemini_oauth_disconnect(_: bool = Depends(require_token)):
     return {"ok": True}
 
 
+class DouyinCookiesBody(BaseModel):
+    cookies: Any = ""
+    browser: str = ""
+
+
+class DouyinLoginBody(BaseModel):
+    url: str = "https://www.douyin.com/"
+
+
 @app.post("/api/videos")
 def videos(body: SourceRequest, _: bool = Depends(require_token)):
     return api_videos(body)
@@ -814,6 +823,35 @@ def videos(body: SourceRequest, _: bool = Depends(require_token)):
 @app.post("/api/videos/page")
 def videos_page(body: PageRequest, _: bool = Depends(require_token)):
     return api_videos_page(body)
+
+
+@app.get("/api/douyin/status")
+def douyin_status(_: bool = Depends(require_token)):
+    from services.sources.douyin import douyin_session_status
+    return douyin_session_status()
+
+
+@app.post("/api/douyin/cookies")
+def douyin_cookies(body: DouyinCookiesBody, _: bool = Depends(require_token)):
+    from services.sources.douyin import save_douyin_cookies, try_import_browser_cookies
+    if body.cookies:
+        try:
+            return save_douyin_cookies(body.cookies, source="user-paste")
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err))
+    return try_import_browser_cookies()
+
+
+@app.post("/api/douyin/login")
+def douyin_login(body: DouyinLoginBody | None = None, _: bool = Depends(require_token)):
+    from services.sources.douyin import DouyinUnavailable, open_login_session
+    target = body.url if body else "https://www.douyin.com/"
+    try:
+        return open_login_session(target)
+    except DouyinUnavailable as err:
+        raise HTTPException(status_code=503, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=str(err))
 
 
 @app.post("/api/library/direct/inspect")

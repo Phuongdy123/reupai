@@ -9,6 +9,24 @@ import { ACTIVE_JOBS, JOB_LABELS, Loading, ErrorMessage, Notice, VideoCover, Pre
 import { OutputEditor } from "./output-editor";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
 import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
+import { prepareSourceInput, videoUrlForIdentity } from "../lib/source-url-input";
+
+function isDouyinLink(value) {
+  return /(?:^|\.)?(?:douyin\.com|v\.douyin\.com|iesdouyin\.com)/i.test(String(value || ""));
+}
+
+function isDouyinAuthError(message) {
+  return /\[?DOUYIN_LOGIN_REQUIRED\]?|douyin.*(?:đăng nhập|xác minh|captcha|cookie|login)|yêu cầu đăng nhập/i.test(String(message || ""));
+}
+
+function cleanStudioError(message) {
+  return String(message || "").replace(/\[DOUYIN_LOGIN_REQUIRED\]\s*/gi, "").trim();
+}
+
+function douyinLoginTargetUrl(rawUrl) {
+  const prepared = prepareSourceInput(rawUrl);
+  return isDouyinLink(prepared) ? prepared : "https://www.douyin.com/";
+}
 
 function parseDurationSeconds(video) {
   if (Number.isFinite(Number(video?.duration_sec)) && Number(video.duration_sec) > 0) return Number(video.duration_sec);
@@ -273,6 +291,10 @@ export function StudioPage({ mode = "youtube" }) {
   const [translatedTitles, setTranslatedTitles] = useState({});
   const [translatingHookId, setTranslatingHookId] = useState(null);
   const [copiedHookId, setCopiedHookId] = useState(null);
+  const [douyinAuthNeeded, setDouyinAuthNeeded] = useState(false);
+  const [douyinCookieOpen, setDouyinCookieOpen] = useState(false);
+  const [douyinCookieText, setDouyinCookieText] = useState("");
+  const [douyinBusy, setDouyinBusy] = useState(false);
 
   const toggleSmartHook = async (video) => {
     const id = video?.video_id || video?.platform_video_id;
@@ -378,10 +400,58 @@ export function StudioPage({ mode = "youtube" }) {
     return () => window.clearInterval(pollRef.current);
   }, [engineStatus, jobsByVideo, loadJobs]);
 
+  const fetchSourceVideos = useCallback(async (rawUrl, refresh = false) => {
+    const cleanUrl = prepareSourceInput(rawUrl);
+    if (!cleanUrl) throw new Error("Hãy dán link kênh Bilibili hoặc Douyin để quét lọc.");
+
+    const firstPage = await client.json("/api/videos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: cleanUrl,
+        limit: 10,
+        refresh: Boolean(refresh),
+      }),
+    });
+
+    const collected = [];
+    const seen = new Set();
+    const pushItems = (items) => {
+      for (const item of items || []) {
+        const key = item?.video_id || item?.platform_video_id;
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        collected.push(item);
+      }
+    };
+
+    pushItems(firstPage?.videos || firstPage?.items || []);
+    let hasMore = Boolean(firstPage?.has_more);
+
+    for (let page = 2; page <= 3 && hasMore && collected.length >= 10; page += 1) {
+      try {
+        const nextRes = await client.json("/api/videos/page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: cleanUrl, page, limit: 10 }),
+        });
+        const nextItems = nextRes?.videos || nextRes?.items || [];
+        if (!nextItems.length) break;
+        pushItems(nextItems);
+        hasMore = Boolean(nextRes?.has_more);
+      } catch {
+        break;
+      }
+    }
+
+    return collected;
+  }, [client]);
+
   const handleSelectSource = async (value) => {
     setSelectedSourceId(value);
     setError(null);
     setNotice(null);
+    setDouyinAuthNeeded(false);
     if (value === "all") {
       setLoading(true);
       try {
@@ -399,10 +469,36 @@ export function StudioPage({ mode = "youtube" }) {
     setSourceUrl(found.profile_url || "");
     setScanning(true);
     try {
-      const res = await client.json(`/api/videos?url=${encodeURIComponent(found.profile_url)}&page=1&limit=60`);
-      setVideos(res?.videos || res?.items || []);
+      const list = await fetchSourceVideos(found.profile_url, false);
+      setVideos(list);
     } catch (err) {
-      setError(err.message || "Không thể đọc video từ nguồn đã chọn.");
+      const msg = err?.message || "Không thể đọc video từ nguồn đã chọn.";
+      setError(cleanStudioError(msg));
+      if (isDouyinAuthError(msg) || isDouyinLink(found.profile_url)) {
+        setDouyinAuthNeeded(true);
+      }
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const scanCurrentUrl = async (targetRaw = sourceUrl, refresh = true) => {
+    const url = String(targetRaw || "").trim();
+    if (!url) { setError("Hãy dán link kênh Bilibili hoặc Douyin để quét lọc."); return; }
+    setScanning(true);
+    setError(null);
+    setNotice(null);
+    setDouyinAuthNeeded(false);
+    try {
+      const list = await fetchSourceVideos(url, refresh);
+      setVideos(list);
+      setNotice(`Đã quét ${list.length} video từ nguồn và tự động chấm điểm phù hợp cho ${isYoutube ? "YouTube Ngang" : "Shorts 9:16"}.`);
+    } catch (err) {
+      const msg = err?.message || "Không thể quét nguồn này.";
+      setError(cleanStudioError(msg));
+      if (isDouyinAuthError(msg)) {
+        setDouyinAuthNeeded(true);
+      }
     } finally {
       setScanning(false);
     }
@@ -410,20 +506,56 @@ export function StudioPage({ mode = "youtube" }) {
 
   const handleScanUrl = async (event) => {
     event?.preventDefault();
-    const url = sourceUrl.trim();
-    if (!url) { setError("Hãy dán link kênh Bilibili hoặc Douyin để quét lọc."); return; }
-    setScanning(true);
+    await scanCurrentUrl(sourceUrl, true);
+  };
+
+  const openDouyinNewTab = () => {
+    const target = douyinLoginTargetUrl(sourceUrl);
+    window.open(target, "_blank", "noopener,noreferrer");
+    setDouyinAuthNeeded(true);
+    setNotice("Đã mở Douyin ở tab mới trong trình duyệt hiện tại. Sau khi đăng nhập / xác minh xong, bấm \"Thử quét lại\" (hoặc dán Cookie nếu cần).");
+  };
+
+  const handleSaveDouyinCookies = async () => {
+    const raw = douyinCookieText.trim();
+    if (!raw) { setError("Hãy dán chuỗi Cookie Douyin (hoặc copy(document.cookie)) trước."); return; }
+    setDouyinBusy(true);
     setError(null);
-    setNotice(null);
     try {
-      const res = await client.json(`/api/videos?url=${encodeURIComponent(url)}&refresh=true&page=1&limit=60`);
-      const list = res?.videos || res?.items || [];
-      setVideos(list);
-      setNotice(`Đã quét ${list.length} video từ nguồn và tự động chấm điểm phù hợp cho ${isYoutube ? "YouTube Ngang" : "Shorts 9:16"}.`);
+      const res = await client.json("/api/douyin/cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookies: raw }),
+      });
+      setDouyinCookieOpen(false);
+      setDouyinCookieText("");
+      setDouyinAuthNeeded(false);
+      setNotice(`Đã lưu ${res?.count || 0} cookie Douyin. Đang quét lại nguồn…`);
+      if (sourceUrl.trim()) await scanCurrentUrl(sourceUrl, true);
     } catch (err) {
-      setError(err.message || "Không thể quét nguồn này.");
+      setError(err?.message || "Không lưu được cookie Douyin.");
     } finally {
-      setScanning(false);
+      setDouyinBusy(false);
+    }
+  };
+
+  const handleEngineDouyinLogin = async () => {
+    setDouyinBusy(true);
+    setError(null);
+    setNotice("Đang mở cửa sổ đăng nhập Douyin của Local Engine… Hãy đăng nhập/xác minh xong trên cửa sổ đó.");
+    try {
+      await client.json("/api/douyin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: douyinLoginTargetUrl(sourceUrl) }),
+      });
+      setDouyinAuthNeeded(false);
+      setNotice("Đã đồng bộ phiên đăng nhập Douyin. Đang quét lại nguồn…");
+      if (sourceUrl.trim()) await scanCurrentUrl(sourceUrl, true);
+    } catch (err) {
+      setError(err?.message || "Không hoàn tất đăng nhập Douyin trên Local Engine.");
+    } finally {
+      setDouyinBusy(false);
     }
   };
 
@@ -464,7 +596,7 @@ export function StudioPage({ mode = "youtube" }) {
     try {
       const payload = {
         video_id: id,
-        url: video.url || video.video_url || `https://www.bilibili.com/video/${id}`,
+        url: video.url || video.video_url || videoUrlForIdentity(id) || (video.platform === "douyin" ? `https://www.douyin.com/video/${id}` : `https://www.bilibili.com/video/${id}`),
         title: video.title || id,
         platform: video.platform || "bilibili",
         channel: "default",
@@ -599,11 +731,54 @@ export function StudioPage({ mode = "youtube" }) {
             onChange={(e) => setSourceUrl(e.target.value)}
             placeholder="Hoặc dán link kênh Bilibili / Douyin để quét chọn lọc..."
           />
+          {isDouyinLink(sourceUrl) && (
+            <button type="button" className="btn secondary" onClick={openDouyinNewTab} title="Mở Douyin trong tab mới của trình duyệt hiện tại để đăng nhập">
+              <Icon name="external" size={14} />
+              Tab Douyin
+            </button>
+          )}
           <button type="submit" className="btn primary" disabled={scanning}>
             <Icon name="search" size={15} />
             {scanning ? "Đang quét…" : "Quét & lọc nguồn"}
           </button>
         </form>
+
+        {(douyinAuthNeeded || isDouyinAuthError(error)) && (
+          <div className="douyin-auth-bar" role="region" aria-label="Đăng nhập Douyin">
+            <div className="douyin-auth-copy">
+              <strong>Cần xác minh hoặc đăng nhập Douyin</strong>
+              <span>Mở Douyin ngay trong tab mới của trình duyệt hiện tại để đăng nhập/giải captcha, hoặc dùng cửa sổ Local Engine / dán Cookie.</span>
+            </div>
+            <div className="douyin-auth-actions">
+              <button type="button" className="btn primary" onClick={openDouyinNewTab}>
+                <Icon name="external" size={14} />
+                Mở tab Douyin đăng nhập
+              </button>
+              <button type="button" className="btn secondary" disabled={scanning || douyinBusy} onClick={() => scanCurrentUrl(sourceUrl, true)}>
+                Thử quét lại
+              </button>
+              <button type="button" className="btn secondary" disabled={douyinBusy} onClick={handleEngineDouyinLogin}>
+                {douyinBusy ? "Đang chờ đăng nhập…" : "Cửa sổ tự động"}
+              </button>
+              <button type="button" className="btn secondary" onClick={() => setDouyinCookieOpen((prev) => !prev)}>
+                Dán Cookie
+              </button>
+            </div>
+            {douyinCookieOpen && (
+              <div className="douyin-cookie-drawer">
+                <input
+                  type="text"
+                  value={douyinCookieText}
+                  onChange={(e) => setDouyinCookieText(e.target.value)}
+                  placeholder="Dán Cookie header hoặc JSON cookie từ tab Douyin…"
+                />
+                <button type="button" className="btn primary" disabled={douyinBusy} onClick={handleSaveDouyinCookies}>
+                  Lưu &amp; quét lại
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="studio-preset-bar">
           <span className="studio-preset-title"><Icon name="settings" size={14} />Mastering Pro:</span>
