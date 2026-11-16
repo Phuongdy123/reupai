@@ -166,16 +166,18 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
-    const processVoicePreviewBtn = dialog.querySelector('#processVoicePreviewBtn');
-    if (processVoicePreviewBtn) {
-        processVoicePreviewBtn.onclick = () => {
+    const bindVoicePreviewButton = (btn) => {
+        if (!btn) return;
+        btn.onclick = () => {
             const pickedVoice = dialog.querySelector('#processVoice')?.value || 'Trúc Ly';
             playVoicePreview(pickedVoice, {
-                button: processVoicePreviewBtn,
+                button: btn,
                 onError: (msg) => window.alert?.(msg),
             });
         };
-    }
+    };
+    bindVoicePreviewButton(dialog.querySelector('#processVoicePreviewBtn'));
+    bindVoicePreviewButton(dialog.querySelector('#processSummaryVoicePreviewBtn'));
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
     set('processMusicVolume', defaults.music_volume ?? 0.25);
