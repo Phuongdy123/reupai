@@ -63,33 +63,61 @@ export async function playVoicePreview(voice, { button = null, text = DEFAULT_PR
   const client = typeof window !== "undefined" ? window.reupEngineClient : null;
   const previousHtml = button ? button.innerHTML : "";
   stopVoicePreview();
-  if (!client || typeof client.request !== "function") {
-    onError?.("Hãy kết nối Local Engine để nghe thử giọng AI.");
-    return;
-  }
   if (button) {
     button.disabled = true;
     button.textContent = "Đang đọc…";
   }
   try {
-    const res = await client.request("/api/tts/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
-    });
+    let res = null;
+    if (client && typeof client.request === "function") {
+      try {
+        const localRes = await client.request("/api/tts/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
+        });
+        if (localRes.ok) res = localRes;
+      } catch {
+        // Fallback to web preview route if Local Engine doesn't have /api/tts/preview yet
+      }
+    }
+    if (!res) {
+      res = await fetch("/api/tts/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
+      });
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      throw new Error(data.detail || (res.status === 404 ? "Hãy cập nhật Local Engine mới nhất để nghe thử giọng AI." : "Không thể tạo âm thanh nghe thử."));
+      throw new Error(data.detail || data.error || "Không thể tạo âm thanh nghe thử.");
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     _activePreviewUrl = url;
     const audio = new Audio(url);
+    const chosen = VIETNAMESE_TTS_VOICES.find((v) => v.value === voice);
+    if (String(voice || "").includes("shorts")) {
+      audio.playbackRate = 1.12;
+    } else if (String(voice || "").includes("tram")) {
+      audio.playbackRate = 0.94;
+    } else if (chosen?.label?.includes("Nam")) {
+      audio.playbackRate = 0.96;
+    }
     _activePreviewAudio = audio;
     audio.onended = () => stopVoicePreview();
     audio.onerror = () => stopVoicePreview();
     await audio.play();
   } catch (err) {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = "vi-VN";
+        window.speechSynthesis.speak(utter);
+        return;
+      } catch {}
+    }
     onError?.(err?.message || "Chưa phát được âm thanh nghe thử.");
   } finally {
     if (button) {

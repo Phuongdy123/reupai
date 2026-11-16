@@ -166,10 +166,26 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
+    const voiceSelect = dialog.querySelector('#processVoice');
+    const summaryVoiceSelect = dialog.querySelector('#processSummaryVoice');
+    if (summaryVoiceSelect && voiceSelect) {
+        summaryVoiceSelect.value = voiceSelect.value || 'Trúc Ly';
+        summaryVoiceSelect.onchange = () => {
+            voiceSelect.value = summaryVoiceSelect.value;
+            voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+        };
+        voiceSelect.addEventListener('change', () => {
+            if (summaryVoiceSelect.value !== voiceSelect.value) {
+                summaryVoiceSelect.value = voiceSelect.value;
+            }
+            try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+        });
+    }
     const bindVoicePreviewButton = (btn) => {
         if (!btn) return;
         btn.onclick = () => {
-            const pickedVoice = dialog.querySelector('#processVoice')?.value || 'Trúc Ly';
+            const pickedVoice = summaryVoiceSelect?.value || voiceSelect?.value || 'Trúc Ly';
             playVoicePreview(pickedVoice, {
                 button: btn,
                 onError: (msg) => window.alert?.(msg),

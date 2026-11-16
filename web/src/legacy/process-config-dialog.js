@@ -377,7 +377,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <select id="processVoice">
                         ${renderVoiceOptionsHtml()}
                     </select>
-                    <button type="button" class="btn secondary" id="processVoicePreviewBtn" style="margin-top:6px;">🔊 Nghe thử</button>
+                    <button type="button" class="btn secondary" id="processVoicePreviewBtn" style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;">${uiIcon('voice', 14)} Nghe thử</button>
                 </label>
                 </div>
             </section>
@@ -404,7 +404,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <dl>
                         <div><dt>${uiIcon('video', 13)} Khung hình</dt><dd data-output-summary="frame">Giữ tỷ lệ gốc</dd></div>
                         <div><dt>${uiIcon('captions', 13)} Lời thoại</dt><dd data-output-summary="language">Tự nhận diện → Tiếng Việt</dd></div>
-                        <div data-output-summary-row="voice"><dt>${uiIcon('voice', 13)} Giọng đọc</dt><dd style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;"><span data-output-summary="voice">Trúc Ly</span><button type="button" class="btn secondary" id="processSummaryVoicePreviewBtn" style="height:24px;min-height:24px;padding:0 9px;font-size:11px;">🔊 Nghe thử</button></dd></div>
+                        <div data-output-summary-row="voice"><dt>${uiIcon('voice', 13)} Giọng đọc</dt><dd style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;"><span data-output-summary="voice" hidden>Trúc Ly</span><select id="processSummaryVoice" aria-label="Chọn giọng đọc nhanh" style="max-width:210px;height:28px;font-size:11.5px;padding:0 8px;">${renderVoiceOptionsHtml()}</select><button type="button" class="btn secondary" id="processSummaryVoicePreviewBtn" style="height:28px;min-height:28px;padding:0 10px;font-size:11.5px;display:inline-flex;align-items:center;gap:5px;">${uiIcon('voice', 13)} Nghe thử</button></dd></div>
                     </dl>
                     <div class="process-output-tags">
                         <span title="Phong cách phụ đề" data-output-summary="style">Minimal Clean</span>
