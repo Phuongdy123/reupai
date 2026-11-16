@@ -9696,13 +9696,37 @@ body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary,
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  gap: 6px !important;
   min-height: var(--ds-control-h-sm) !important;
   height: var(--ds-control-h-sm) !important;
-  padding-inline: var(--ds-control-px-sm) !important;
+  padding-inline: 14px !important;
   border-radius: 6px 2px 6px 2px !important;
   font-size: var(--ds-text-sm) !important;
-  font-weight: var(--ds-weight-medium) !important;
+  font-weight: 600 !important;
   line-height: 1 !important;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease, border-color 140ms ease !important;
+}
+body.theme-xports .compact-video-card .sub-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.28) !important;
+}
+body.theme-xports .compact-video-card .sub-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4) !important;
+  transform: translateY(-1px);
+}
+body.theme-xports .compact-video-card .voice-btn {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border: 1px solid rgba(239, 68, 68, 0.36) !important;
+  color: #fca5a5 !important;
+}
+body.theme-xports .compact-video-card .voice-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }
 body.theme-xports .compact-video-card .mini-result {
   border: 1px solid var(--ds-border-strong) !important;
@@ -10803,7 +10827,29 @@ html[data-theme="light"] body.theme-xports #videos .compact-video-card.is-proces
   border-color: var(--ds-border-hover) !important;
 }
 
-html[data-theme="light"] body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn):is(:hover, :focus-visible):not(:disabled),
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .sub-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border-color: #dc2626 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.24) !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .sub-btn:is(:hover, :focus-visible):not(:disabled) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.34) !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .voice-btn {
+  background: #ffffff !important;
+  border-color: rgba(239, 68, 68, 0.42) !important;
+  color: #dc2626 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .voice-btn:is(:hover, :focus-visible):not(:disabled) {
+  background: #fef2f2 !important;
+  border-color: #ef4444 !important;
+  color: #b91c1c !important;
+}
 html[data-theme="light"] body.theme-xports #batchBar > button:not(:disabled) {
   background: var(--ds-surface-hover) !important;
   border-color: var(--ds-border-hover) !important;

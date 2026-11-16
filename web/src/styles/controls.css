@@ -734,13 +734,37 @@ body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary,
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  gap: 6px !important;
   min-height: var(--ds-control-h-sm) !important;
   height: var(--ds-control-h-sm) !important;
-  padding-inline: var(--ds-control-px-sm) !important;
+  padding-inline: 14px !important;
   border-radius: 6px 2px 6px 2px !important;
   font-size: var(--ds-text-sm) !important;
-  font-weight: var(--ds-weight-medium) !important;
+  font-weight: 600 !important;
   line-height: 1 !important;
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease, border-color 140ms ease !important;
+}
+body.theme-xports .compact-video-card .sub-btn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.28) !important;
+}
+body.theme-xports .compact-video-card .sub-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4) !important;
+  transform: translateY(-1px);
+}
+body.theme-xports .compact-video-card .voice-btn {
+  background: rgba(239, 68, 68, 0.12) !important;
+  border: 1px solid rgba(239, 68, 68, 0.36) !important;
+  color: #fca5a5 !important;
+}
+body.theme-xports .compact-video-card .voice-btn:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22) !important;
+  border-color: rgba(239, 68, 68, 0.65) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }
 body.theme-xports .compact-video-card .mini-result {
   border: 1px solid var(--ds-border-strong) !important;
