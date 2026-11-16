@@ -1389,6 +1389,7 @@ class SavedSeriesBody(BaseModel):
     sort_mode: Optional[str] = "episode_asc"
     config: Optional[dict] = None
     video_ids: Optional[list[str]] = None
+    videos: Optional[list[VideoBody]] = None
 
 
 @router.get("/series/saved")
@@ -1401,6 +1402,18 @@ def api_list_saved_series(request: Request):
 @router.post("/series/saved")
 def api_save_series(body: SavedSeriesBody, request: Request):
     user_id = user_id_from_request(request)
+    ordered_ids = list(body.video_ids or [])
+    if body.videos:
+        seen_ids = set(ordered_ids)
+        for video in body.videos[:500]:
+            payload = video.model_dump()
+            upsert_video_dict(
+                payload,
+                source_type="source" if video.source_id else "direct",
+            )
+            if video.video_id and video.video_id not in seen_ids:
+                seen_ids.add(video.video_id)
+                ordered_ids.append(video.video_id)
     item = save_series_entry(
         user_id=user_id,
         series_key=body.series_key,
@@ -1409,7 +1422,7 @@ def api_save_series(body: SavedSeriesBody, request: Request):
         source_label=body.source_label or "",
         sort_mode=body.sort_mode or "episode_asc",
         config=body.config or {},
-        video_ids=body.video_ids or [],
+        video_ids=ordered_ids,
     )
     return {"ok": True, "series": item}
 

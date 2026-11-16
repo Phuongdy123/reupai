@@ -186,7 +186,13 @@ export function LibraryPage({ kind }) {
     try {
       const params = new URLSearchParams({ series: item.series_key, limit: "2000" });
       const data = await client.json(`/api/library/videos?${params}`);
-      const list = [...(data.videos || [])].sort((a, b) => {
+      let rawVideos = data.videos || [];
+      if (!rawVideos.length && Array.isArray(item.video_ids) && item.video_ids.length) {
+        const allData = await client.json("/api/library/videos?limit=2000");
+        const idSet = new Set(item.video_ids.map(String));
+        rawVideos = (allData.videos || []).filter((v) => idSet.has(String(v.video_id)));
+      }
+      const list = [...rawVideos].sort((a, b) => {
         if (item.sort_mode === "oldest_first") {
           const pa = String(a.published_at || "9999-99-99");
           const pb = String(b.published_at || "9999-99-99");
@@ -202,6 +208,8 @@ export function LibraryPage({ kind }) {
         return;
       }
       const cfg = item.config || {};
+      const apiMode = cfg.mode === "subtitle" ? "subtitle" : "voiceover";
+      const aspectRatio = cfg.aspect_ratio && cfg.aspect_ratio !== "auto" ? cfg.aspect_ratio : null;
       let queued = 0;
       for (const video of remaining) {
         try {
@@ -210,19 +218,18 @@ export function LibraryPage({ kind }) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               video_id: video.video_id,
-              channel: "default",
+              channel: video.channel_key || "default",
               url: video.url || "",
-              title: video.title || video.video_id,
-              mode: cfg.mode || "both",
-              voice: cfg.voice || "vi-VN-NamMinhNeural",
-              voice_speed: Number(cfg.voice_speed || 1.0),
-              source_lang: cfg.source_lang || "auto",
-              target_lang: cfg.target_lang || "vi",
+              mode: apiMode,
+              voice: cfg.voice || "Trúc Ly",
+              tts_speed: Number(cfg.voice_speed || 1.0),
+              source_language: cfg.source_lang || "auto",
               transcript_source: cfg.transcript_source || "audio",
-              aspect_ratio: cfg.aspect_ratio || "auto",
+              aspect_ratio: aspectRatio,
               boost_gpu: Boolean(cfg.boost_gpu),
               ocr_use_gpu: Boolean(cfg.boost_gpu),
               ocr_parallelism: cfg.boost_gpu ? 4 : 2,
+              stability_mode: true,
             }),
           });
           queued += 1;

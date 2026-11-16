@@ -88,6 +88,7 @@ from services.library_api import (
     CollectionVideosBody,
     DirectVideoBody,
     FavoriteBody,
+    SavedSeriesBody,
     SavedSourceBody,
     SavedSourcePatchBody,
     UiStateBody,
@@ -96,14 +97,17 @@ from services.library_api import (
     api_collections,
     api_create_collection,
     api_delete_collection,
+    api_delete_saved_series,
     api_delete_source,
     api_direct_video,
     api_get_ui_state,
     api_library_videos,
+    api_list_saved_series,
     api_meta,
     api_patch_source,
     api_put_ui_state,
     api_remove_collection_video,
+    api_save_series,
     api_save_source,
     api_saved_sources,
     api_series,
@@ -916,58 +920,46 @@ def _saved_series_file() -> Path:
     return get_config_dir() / "saved_series.json"
 
 
-def _read_saved_series() -> list[dict[str, Any]]:
+def _migrate_legacy_saved_series_once() -> None:
     path = _saved_series_file()
     if not path.is_file():
-        return []
+        return
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
+        items = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(items, list):
+            req = local_library_request()
+            for entry in reversed(items):
+                if not isinstance(entry, dict) or not str(entry.get("series_key") or "").strip():
+                    continue
+                body = SavedSeriesBody(
+                    series_key=str(entry.get("series_key") or "").strip(),
+                    name=str(entry.get("name") or entry.get("series_key") or "").strip(),
+                    source_key=str(entry.get("source_key") or ""),
+                    source_label=str(entry.get("source_label") or ""),
+                    sort_mode=str(entry.get("sort_mode") or "episode_asc"),
+                    config=entry.get("config") if isinstance(entry.get("config"), dict) else {},
+                    video_ids=[str(v) for v in (entry.get("video_ids") or []) if v],
+                )
+                api_save_series(body, req)
+        path.replace(path.with_name("saved_series.json.migrated"))
     except Exception:
-        return []
-
-
-def _write_saved_series(items: list[dict[str, Any]]) -> None:
-    path = _saved_series_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+        pass
 
 
 @app.get("/api/library/series/saved")
 def list_saved_series(_: bool = Depends(require_token)):
-    return {"series": _read_saved_series()}
+    _migrate_legacy_saved_series_once()
+    return api_list_saved_series(local_library_request())
 
 
 @app.post("/api/library/series/saved")
-def upsert_saved_series(payload: dict[str, Any], _: bool = Depends(require_token)):
-    series_key = str(payload.get("series_key") or "").strip()
-    if not series_key:
-        raise HTTPException(status_code=400, detail="Thiếu series_key.")
-    items = [item for item in _read_saved_series() if item.get("series_key") != series_key]
-    entry = {
-        "series_key": series_key,
-        "name": str(payload.get("name") or series_key).strip(),
-        "source_key": str(payload.get("source_key") or "").strip(),
-        "source_label": str(payload.get("source_label") or "").strip(),
-        "sort_mode": str(payload.get("sort_mode") or "episode_asc"),
-        "config": payload.get("config") if isinstance(payload.get("config"), dict) else {},
-        "video_ids": payload.get("video_ids") if isinstance(payload.get("video_ids"), list) else [],
-        "total_count": len(payload.get("video_ids") or []),
-        "processed_count": int(payload.get("processed_count") or 0),
-        "pending_count": int(payload.get("pending_count") or len(payload.get("video_ids") or [])),
-        "processing_count": 0,
-        "saved_at": int(time.time()),
-    }
-    items.insert(0, entry)
-    _write_saved_series(items)
-    return {"series": entry}
+def upsert_saved_series(body: SavedSeriesBody, _: bool = Depends(require_token)):
+    return api_save_series(body, local_library_request())
 
 
 @app.delete("/api/library/series/saved/{series_key}")
 def remove_saved_series(series_key: str, _: bool = Depends(require_token)):
-    items = [item for item in _read_saved_series() if item.get("series_key") != series_key]
-    _write_saved_series(items)
-    return {"ok": True}
+    return api_delete_saved_series(series_key, local_library_request())
 
 
 _TTS_PREVIEW_LOCK = threading.Lock()

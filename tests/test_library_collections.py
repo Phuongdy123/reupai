@@ -47,6 +47,27 @@ class CollectionBatchTests(unittest.TestCase):
             library_api.api_add_collection_videos(3, oversized, self.request)
         self.assertEqual(too_many.exception.status_code, 400)
 
+    def test_save_series_upserts_episode_videos_into_library(self):
+        body = library_api.SavedSeriesBody(
+            series_key="tuyet the",
+            name="Tuyệt Thế",
+            videos=[
+                library_api.VideoBody(video_id="BVep1", title="Tuyệt Thế Tập 1", source_id=4),
+                library_api.VideoBody(video_id="BVep2", title="Tuyệt Thế Tập 2", source_id=4),
+            ],
+        )
+        with patch.object(library_api, "upsert_video_dict") as upsert, patch.object(
+            library_api,
+            "save_series_entry",
+            return_value={"series_key": "tuyet the", "total_count": 2},
+        ) as save_entry:
+            result = library_api.api_save_series(body, self.request)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(upsert.call_count, 2)
+        save_entry.assert_called_once()
+        self.assertEqual(save_entry.call_args.kwargs["video_ids"], ["BVep1", "BVep2"])
+
 
 if __name__ == "__main__":
     unittest.main()

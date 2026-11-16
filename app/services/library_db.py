@@ -1263,7 +1263,7 @@ def list_collections(
                 """
                 SELECT
                     c.*,
-                    COUNT(cv.id) AS video_count
+                    COUNT(DISTINCT cv.platform_video_id) AS video_count
                 FROM collections c
                 LEFT JOIN collection_videos cv
                     ON cv.collection_id = c.id
@@ -1617,6 +1617,20 @@ def remove_video_from_collection(
             ),
         )
 
+        conn.execute(
+            """
+            UPDATE collections
+            SET updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                now(),
+                int(
+                    collection_id
+                ),
+            ),
+        )
+
         conn.commit()
 
         return True
@@ -1861,6 +1875,31 @@ def list_library_videos(
         )
         for item in result:
             item.update(states.get(item["video_id"], {}))
+
+    if result and include_local_state:
+        video_ids_list = [str(item["video_id"]) for item in result if item.get("video_id")]
+        if video_ids_list:
+            meta_conn = get_connection()
+            try:
+                placeholders = ",".join("?" for _ in video_ids_list)
+                col_rows = meta_conn.execute(
+                    f"""
+                    SELECT cv.platform_video_id, c.id AS collection_id
+                    FROM collection_videos cv
+                    JOIN collections c ON c.id = cv.collection_id
+                    WHERE c.user_id = ?
+                      AND cv.platform_video_id IN ({placeholders})
+                    ORDER BY c.id
+                    """,
+                    (int(user_id), *video_ids_list),
+                ).fetchall()
+            finally:
+                meta_conn.close()
+            col_map = {}
+            for r in col_rows:
+                col_map.setdefault(r["platform_video_id"], []).append(int(r["collection_id"]))
+            for item in result:
+                item["collection_ids"] = col_map.get(item["video_id"], [])
 
     result.sort(
         key=lambda item: (

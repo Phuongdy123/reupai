@@ -6384,6 +6384,13 @@ async function deleteCollectionUi() {
 
             currentView =
                 'source';
+            activeSeriesKey = '';
+            updateViewLabel('Nguồn video');
+            if (typeof loadVideos === 'function') {
+                await loadVideos(false);
+            } else {
+                renderVideos();
+            }
         }
 
         saveUiState();
@@ -6542,6 +6549,7 @@ async function addVideoToCollectionId(
 
         await loadCollections();
         await loadSeries();
+        renderVideos();
 
         if (card) {
 
@@ -7349,29 +7357,40 @@ async function toggleSaveCurrentSeries() {
             updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
         } else {
             const item = seriesGroups.find((value) => value.series_key === key);
-            const videoIds = currentVideos.filter((v) => v.series_key === key).map((v) => v.video_id);
+            const allCandidates = Array.from(
+                new Map(
+                    [...Object.values(pageCache).flat(), ...currentVideos]
+                        .filter((v) => v && v.video_id && v.series_key === key)
+                        .map((v) => [v.video_id, v])
+                ).values()
+            );
+            const videoIds = allCandidates.map((v) => v.video_id);
             const payload = {
                 series_key: key,
                 name: item?.name || key,
-                source_key: item?.source_key || currentVideos.find((v) => v.series_key === key)?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
+                source_key: item?.source_key || allCandidates[0]?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
                 source_label: item?.source_label || '',
                 sort_mode: 'episode_asc',
                 video_ids: videoIds,
+                videos: allCandidates.slice(0, 500).map(videoLibraryPayload),
             };
+            let savedEntry = null;
             try {
-                await apiJson('/api/library/series/saved', {
+                const res = await apiJson('/api/library/series/saved', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                savedEntry = res?.series || null;
             } catch (err) {
                 if (!/not found|404/i.test(String(err?.message || ''))) throw err;
             }
             const next = _readLocalSavedSeries().filter((s) => s.series_key !== key);
-            next.unshift({ ...payload, saved_at: Date.now() });
+            const { videos: _omitVideos, ...localMeta } = payload;
+            next.unshift({ ...(savedEntry || localMeta), saved_at: Date.now() });
             _writeLocalSavedSeries(next);
             savedSeriesKeys.add(key);
-            updateSourceInfo(`Đã lưu Series "${item?.name || key}".`);
+            updateSourceInfo(`Đã lưu Series "${item?.name || key}" (${videoIds.length} tập).`);
         }
     } catch (err) {
         alert(err?.message || 'Không thể cập nhật Series.');
@@ -8030,63 +8049,54 @@ async function addSelectedToCollection() {
         `0/${videos.length}`
     );
 
+    let addSucceeded = false;
+
     try {
 
-        for (
-            let index = 0;
-            index < videos.length;
-            index += 1
-        ) {
-
-            const video = (
-                videos[
-                    index
-                ]
-            );
-
-            renderBatchBar(
-                `${index + 1}/${videos.length}`
-            );
-
-            await apiJson(
-                (
-                    '/api/library/collections/'
-                    + encodeURIComponent(
-                        collectionId
-                    )
-                    + '/videos'
-                ),
-                {
-                    method:
-                        'POST',
-
-                    headers: {
-                        'Content-Type':
-                            'application/json'
-                    },
-
-                    body:
-                        JSON.stringify(
-                            videoLibraryPayload(
-                                video
-                            )
-                        )
+        for (let start = 0; start < videos.length; start += 200) {
+            const chunk = videos.slice(start, start + 200);
+            renderBatchBar(`${Math.min(start + chunk.length, videos.length)}/${videos.length}`);
+            try {
+                await apiJson(
+                    `/api/library/collections/${encodeURIComponent(collectionId)}/videos/batch`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ videos: chunk.map(videoLibraryPayload) }),
+                    }
+                );
+                for (const video of chunk) {
+                    video.collection_ids = Array.from(
+                        new Set([...(video.collection_ids || []), collectionId])
+                    );
                 }
-            );
-
-            video.collection_ids = Array.from(
-                new Set([
-                    ...(
-                        video.collection_ids
-                        || []
-                    ),
-                    collectionId
-                ])
-            );
+            } catch (batchErr) {
+                if (!/not found|404/i.test(String(batchErr?.message || ''))) {
+                    throw batchErr;
+                }
+                for (let idx = 0; idx < chunk.length; idx += 1) {
+                    const video = chunk[idx];
+                    renderBatchBar(`${start + idx + 1}/${videos.length}`);
+                    await apiJson(
+                        `/api/library/collections/${encodeURIComponent(collectionId)}/videos`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(videoLibraryPayload(video)),
+                        }
+                    );
+                    video.collection_ids = Array.from(
+                        new Set([...(video.collection_ids || []), collectionId])
+                    );
+                }
+            }
         }
 
         await loadCollections();
         await loadSeries();
+        renderVideos();
+        saveUiState();
+        addSucceeded = true;
 
     } catch (
         error
@@ -8102,7 +8112,7 @@ async function addSelectedToCollection() {
             false;
 
         renderBatchBar(
-            'Đã thêm'
+            addSucceeded ? 'Đã thêm' : 'Lỗi'
         );
 
         setTimeout(

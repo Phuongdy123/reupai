@@ -24,7 +24,7 @@ const PAGE_SIZE = 12;
 
 const DEFAULT_SERIES_CONFIG = {
   mode: "both",
-  voice: "vi-VN-NamMinhNeural",
+  voice: "Trúc Ly",
   voice_speed: 1.0,
   source_lang: "auto",
   target_lang: "vi",
@@ -429,7 +429,8 @@ export function SeriesPage() {
     setSaving(true);
     setError(null);
     try {
-      const orderedIds = (customVideos || sortedLocalVideos).map((v) => v.video_id);
+      const targetList = customVideos || sortedLocalVideos;
+      const orderedIds = targetList.map((v) => v.video_id);
       const payload = {
         series_key: selected.series_key,
         name: selected.name,
@@ -438,7 +439,7 @@ export function SeriesPage() {
         sort_mode: sortMode,
         config: seriesConfig,
         video_ids: orderedIds,
-        total_count: orderedIds.length,
+        videos: targetList.slice(0, 500).map(videoBody),
       };
       let res = null;
       try {
@@ -451,12 +452,17 @@ export function SeriesPage() {
         if (!/not found|404/i.test(String(err?.message || ""))) throw err;
       }
       const nextLocal = _readLocalSavedSeries().filter((s) => s.series_key !== selected.series_key);
-      nextLocal.unshift({ ...payload, saved_at: Date.now() });
+      const { videos: _omitVideos, ...localMeta } = payload;
+      nextLocal.unshift({
+        ...(res?.series || localMeta),
+        total_count: res?.series?.total_count ?? orderedIds.length,
+        saved_at: Date.now(),
+      });
       _writeLocalSavedSeries(nextLocal);
       const updated = await client.json("/api/library/series/saved").catch(() => ({ series: [] }));
       setSavedSeries(_mergeSavedSeries(updated.series || []));
       setNotice(`Đã lưu Series "${selected.name}" (${seriesProgress.done}/${seriesProgress.total}).`);
-      return res?.series || payload;
+      return res?.series || localMeta;
     } catch (requestError) {
       setError(requestError.message || "Không thể lưu Series.");
       return null;
@@ -478,22 +484,31 @@ export function SeriesPage() {
 
     try {
       if (seriesItemMeta) {
-        await client
+        const metaPayload = {
+          series_key: seriesItemMeta.series_key,
+          name: seriesItemMeta.name,
+          source_key: seriesItemMeta.source_key || "",
+          source_label: seriesItemMeta.source_label || "",
+          sort_mode: seriesItemMeta.sort_mode || sortMode,
+          config: finalCfg,
+          video_ids: seriesItemMeta.video_ids || targetVideos.map((v) => v.video_id),
+          videos: targetVideos.slice(0, 500).map(videoBody),
+        };
+        const savedMeta = await client
           .json("/api/library/series/saved", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              series_key: seriesItemMeta.series_key,
-              name: seriesItemMeta.name,
-              source_key: seriesItemMeta.source_key || "",
-              source_label: seriesItemMeta.source_label || "",
-              sort_mode: seriesItemMeta.sort_mode || sortMode,
-              config: finalCfg,
-              video_ids: seriesItemMeta.video_ids || targetVideos.map((v) => v.video_id),
-            }),
+            body: JSON.stringify(metaPayload),
           })
-          .catch(() => {});
+          .catch(() => null);
+        const { videos: _omitVideos, ...localMeta } = metaPayload;
+        const nextLocal = _readLocalSavedSeries().filter((s) => s.series_key !== metaPayload.series_key);
+        nextLocal.unshift({ ...(savedMeta?.series || localMeta), saved_at: Date.now() });
+        _writeLocalSavedSeries(nextLocal);
       }
+
+      const apiMode = finalCfg.mode === "subtitle" ? "subtitle" : "voiceover";
+      const aspectRatio = finalCfg.aspect_ratio && finalCfg.aspect_ratio !== "auto" ? finalCfg.aspect_ratio : null;
 
       for (const video of targetVideos) {
         if (!video?.video_id) continue;
@@ -503,19 +518,18 @@ export function SeriesPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               video_id: video.video_id,
-              channel: "default",
+              channel: video.channel_key || "default",
               url: video.url || "",
-              title: video.title || video.video_id,
-              mode: finalCfg.mode || "both",
-              voice: finalCfg.voice || "vi-VN-NamMinhNeural",
-              voice_speed: Number(finalCfg.voice_speed || 1.0),
-              source_lang: finalCfg.source_lang || "auto",
-              target_lang: finalCfg.target_lang || "vi",
+              mode: apiMode,
+              voice: finalCfg.voice || "Trúc Ly",
+              tts_speed: Number(finalCfg.voice_speed || 1.0),
+              source_language: finalCfg.source_lang || "auto",
               transcript_source: finalCfg.transcript_source || "audio",
-              aspect_ratio: finalCfg.aspect_ratio || "auto",
+              aspect_ratio: aspectRatio,
               boost_gpu: Boolean(finalCfg.boost_gpu),
               ocr_use_gpu: Boolean(finalCfg.boost_gpu),
               ocr_parallelism: finalCfg.boost_gpu ? 4 : 2,
+              stability_mode: true,
             }),
           });
           queuedCount += 1;
@@ -530,7 +544,7 @@ export function SeriesPage() {
       }
 
       const savedRes = await client.json("/api/library/series/saved").catch(() => ({ series: [] }));
-      setSavedSeries(savedRes.series || []);
+      setSavedSeries(_mergeSavedSeries(savedRes.series || []));
       if (selected) await loadEpisodes();
       else await loadSeries();
 
@@ -568,7 +582,13 @@ export function SeriesPage() {
     try {
       const params = new URLSearchParams({ series: savedItem.series_key, limit: "2000" });
       const data = await client.json(`/api/library/videos?${params}`);
-      const ordered = sortEpisodes(data.videos || [], savedItem.sort_mode || "episode_asc");
+      let rawVideos = data.videos || [];
+      if (!rawVideos.length && Array.isArray(savedItem.video_ids) && savedItem.video_ids.length) {
+        const allData = await client.json("/api/library/videos?limit=2000");
+        const idSet = new Set(savedItem.video_ids.map(String));
+        rawVideos = (allData.videos || []).filter((v) => idSet.has(String(v.video_id)));
+      }
+      const ordered = sortEpisodes(rawVideos, savedItem.sort_mode || "episode_asc");
       const remaining = ordered.filter((v) => !isVideoDone(v) && !v.processing);
       if (!remaining.length) {
         setNotice(`Series "${savedItem.name}" đã xử lý xong toàn bộ (${savedItem.progress_label}).`);
