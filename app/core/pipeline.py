@@ -3514,17 +3514,19 @@ def pipeline(
 
 
         offline_mode = bool(config.get("offline_mode"))
-        stability_mode = bool(config.get("stability_mode") or offline_mode)
+        boost_gpu = bool(config.get("boost_gpu"))
+        stability_mode = bool(config.get("stability_mode", True))
         _saved_env = {}
-        _env_updates = {}
-        if stability_mode:
+        _env_updates = {
+            "LOCAL_TRANSLATION_FALLBACK": "1",
+        }
+        _env_updates.setdefault("REUP_RENDER_CHUNK_SECONDS", os.getenv("REUP_RENDER_CHUNK_SECONDS", "600"))
+        if stability_mode and not boost_gpu:
             _env_updates["REUP_STABILITY_MODE"] = "1"
             _env_updates["REUP_TTS_ONNX_WORKERS"] = "1"
-            _env_updates.setdefault("REUP_RENDER_CHUNK_SECONDS", os.getenv("REUP_RENDER_CHUNK_SECONDS", "600"))
         if offline_mode:
             _env_updates["REUP_OFFLINE_MODE"] = "1"
             _env_updates["REUP_TTS_EDGE_FALLBACK"] = "0"
-            _env_updates["LOCAL_TRANSLATION_FALLBACK"] = "1"
         for _k, _v in _env_updates.items():
             _saved_env[_k] = os.environ.get(_k)
             os.environ[_k] = _v
@@ -3539,7 +3541,7 @@ def pipeline(
             message=(
                 "Che do Offline · Uu tien on dinh dang kich hoat."
                 if offline_mode
-                else "Dang kiem tra quyen Gemini."
+                else "Dang kiem tra ket noi va chuan bi checkpoint xu ly."
             ),
             mode=mode,
         )

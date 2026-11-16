@@ -166,6 +166,24 @@ class LongVideoResilienceTests(unittest.TestCase):
             self.assertEqual(translator._nllb_source_lang("en"), "eng_Latn")
             self.assertEqual(translator._nllb_source_lang("ja"), "jpn_Jpan")
 
+    def test_translator_auto_switches_to_local_nllb_when_offline_without_manual_toggle(self):
+        saved_offline = os.environ.pop("REUP_OFFLINE_MODE", None)
+        try:
+            with patch.dict(os.environ, {"LOCAL_TRANSLATION_FALLBACK": "1"}), \
+                 patch.object(translator, "OAUTH_CREDENTIALS", True), \
+                 patch.object(translator, "get_credentials", return_value=type("C", (), {"token": "ok"})()), \
+                 patch.object(translator, "get_project_id", return_value="proj-1"), \
+                 patch.object(translator, "authorized_request", side_effect=translator.requests.RequestException("offline")), \
+                 patch.object(translator, "_local_nllb_cached", return_value=True), \
+                 patch.object(translator.time, "sleep"):
+                translator.ensure_translation_ready()
+                self.assertEqual(os.environ.get("REUP_OFFLINE_MODE"), "1")
+        finally:
+            if saved_offline is None:
+                os.environ.pop("REUP_OFFLINE_MODE", None)
+            else:
+                os.environ["REUP_OFFLINE_MODE"] = saved_offline
+
     def test_api_download_preserves_non_empty_part_session_on_failure(self):
         folder = self.root / "BV1LongVideo"
         folder.mkdir(parents=True)

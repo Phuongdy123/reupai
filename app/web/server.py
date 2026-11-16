@@ -557,7 +557,7 @@ class ProcessRequest(BaseModel):
     regenerate_voice: bool = False
     revised_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     rerender_music_path: Optional[str] = None
-    stability_mode: bool = False
+    stability_mode: bool = True
     offline_mode: bool = False
 
 

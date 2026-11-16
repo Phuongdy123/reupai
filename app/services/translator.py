@@ -153,12 +153,27 @@ def _is_gemini_api_disabled(error: Exception) -> bool:
     )
 
 
+def _local_nllb_cached() -> bool:
+    """Return True when local NLLB weights + libraries are already cached on disk."""
+    try:
+        from transformers import AutoTokenizer  # noqa: F401
+        import torch  # noqa: F401
+        AutoTokenizer.from_pretrained(LOCAL_MODEL_NAME, local_files_only=True)
+        return True
+    except Exception:
+        return False
+
+
 def ensure_translation_ready() -> None:
     """Fail before download/transcription when Google API access is unavailable."""
     if _is_offline_mode():
         print("[translator] Che do Offline dang bat -> bo qua kiem tra Gemini online.")
         return
     if not API_KEY and not OAUTH_CREDENTIALS:
+        if _local_fallback_active() and _local_nllb_cached():
+            print("[translator] Khong co Gemini key/OAuth -> tu dong dung NLLB Offline da tai san.")
+            os.environ["REUP_OFFLINE_MODE"] = "1"
+            return
         if _local_fallback_active():
             return
         raise GeminiSetupError(str(_require_gemini_credentials_error()))
@@ -167,6 +182,10 @@ def ensure_translation_ready() -> None:
     credentials = get_credentials()
     if not credentials or not credentials.token:
         if google_oauth_status().get("temporary_error"):
+            if _local_fallback_active() and _local_nllb_cached():
+                print("[translator] Mat mang tam thoi -> tu dong chuyen sang NLLB Offline.")
+                os.environ["REUP_OFFLINE_MODE"] = "1"
+                return
             raise GeminiSetupError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
         raise GeminiSetupError(
             "Phiên đăng nhập Google đã hết hạn. Mở Cài đặt Local Engine và kết nối Google lại."
@@ -185,6 +204,10 @@ def ensure_translation_ready() -> None:
             )
         except requests.RequestException:
             if attempt == 2:
+                if _local_fallback_active() and _local_nllb_cached():
+                    print("[translator] Khong ket noi duoc Internet/Gemini -> tu dong dung NLLB Offline.")
+                    os.environ["REUP_OFFLINE_MODE"] = "1"
+                    return
                 raise GeminiSetupError("Chưa liên lạc được với Gemini. Kiểm tra Internet rồi thử lại; không cần kết nối Google lại.")
         if response is not None and response.status_code not in {429, 500, 502, 503, 504}:
             break

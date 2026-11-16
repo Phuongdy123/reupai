@@ -128,20 +128,6 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processOcrParallelism', enabled ? 4 : 2);
         };
     }
-    const modalStabilityOffline = dialog.querySelector('#processStabilityOffline');
-    if (modalStabilityOffline) {
-        const barStability = document.getElementById('sourceStabilityOfflineToggle');
-        modalStabilityOffline.checked = Boolean(barStability ? barStability.checked : defaults.offline_mode);
-        modalStabilityOffline.onchange = () => {
-            const enabled = Boolean(modalStabilityOffline.checked);
-            if (barStability) barStability.checked = enabled;
-            try {
-                localStorage.setItem('reupai:stability-offline', enabled ? '1' : '0');
-            } catch {
-                // ignore storage errors
-            }
-        };
-    }
     dialog.querySelector('#processOcrMergeSimilar').checked = defaults.ocr_merge_similar !== false;
     const transcriptSource = dialog.querySelector('#processTranscriptSource');
     const ocrOptions = dialog.querySelector('#processOcrOptions');
@@ -1733,8 +1719,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             ocr_parallelism: Number(value('processOcrParallelism') || 2),
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             boost_gpu: Boolean(dialog.querySelector('#processBoostGpu')?.checked || document.getElementById('boostGpuToggle')?.checked || dialog.querySelector('#processOcrUseGpu')?.checked),
-            stability_mode: Boolean(dialog.querySelector('#processStabilityOffline')?.checked || document.getElementById('sourceStabilityOfflineToggle')?.checked),
-            offline_mode: Boolean(dialog.querySelector('#processStabilityOffline')?.checked || document.getElementById('sourceStabilityOfflineToggle')?.checked),
+            stability_mode: true,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
             ocr_similarity_threshold: Number(value('processOcrSimilarity') || 0.82),
             subtitle_style: value('processSubtitleStyle') || 'minimal',
