@@ -16,6 +16,25 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <h3 id="processConfigTitle">Thiết lập video</h3>
                     <p><span id="processConfigMode">Vietsub</span> · Kiểm tra và bắt đầu khi bạn sẵn sàng</p>
                 </div>
+                <div class="process-flow-switch" role="group" aria-label="Chế độ xử lý">
+                    <button type="button" class="btn secondary" id="processFlowWizardBtn">Từng bước (5 bước)</button>
+                    <button type="button" class="btn primary" id="processFlowQuickBtn">Xử lý nhanh</button>
+                </div>
+            </div>
+
+            <div class="process-wizard-bar" id="processWizardBar" hidden>
+                <nav class="process-wizard-steps" aria-label="Quy trình 5 bước">
+                    <button type="button" class="process-wizard-step is-active" data-wizard-step="1"><b>1</b><span>Tải video</span></button>
+                    <button type="button" class="process-wizard-step" data-wizard-step="2"><b>2</b><span>Vùng mờ &amp; Giọng đọc</span></button>
+                    <button type="button" class="process-wizard-step" data-wizard-step="3"><b>3</b><span>Âm lượng &amp; Nhạc nền</span></button>
+                    <button type="button" class="process-wizard-step" data-wizard-step="4"><b>4</b><span>Xem lại thay đổi</span></button>
+                    <button type="button" class="process-wizard-step" data-wizard-step="5"><b>5</b><span>Xuất video</span></button>
+                </nav>
+                <div class="process-wizard-guide" id="processWizardGuide">
+                    <strong id="processWizardGuideTitle">Bước 1: Tải video nguồn</strong>
+                    <p id="processWizardGuideText">Bấm “Tải video để xem trước” nếu bạn muốn kiểm tra khung hình, chọn vùng mờ chính xác, hoặc bấm Tiếp tục để sang Bước 2.</p>
+                </div>
+                <div class="process-wizard-review" id="processWizardReview" hidden></div>
             </div>
 
             <div class="process-config-body">
@@ -421,7 +440,10 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <button type="button" class="btn secondary" id="resetProcessConfig">${uiIcon('reset', 16)} Đặt lại mặc định</button>
                 <div class="process-config-actions-main">
                 <button type="button" class="btn secondary" id="cancelProcessConfig">Hủy</button>
-                <button type="submit" class="btn primary" id="runProcessConfig">${uiIcon('sparkles', 16)} Bắt đầu xử lý</button>
+                <button type="button" class="btn secondary" id="processWizardPrev" hidden>← Bước trước</button>
+                <button type="button" class="btn primary" id="processWizardNext" hidden>Bước tiếp →</button>
+                <button type="button" class="btn secondary" id="processQuickExportBtn" hidden>Xử lý nhanh</button>
+                <button type="submit" class="btn primary" id="runProcessConfig">${uiIcon('sparkles', 16)} Xử lý nhanh</button>
                 </div>
             </div>
         </form>

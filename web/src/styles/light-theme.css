@@ -715,3 +715,30 @@ html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-res
   background: #fee2e2 !important;
   color: #991b1b !important;
 }
+
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-bar {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+}
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-step {
+  background: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #475569 !important;
+}
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-step.is-active {
+  background: #fef2f2 !important;
+  border-color: #ef4444 !important;
+  color: #b91c1c !important;
+}
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-guide strong,
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-review-item strong {
+  color: #0f172a !important;
+}
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-guide p,
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-review-item span {
+  color: #475569 !important;
+}
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-review-item {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}

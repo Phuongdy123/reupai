@@ -182,6 +182,184 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
         });
     }
+    const wizardBtn = dialog.querySelector('#processFlowWizardBtn');
+    const quickBtn = dialog.querySelector('#processFlowQuickBtn');
+    const wizardBar = dialog.querySelector('#processWizardBar');
+    const wizardPrev = dialog.querySelector('#processWizardPrev');
+    const wizardNext = dialog.querySelector('#processWizardNext');
+    const quickExportBtn = dialog.querySelector('#processQuickExportBtn');
+    const runBtn = dialog.querySelector('#runProcessConfig');
+    const wizardGuideTitle = dialog.querySelector('#processWizardGuideTitle');
+    const wizardGuideText = dialog.querySelector('#processWizardGuideText');
+    const wizardReview = dialog.querySelector('#processWizardReview');
+    let flowMode = 'quick';
+    try {
+        flowMode = localStorage.getItem('reupai:process-flow-mode') === 'wizard' ? 'wizard' : 'quick';
+    } catch {}
+    let wizardStep = 1;
+
+    const selectInspectorTab = (tabName) => {
+        const tabBtn = dialog.querySelector(`.process-inspector-tab[data-inspector-tab="${tabName}"]`);
+        tabBtn?.click();
+    };
+
+    const buildWizardReviewHtml = () => {
+        const val = (id) => dialog.querySelector(`#${id}`)?.value ?? '';
+        const blurCoords = ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight'].some((id) => val(id) !== '');
+        const customCoords = ['processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight'].some((id) => val(id) !== '');
+        const autoWatermark = dialog.querySelector('#processAutoBrandBlur')?.checked;
+        const boostGpuOn = dialog.querySelector('#processBoostGpu')?.checked;
+        const origPct = Math.round((Number(val('processOriginalVolume') || 0.15)) * 100);
+        const voicePct = Math.round((Number(val('processVoiceVolume') || 1)) * 100);
+        const musicPct = Math.round((Number(val('processMusicVolume') || 0.25)) * 100);
+        const musicUrl = val('processMusicUrl').trim();
+        const musicFile = dialog.querySelector('#processMusicFile')?.files?.[0]?.name || '';
+        const blurText = [
+            blurCoords ? 'Đã chọn vùng mờ phụ đề' : 'Mờ phụ đề: Tự động / mặc định',
+            customCoords ? 'Có thêm vùng mờ phụ' : null,
+            autoWatermark ? 'Làm mờ watermark tự động' : null,
+        ].filter(Boolean).join(' · ');
+        const rows = [
+            [1, '1. Video nguồn', video.downloaded ? 'Đã tải sẵn trên máy' : 'Sẽ tự tải khi xuất'],
+            [2, '2. Vùng mờ & Giọng', `${blurText} · Giọng ${val('processVoice') || 'Trúc Ly'} (${Number(val('processTtsSpeed') || 1).toFixed(2)}x)${boostGpuOn ? ' · Boost GPU' : ''}`],
+            [3, '3. Âm lượng & Nhạc', `Gốc ${origPct}% · Voice ${voicePct}% · Nhạc nền ${musicFile || musicUrl ? `${musicPct}% (${musicFile || 'Link'})` : 'Không thêm'}`],
+            [4, '4. Tỷ lệ & Phụ đề', `Tỷ lệ: ${val('processAspectRatio') || 'Giữ gốc'} · Phong cách: ${val('processSubtitleStyle') || 'minimal'}`],
+        ];
+        return `
+            <div class="process-wizard-review-head"><strong>Kiểm tra lại các thay đổi trước khi xuất video</strong><span>Bấm vào từng bước để sửa lại nếu cần</span></div>
+            <div class="process-wizard-review-grid">
+                ${rows.map(([s, label, summary]) => `
+                    <button type="button" class="process-wizard-review-item" data-jump-step="${s}">
+                        <strong>${label}</strong>
+                        <span>${summary}</span>
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    };
+
+    const STEP_COPY = {
+        1: ['Bước 1: Tải video nguồn', 'Bấm “Tải video để xem trước” nếu muốn xem khung hình gốc trên máy, hoặc bấm “Bước tiếp” để hệ thống tự tải khi xuất.'],
+        2: ['Bước 2: Chọn vùng mờ & Giọng đọc AI', 'Bấm “AI dò vùng mờ” hoặc “Kéo chọn vùng” trên video, sau đó chọn Giọng đọc AI và bấm Nghe thử ngay bên phải.'],
+        3: ['Bước 3: Âm lượng video & Nhạc nền', 'Điều chỉnh âm lượng tiếng gốc, âm lượng giọng đọc và gắn link/tệp nhạc nền nếu muốn ở bảng bên phải.'],
+        4: ['Bước 4: Xem lại toàn bộ thay đổi trước khi xuất', 'Kiểm tra kỹ thông số bạn đã chỉnh ở Bước 1–3 dưới đây trước khi chuyển sang Bước 5 xuất video.'],
+        5: ['Bước 5: Xuất video thành phẩm', 'Mọi thiết lập đã sẵn sàng. Bấm “Xuất video ngay” để ReupAI xử lý video của bạn!'],
+    };
+
+    const syncWizardUi = () => {
+        const isWizard = flowMode === 'wizard';
+        dialog.classList.toggle('is-wizard-mode', isWizard);
+        if (wizardBtn) {
+            wizardBtn.className = `btn ${isWizard ? 'primary' : 'secondary'}`;
+            wizardBtn.setAttribute('aria-pressed', String(isWizard));
+        }
+        if (quickBtn) {
+            quickBtn.className = `btn ${!isWizard ? 'primary' : 'secondary'}`;
+            quickBtn.setAttribute('aria-pressed', String(!isWizard));
+        }
+        if (wizardBar) wizardBar.hidden = !isWizard;
+        if (wizardPrev) wizardPrev.hidden = !isWizard || wizardStep <= 1;
+        if (wizardNext) wizardNext.hidden = !isWizard || wizardStep >= 5;
+        if (quickExportBtn) quickExportBtn.hidden = !isWizard || wizardStep >= 5;
+        if (runBtn) {
+            runBtn.hidden = isWizard && wizardStep < 5;
+            if (isWizard && wizardStep === 5) {
+                runBtn.textContent = outputFormat?.value === 'srt' ? 'Bước 5 · Xuất file SRT' : 'Bước 5 · Xuất video ngay';
+            } else {
+                const hasTranscript = manualOcrRows.some(Boolean);
+                runBtn.textContent = hasTranscript
+                    ? (outputFormat?.value === 'srt' ? 'Dịch & xuất SRT' : 'Tiếp tục dịch & xử lý')
+                    : (outputFormat?.value === 'srt' ? 'Xuất file SRT' : 'Xử lý nhanh');
+            }
+        }
+        if (!isWizard) return;
+
+        dialog.querySelectorAll('.process-wizard-step').forEach((el) => {
+            const s = Number(el.dataset.wizardStep);
+            el.classList.toggle('is-active', s === wizardStep);
+            el.classList.toggle('is-done', s < wizardStep);
+        });
+        const [title, desc] = STEP_COPY[wizardStep] || STEP_COPY[1];
+        if (wizardGuideTitle) wizardGuideTitle.textContent = title;
+        if (wizardGuideText) wizardGuideText.textContent = desc;
+        if (wizardReview) {
+            const showReview = wizardStep === 4 || wizardStep === 5;
+            wizardReview.hidden = !showReview;
+            if (showReview) {
+                wizardReview.innerHTML = buildWizardReviewHtml();
+                wizardReview.querySelectorAll('[data-jump-step]').forEach((btn) => {
+                    btn.onclick = () => {
+                        wizardStep = Number(btn.dataset.jumpStep) || 1;
+                        applyWizardStepFocus();
+                        syncWizardUi();
+                    };
+                });
+            }
+        }
+    };
+
+    const applyWizardStepFocus = () => {
+        if (flowMode !== 'wizard') return;
+        if (wizardStep === 1) {
+            selectInspectorTab('video');
+        } else if (wizardStep === 2) {
+            selectInspectorTab('audio');
+        } else if (wizardStep === 3) {
+            selectInspectorTab('audio');
+            const adv = dialog.querySelector('.process-disclosure:not(.process-ai-disclosure)');
+            if (adv) adv.open = true;
+        } else if (wizardStep === 4 || wizardStep === 5) {
+            selectInspectorTab('video');
+        }
+    };
+
+    if (wizardBtn) {
+        wizardBtn.onclick = () => {
+            flowMode = 'wizard';
+            wizardStep = 1;
+            try { localStorage.setItem('reupai:process-flow-mode', 'wizard'); } catch {}
+            applyWizardStepFocus();
+            syncWizardUi();
+        };
+    }
+    if (quickBtn) {
+        quickBtn.onclick = () => {
+            flowMode = 'quick';
+            try { localStorage.setItem('reupai:process-flow-mode', 'quick'); } catch {}
+            syncWizardUi();
+        };
+    }
+    if (wizardPrev) {
+        wizardPrev.onclick = () => {
+            wizardStep = Math.max(1, wizardStep - 1);
+            applyWizardStepFocus();
+            syncWizardUi();
+        };
+    }
+    if (wizardNext) {
+        wizardNext.onclick = () => {
+            wizardStep = Math.min(5, wizardStep + 1);
+            applyWizardStepFocus();
+            syncWizardUi();
+        };
+    }
+    if (quickExportBtn) {
+        quickExportBtn.onclick = () => {
+            flowMode = 'quick';
+            syncWizardUi();
+            dialog.querySelector('form')?.requestSubmit();
+        };
+    }
+    dialog.querySelectorAll('.process-wizard-step').forEach((btn) => {
+        btn.onclick = () => {
+            wizardStep = Number(btn.dataset.wizardStep) || 1;
+            applyWizardStepFocus();
+            syncWizardUi();
+        };
+    });
+    applyWizardStepFocus();
+    syncWizardUi();
+
     const bindVoicePreviewButton = (btn) => {
         if (!btn) return;
         btn.onclick = () => {
