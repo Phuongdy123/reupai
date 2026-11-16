@@ -1605,35 +1605,7 @@ function buildCard(
         )
     );
 
-    const resultButtons = `
-        ${
-            video.has_subtitle_result
-            ? `
-                <button
-                    class="result-chip"
-                    data-result-mode="subtitle"
-                    title="Xem bản Vietsub"
-                >
-                    SUB
-                </button>
-            `
-            : ''
-        }
-
-        ${
-            video.has_voice_result
-            ? `
-                <button
-                    class="result-chip"
-                    data-result-mode="voiceover"
-                    title="Xem bản Voice"
-                >
-                    VOICE
-                </button>
-            `
-            : ''
-        }
-    `;
+    const resultButtons = '';
 
     card.innerHTML = `
         ${PROCESSING_STAR_BORDER}
@@ -1768,10 +1740,6 @@ function buildCard(
                     Voice
                 </button>
 
-                <div class="result-chip-group">
-                    ${resultButtons}
-                </div>
-
                 <button
                     class="process-details-btn"
                     type="button"
@@ -1783,8 +1751,11 @@ function buildCard(
                     <strong class="process-inline-percent">0%</strong>
                 </button>
 
-                <div class="result-actions dynamic-results"></div>
+            </div>
 
+            <div class="card-result-row" hidden>
+                <div class="result-chip-group"></div>
+                <div class="result-actions dynamic-results"></div>
             </div>
 
 
@@ -1985,36 +1956,64 @@ function buildCard(
     };
 
 
-    for (
-        const button
-        of card
-        .querySelectorAll(
-            '[data-result-mode]'
-        )
-    ) {
-
-        button.onclick = () => {
-
-            const mode = (
-                button.dataset
-                .resultMode
-            );
-
-            openPlayer(
-                video,
-                mode,
-                card
-                .querySelector(
-                    '.channel'
-                )
-                ?.value
-                || 'default'
-            );
-        };
-    }
-
+    renderCardResultRow(card, video);
 
     return card;
+}
+
+
+// Result row sits under the Vietsub/Voice buttons: SUB / VOICE chips plus the
+// YouTube publish button, shown only once a Vietsub or Voice result exists.
+function renderCardResultRow(card, video) {
+
+    const row = card.querySelector('.card-result-row');
+    const group = card.querySelector('.result-chip-group');
+    const dynamic = card.querySelector('.dynamic-results');
+    if (!row || !group) return;
+
+    const channel = (
+        card.querySelector('.channel')?.value
+        || video.channel_key
+        || 'default'
+    );
+    const hasSub = Boolean(video.has_subtitle_result);
+    const hasVoice = Boolean(video.has_voice_result);
+
+    group.innerHTML = '';
+
+    const addChip = (mode, label, title) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'result-chip';
+        chip.dataset.resultMode = mode;
+        chip.title = title;
+        chip.textContent = label;
+        chip.onclick = () => openPlayer(video, mode, channel);
+        group.appendChild(chip);
+    };
+
+    if (hasSub) addChip('subtitle', 'SUB', 'Xem bản Vietsub');
+    if (hasVoice) addChip('voiceover', 'VOICE', 'Xem bản Voice');
+
+    if (hasSub || hasVoice) {
+        const youtube = document.createElement('button');
+        youtube.type = 'button';
+        youtube.className = 'result-youtube-btn';
+        youtube.title = 'Đăng video này lên YouTube';
+        youtube.innerHTML = `${uiIcon('play', 13)}<span>Đăng YouTube</span>`;
+        youtube.onclick = () => {
+            window.dispatchEvent(new CustomEvent('reupai:publish-output', {
+                detail: {
+                    ...video,
+                    channel,
+                    mode: hasVoice ? 'voiceover' : 'subtitle',
+                },
+            }));
+        };
+        group.appendChild(youtube);
+    }
+
+    row.hidden = !(hasSub || hasVoice || (dynamic && dynamic.childElementCount > 0));
 }
 
 
@@ -2609,6 +2608,8 @@ async function performProcessVideo(
     dynamicResults.innerHTML =
         '';
 
+    renderCardResultRow(card, video);
+
     progressBar.style.width =
         '1%';
 
@@ -3081,12 +3082,6 @@ async function pollProcess(
             dynamicResults.innerHTML = srtOnly ? `
                 <a class="secondary download-finished" href="/api/result/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(channel)}&mode=${encodeURIComponent(mode)}&output_format=srt">${uiIcon('download', 16)} Tải SRT tiếng Việt</a>
             ` : `
-                <button
-                    class="secondary play-finished"
-                >
-                    ${uiIcon('play', 16)} Xem kết quả
-                </button>
-
                 <a
                     class="secondary download-finished"
                     style="
@@ -3095,19 +3090,11 @@ async function pollProcess(
                     "
                     href="/api/result/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(channel)}&mode=${encodeURIComponent(mode)}&v=${Date.now()}"
                 >
-                    ${uiIcon('download', 16)} Tải kết quả
+                    ${uiIcon('download', 16)} Tải về
                 </a>
             `;
 
-            const playFinished = dynamicResults.querySelector('.play-finished');
-            if (playFinished) playFinished.onclick = () => {
-
-                openPlayer(
-                    video,
-                    mode,
-                    channel
-                );
-            };
+            renderCardResultRow(card, video);
 
             subButton.disabled =
                 false;

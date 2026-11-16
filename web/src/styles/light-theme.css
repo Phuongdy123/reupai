@@ -702,3 +702,16 @@ html[data-theme="light"] body.theme-xports .settings-page .notice-banner {
 .theme-toggle-btn:active {
   transform: scale(0.97);
 }
+
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row {
+  border-top-color: #e2e8f0 !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row .result-chip {
+  background: #fef2f2 !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #b91c1c !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row .result-chip:hover {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+}
