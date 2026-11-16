@@ -7202,12 +7202,34 @@ function syncSaveSeriesButton() {
     btn.setAttribute('aria-label', btn.title);
 }
 
+function _readLocalSavedSeries() {
+    try {
+        const raw = localStorage.getItem('reupai:saved-series-v1');
+        const list = JSON.parse(raw || '[]');
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+}
+
+function _writeLocalSavedSeries(list) {
+    try {
+        localStorage.setItem('reupai:saved-series-v1', JSON.stringify(list));
+    } catch {
+        // ignore storage errors
+    }
+}
+
 async function refreshSavedSeriesKeys() {
+    const localKeys = _readLocalSavedSeries().map((s) => s.series_key).filter(Boolean);
+    savedSeriesKeys = new Set(localKeys);
     try {
         const data = await apiJson('/api/library/series/saved');
-        savedSeriesKeys = new Set((data?.series || []).map((s) => s.series_key).filter(Boolean));
+        for (const s of (data?.series || [])) {
+            if (s?.series_key) savedSeriesKeys.add(s.series_key);
+        }
     } catch {
-        // ignore network errors when checking saved status
+        // fallback to localStorage when Local Engine lacks /api/library/series/saved
     }
     syncSaveSeriesButton();
 }
@@ -7220,24 +7242,37 @@ async function toggleSaveCurrentSeries() {
     if (btn) btn.disabled = true;
     try {
         if (savedSeriesKeys.has(key)) {
-            await apiJson(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            try {
+                await apiJson(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            } catch (err) {
+                if (!/not found|404/i.test(String(err?.message || ''))) throw err;
+            }
+            _writeLocalSavedSeries(_readLocalSavedSeries().filter((s) => s.series_key !== key));
             savedSeriesKeys.delete(key);
             updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
         } else {
             const item = seriesGroups.find((value) => value.series_key === key);
             const videoIds = currentVideos.filter((v) => v.series_key === key).map((v) => v.video_id);
-            await apiJson('/api/library/series/saved', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    series_key: key,
-                    name: item?.name || key,
-                    source_key: item?.source_key || currentVideos.find((v) => v.series_key === key)?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
-                    source_label: item?.source_label || '',
-                    sort_mode: 'episode_asc',
-                    video_ids: videoIds,
-                }),
-            });
+            const payload = {
+                series_key: key,
+                name: item?.name || key,
+                source_key: item?.source_key || currentVideos.find((v) => v.series_key === key)?.source_key || document.getElementById('sourceUrl')?.value?.trim() || '',
+                source_label: item?.source_label || '',
+                sort_mode: 'episode_asc',
+                video_ids: videoIds,
+            };
+            try {
+                await apiJson('/api/library/series/saved', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+            } catch (err) {
+                if (!/not found|404/i.test(String(err?.message || ''))) throw err;
+            }
+            const next = _readLocalSavedSeries().filter((s) => s.series_key !== key);
+            next.unshift({ ...payload, saved_at: Date.now() });
+            _writeLocalSavedSeries(next);
             savedSeriesKeys.add(key);
             updateSourceInfo(`Đã lưu Series "${item?.name || key}".`);
         }
