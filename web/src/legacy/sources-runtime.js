@@ -2300,11 +2300,6 @@ function ensureProcessDetailsPopup() {
                 <div class="process-details-bar"></div>
             </div>
 
-            <details class="process-details-log-wrap">
-                <summary class="process-details-log-toggle">Chi tiết kỹ thuật <span>Chỉ cần mở khi gửi lỗi cho hỗ trợ</span></summary>
-                <pre class="process-details-log">Đang chờ dữ liệu tiến trình...</pre>
-            </details>
-
             <footer class="process-details-footer">
                 <span>Tiến trình vẫn tiếp tục khi đóng cửa sổ này.</span>
                 <div>
@@ -2396,7 +2391,7 @@ function friendlyProcessStage(message, isError) {
         return 'Không tìm thấy video trên máy. Hãy tải lại video nguồn.';
     }
     if (/Traceback|(?:Runtime|Value|Import|FileNotFound|Permission)Error|CalledProcessError|exit code|COMMAND:/i.test(value)) {
-        return 'Xử lý gặp sự cố. Mở Chi tiết kỹ thuật nếu cần gửi lỗi cho hỗ trợ.';
+        return 'Xử lý gặp sự cố. Hãy bấm Tiếp tục hoặc thử lại.';
     }
     return value.length > 180 ? `${value.slice(0, 177)}…` : value;
 }
@@ -2435,8 +2430,6 @@ function syncProcessDetailsPopup(
             : finished
                 ? 'Hoàn tất'
                 : 'Đang xử lý';
-    popup.querySelector('.process-details-log').textContent = log
-        || (isError ? stage : 'Đang chờ dữ liệu tiến trình...');
     const repairLink = popup.querySelector('.process-details-google-reconnect');
     const repair = isError ? geminiRepairType(stage) : null;
     repairLink.hidden = !repair;
@@ -2480,7 +2473,6 @@ function openProcessDetailsPopup(
     popup.querySelector('.process-details-source').textContent = (
         `${video.video_id} · ${card.querySelector('.process-inline-label')?.textContent || 'Đang xử lý'}`
     );
-    popup.querySelector('.process-details-log-wrap').open = false;
     popup.hidden = false;
     syncProcessDetailsPopup(card, {
         error: card.classList.contains('has-process-error'),
