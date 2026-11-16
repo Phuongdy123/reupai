@@ -2008,146 +2008,73 @@ function renderCardResultRow(card, video) {
 }
 
 
-function downloadVideo(video, card) {
-    return runAction(`download:${video.video_id}`, () => performDownloadVideo(video, card));
+function downloadVideo(video, card, options = {}) {
+    return runAction(`download:${video.video_id}`, () => performDownloadVideo(video, card, options));
 }
 
 async function performDownloadVideo(
     video,
-    card
+    card,
+    options = {}
 ) {
-
-    const button = (
-        card
-        .querySelector(
-            '.download-btn'
-        )
-    );
-
-    const oldText = (
-        button.textContent
-    );
-
-    button.disabled =
-        true;
-
-    button.textContent =
-        'Đang tải...';
+    const localOnly = Boolean(options?.localOnly);
+    const button = card?.querySelector?.('.download-btn') || null;
+    const oldText = button ? button.textContent : '';
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Đang tải...';
+    }
 
     try {
-
-        const response = (
-            await window.reupEngineClient.request(
-                '/api/download',
-                {
-                    method:
-                        'POST',
-
-                    headers: {
-                        'Content-Type':
-                            'application/json'
-                    },
-
-                    body:
-                        JSON.stringify({
-                            url:
-                                video.url,
-
-                            video_id:
-                                video.video_id
-                        })
-                }
-            )
+        const targetUrl = String(video.url || '').trim() || videoUrlForIdentity(video);
+        const endpoint = localOnly ? '/api/download?local_only=true' : '/api/download';
+        const response = await window.reupEngineClient.request(
+            endpoint,
+            {
+                method: 'POST',
+                timeoutMs: 0,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url: targetUrl,
+                    video_id: video.video_id,
+                }),
+            }
         );
 
-        if (
-            !response.ok
-        ) {
-
-            let message =
-                'Tải video thất bại.';
-
+        if (!response.ok) {
+            let message = 'Tải video thất bại.';
             try {
-
-                const data = (
-                    await response.json()
-                );
-
-                message = (
-                    data.detail
-                    || message
-                );
-
+                const data = await response.json();
+                message = data.detail || message;
             } catch {}
-
-            throw new Error(
-                message
-            );
+            throw new Error(message);
         }
 
-        const blob = (
-            await response.blob()
-        );
+        if (localOnly) {
+            await response.json().catch(() => ({}));
+            if (signal?.aborted) return;
+        } else {
+            const blob = await response.blob();
+            if (signal?.aborted) return;
+            const objectUrl = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = objectUrl;
+            anchor.download = `${video.video_id}_source.mp4`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(objectUrl);
+        }
 
-        if (signal?.aborted) return;
-
-        const objectUrl = (
-            URL.createObjectURL(
-                blob
-            )
-        );
-
-        const anchor = (
-            document
-            .createElement(
-                'a'
-            )
-        );
-
-        anchor.href =
-            objectUrl;
-
-        anchor.download =
-            (
-                video.video_id
-                + '_source.mp4'
-            );
-
-        document.body.appendChild(
-            anchor
-        );
-
-        anchor.click();
-
-        anchor.remove();
-
-        URL.revokeObjectURL(
-            objectUrl
-        );
-
-        video.downloaded =
-            true;
-
-        button.innerHTML =
-            `${uiIcon('check', 15)} Đã tải`;
-
+        video.downloaded = true;
+        if (button) button.innerHTML = `${uiIcon('check', 15)} Đã tải`;
         renderVideos();
-
-    } catch (
-        error
-    ) {
-
-        alert(
-            error.message
-        );
-
-        button.textContent =
-            oldText;
-
+    } catch (error) {
+        if (button) button.textContent = oldText;
+        if (localOnly) throw error;
+        alert(error?.message || 'Tải video thất bại.');
     } finally {
-
-        button.disabled =
-            false;
+        if (button) button.disabled = false;
     }
 }
 

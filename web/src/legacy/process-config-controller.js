@@ -447,7 +447,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         downloadButton.textContent = 'Đang tải video...';
         setPreviewState('downloading');
         try {
-            await downloadVideo(video, card);
+            await downloadVideo(video, card, { localOnly: true });
             if (!isCurrent()) return;
             if (!video.downloaded) { setPreviewState('empty'); return; }
             setPreviewState('loading');
