@@ -9791,6 +9791,10 @@ body.theme-xports #videos .compact-video-card :is(.sub-btn.action-primary, .voic
 body.theme-xports #videos .compact-video-card :is(.sub-btn.action-primary, .voice-btn.action-secondary, .process-details-btn) svg {
   color: #0f172a !important;
 }
+body.theme-xports #videos .compact-video-card .process-details-btn .process-inline-percent {
+  color: #0f172a !important;
+  font-size: 11px !important;
+}
 body.theme-xports #videos .compact-video-card :is(.sub-btn.action-primary, .voice-btn.action-secondary, .process-details-btn):hover:not(:disabled) {
   background: #f1f5f9 !important;
   border-color: #94a3b8 !important;
