@@ -336,6 +336,12 @@ def _aweme_to_video(
                 title
             ).strip(),
 
+        "author_name":
+            str(author.get("nickname") or author.get("unique_id") or "").strip(),
+
+        "uploader":
+            str(author.get("nickname") or author.get("unique_id") or "").strip(),
+
         "cover_url":
             cover_url,
 
