@@ -10,6 +10,9 @@ function configured() {
 
 export async function updateSession(request) {
   const { pathname, search } = request.nextUrl;
+  if (pathname === "/tiktok3ltsvvzvzuPSHBxPg6dHrEzhPC6EbEcP.txt") {
+    return NextResponse.next();
+  }
   if (pathname === "/terms" || pathname === "/privacy" || pathname === "/local-engine" || pathname.startsWith("/giai-phap")) {
     return NextResponse.next({ request });
   }
