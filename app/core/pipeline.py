@@ -1649,7 +1649,17 @@ def transcribe_audio(audio_path: Path, chinese_srt: Path, force=False, on_progre
 
 
 
-    segments = transcriber.transcribe(rel(audio_path), on_progress=on_progress, language=None if source_language == "auto" else source_language)
+    partial_checkpoint = chinese_srt.with_name(chinese_srt.stem + ".partial.json")
+    # The partial checkpoint carries its own audio/model/language signature, so
+    # it is safe to resume even when the job-level settings signature has not
+    # been written yet (the first run was interrupted mid-Whisper).
+    segments = transcriber.transcribe(
+        rel(audio_path), on_progress=on_progress,
+        language=None if source_language == "auto" else source_language,
+        checkpoint_path=rel(partial_checkpoint),
+    )
+    # The finished SRT is the final checkpoint; the partial one is now stale.
+    remove_file(partial_checkpoint)
 
 
 
@@ -1751,6 +1761,10 @@ def translate_srt(
 
     model_path = vietnamese_srt.with_suffix(".model.txt")
     previous_model = model_path.read_text(encoding="utf-8").strip() if model_path.is_file() else ""
+    if not previous_model and checkpoint_path.is_file():
+        # An earlier run stopped mid-translation before the model marker existed;
+        # its checkpoint is still valid, so resume instead of translating again.
+        previous_model = translation_model
     force = force or previous_model != translation_model
     if file_ok(vietnamese_srt) and not force:
 
@@ -1817,6 +1831,12 @@ def translate_srt(
         vietnamese_srt.write_bytes(chinese_srt.read_bytes())
         return
     from services import translator
+    # Tie the checkpoint to the chosen model immediately, so a stopped run can
+    # resume with the same model rather than being treated as a model change.
+    try:
+        model_path.write_text(translation_model, encoding="utf-8")
+    except OSError:
+        pass
     translator.SOURCE_LANGUAGE = source_language
 
 
@@ -3231,18 +3251,22 @@ def pipeline(
     else:
         os.environ.pop("REUP_BOOST_GPU", None)
 
+    is_ocr_source = transcript_source == "video_subtitles"
+    # Only OCR transcripts depend on OCR knobs. Keeping them out of the audio
+    # signature means toggling Boost GPU never discards a finished Whisper
+    # transcript or its translation checkpoint.
     transcription_signature = stable_fingerprint({
         "schema": 1,
         "transcript_source": transcript_source,
         "manual_transcript": config.get("manual_transcript") or None,
         "source_language": source_language,
-        "ocr_language": config.get("ocr_language", "auto"),
-        "ocr_fps": float(config.get("ocr_fps", 2.0) or 2.0),
-        "ocr_min_confidence": float(config.get("ocr_min_confidence", 0.45) or 0.45),
-        "ocr_parallelism": int(config.get("ocr_parallelism", 2) or 2),
-        "ocr_use_gpu": bool(config.get("ocr_use_gpu", False)),
-        "ocr_merge_similar": bool(config.get("ocr_merge_similar", True)),
-        "ocr_similarity_threshold": float(config.get("ocr_similarity_threshold", 0.82) or 0.82),
+        "ocr_language": config.get("ocr_language", "auto") if is_ocr_source else "auto",
+        "ocr_fps": float(config.get("ocr_fps", 2.0) or 2.0) if is_ocr_source else 2.0,
+        "ocr_min_confidence": float(config.get("ocr_min_confidence", 0.45) or 0.45) if is_ocr_source else 0.45,
+        "ocr_parallelism": int(config.get("ocr_parallelism", 2) or 2) if is_ocr_source else 2,
+        "ocr_use_gpu": bool(config.get("ocr_use_gpu", False)) if is_ocr_source else False,
+        "ocr_merge_similar": bool(config.get("ocr_merge_similar", True)) if is_ocr_source else True,
+        "ocr_similarity_threshold": float(config.get("ocr_similarity_threshold", 0.82) or 0.82) if is_ocr_source else 0.82,
     })
     previous_transcription_signature = (
         transcription_signature_path.read_text(encoding="utf-8").strip()

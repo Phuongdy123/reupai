@@ -697,7 +697,7 @@ body.theme-xports .compact-video-card .compact-meta .media-inline {
   font-weight: var(--ds-weight-medium) !important;
 }
 body.theme-xports .compact-video-card .compact-badges {
-  margin-top: 8px !important;
+  margin-top: 5px !important;
   min-height: 0 !important;
   gap: 6px !important;
 }
@@ -879,10 +879,18 @@ body.theme-xports #videos .compact-video-card .card-result-row .dynamic-results:
   display: none !important;
 }
 body.theme-xports #videos .compact-video-card .card-result-row .dynamic-results :is(a, button) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  width: auto !important;
   height: 28px !important;
   padding: 0 11px !important;
   font-size: 11px !important;
+  white-space: nowrap !important;
   border-radius: 8px 2px 8px 2px !important;
+}
+body.theme-xports #videos .compact-video-card .process-details-btn.is-complete {
+  display: none !important;
 }
 body.theme-xports #videos .compact-video-card .process-details-btn {
   padding-inline: 11px !important;

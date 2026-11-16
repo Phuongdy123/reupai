@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -29,9 +30,64 @@ def _positive_int(name: str, default: int) -> int:
 
 WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 1)
 _CUDA_DISABLED_FOR_SESSION = False
-_LONG_AUDIO_THRESHOLD_SECONDS = 60 * 60
+_LONG_AUDIO_THRESHOLD_SECONDS = 15 * 60
 _CHUNK_SECONDS = 10 * 60
 _CHUNK_OVERLAP_SECONDS = 2
+_CHECKPOINT_SCHEMA = 1
+
+
+def _audio_signature(audio_path: str, duration: float, language: str | None) -> str:
+    """Identify one audio file + recognition settings for checkpoint reuse."""
+    try:
+        size = os.stat(audio_path).st_size
+    except OSError:
+        size = 0
+    raw = "|".join([
+        str(_CHECKPOINT_SCHEMA), str(size), f"{duration:.2f}", WHISPER_MODEL,
+        str(language or "auto"), str(WHISPER_BEAM_SIZE),
+        str(_CHUNK_SECONDS), str(_CHUNK_OVERLAP_SECONDS),
+    ])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _load_transcription_checkpoint(path: str, signature: str, duration: float) -> dict | None:
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("signature") != signature:
+        return None
+    try:
+        if abs(float(data.get("duration", 0)) - duration) > 0.5:
+            return None
+        next_frame = int(data.get("next_frame", 0))
+        results = [
+            {"start": float(item["start"]), "end": float(item["end"]), "text": str(item["text"])}
+            for item in data.get("results", [])
+        ]
+    except (KeyError, TypeError, ValueError):
+        return None
+    if next_frame <= 0:
+        return None
+    return {"results": results, "next_frame": next_frame, "language": data.get("language")}
+
+
+def _save_transcription_checkpoint(
+    path: str, signature: str, duration: float, next_frame: int,
+    language: str | None, results: list[dict],
+) -> None:
+    """Atomically persist finished windows so a stop or crash never loses them."""
+    target = Path(path)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(target.name + ".tmp")
+        temporary.write_text(json.dumps({
+            "signature": signature, "duration": duration, "next_frame": next_frame,
+            "language": language, "results": results,
+        }, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        os.replace(temporary, target)
+    except OSError as error:
+        print(f"Khong luu duoc checkpoint Whisper: {error}")
 
 
 def _cpu_threads() -> int:
@@ -246,18 +302,44 @@ def _transcribe_long_wav(
     on_progress: Callable[[float, float], None] | None,
     source_language: str | None = None,
     on_segment: Callable[[dict], None] | None = None,
+    checkpoint_path: str | None = None,
 ) -> list[dict]:
-    """Bound decode memory by transcribing ten-minute audio windows."""
+    """Bound decode memory by transcribing ten-minute audio windows.
+
+    Each finished window is checkpointed, so a stopped or failed job resumes
+    after the last completed window instead of re-running Whisper from zero.
+    """
     import numpy as np
 
     chunk_frames = _CHUNK_SECONDS * 16000
     overlap_frames = _CHUNK_OVERLAP_SECONDS * 16000
     results: list[dict] = []
     language: str | None = source_language
+    signature = _audio_signature(audio_path, duration, source_language) if checkpoint_path else ""
+    resume_frame = 0
+    if checkpoint_path:
+        saved = _load_transcription_checkpoint(checkpoint_path, signature, duration)
+        if saved:
+            results = saved["results"]
+            resume_frame = saved["next_frame"]
+            language = saved["language"] or language
+            print(f"Whisper: tiep tuc tu checkpoint, bo qua {resume_frame / 16000:.0f}/{duration:.0f} giay da nhan dien ({len(results)} doan).")
+            if on_segment:
+                for segment in results:
+                    on_segment(segment.copy())
+            if on_progress:
+                on_progress(min(resume_frame / 16000, duration), duration)
+
+    def persist(next_frame: int) -> None:
+        if checkpoint_path:
+            _save_transcription_checkpoint(checkpoint_path, signature, duration, next_frame, language, results)
+
     with wave.open(audio_path, "rb") as source:
         total_frames = source.getnframes()
         for core_start in range(0, total_frames, chunk_frames):
             core_end = min(total_frames, core_start + chunk_frames)
+            if core_end <= resume_frame:
+                continue
             read_start = max(0, core_start - overlap_frames)
             read_end = min(total_frames, core_end + overlap_frames)
             source.setpos(read_start)
@@ -270,6 +352,7 @@ def _transcribe_long_wav(
                 print(f"Whisper: {processed:.0f}/{duration:.0f} giay; bo qua khoang im lang")
                 if on_progress:
                     on_progress(processed, duration)
+                persist(core_end)
                 continue
             audio = pcm.astype(np.float32) / 32768.0
             read_offset = read_start / 16000
@@ -318,6 +401,7 @@ def _transcribe_long_wav(
             print(f"Whisper: {processed:.0f}/{duration:.0f} giay; {len(results)} doan loi thoai")
             if on_progress:
                 on_progress(processed, duration)
+            persist(core_end)
     return results
 
 
@@ -331,12 +415,13 @@ def transcribe(
     on_progress: Callable[[float, float], None] | None = None,
     language: str | None = None,
     on_segment: Callable[[dict], None] | None = None,
+    checkpoint_path: str | None = None,
 ):
     print("Dang nhan dien audio...")
 
     duration = _chunkable_wav_duration(audio_path)
     if duration is not None and duration > _LONG_AUDIO_THRESHOLD_SECONDS:
-        return _transcribe_long_wav(audio_path, duration, on_progress, language, on_segment)
+        return _transcribe_long_wav(audio_path, duration, on_progress, language, on_segment, checkpoint_path)
 
     total = duration or 0
     segments, info = _transcribe_once(

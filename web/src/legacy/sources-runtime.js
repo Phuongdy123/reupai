@@ -1440,24 +1440,6 @@ function buildBadges(
     }
 
     if (
-        video.has_subtitle_result
-    ) {
-
-        badges.push(
-            `<span class="badge ok">${uiIcon('captions', 14)} Vietsub</span>`
-        );
-    }
-
-    if (
-        video.has_voice_result
-    ) {
-
-        badges.push(
-            `<span class="badge ok">${uiIcon('voice', 14)} Voice</span>`
-        );
-    }
-
-    if (
         video.processing
     ) {
 

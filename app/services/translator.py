@@ -1339,8 +1339,11 @@ def save_checkpoint(
             translations,
     }
 
+    # Write-then-replace keeps the last good checkpoint intact if the engine is
+    # killed mid-write; compact JSON keeps the per-batch save cheap.
+    temporary_file = f"{CHECKPOINT_FILE}.tmp"
     with open(
-        CHECKPOINT_FILE,
+        temporary_file,
         "w",
         encoding="utf-8"
     ) as file:
@@ -1348,8 +1351,13 @@ def save_checkpoint(
             data,
             file,
             ensure_ascii=False,
-            indent=2
+            separators=(",", ":")
         )
+
+    os.replace(
+        temporary_file,
+        CHECKPOINT_FILE
+    )
 
 
 # =========================================================
