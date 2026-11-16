@@ -52,7 +52,27 @@ export function LibraryPage({ kind }) {
         ]);
         const list = listData.collections || [];
         setCollections(list); setDownloads(downloaded.videos || []); setOutputs(rendered.outputs || []);
-        if (kind === "collections") setSavedSeries(savedSeriesRes.series || []);
+        if (kind === "collections") {
+          const byKey = new Map();
+          for (const item of (savedSeriesRes.series || [])) {
+            if (item?.series_key) byKey.set(item.series_key, item);
+          }
+          try {
+            const localRaw = JSON.parse(window.localStorage.getItem("reupai:saved-series-v1") || "[]");
+            for (const item of (Array.isArray(localRaw) ? localRaw : [])) {
+              if (item?.series_key && !byKey.has(item.series_key)) {
+                byKey.set(item.series_key, {
+                  ...item,
+                  total_count: item.total_count ?? (item.video_ids?.length || 0),
+                  processed_count: item.processed_count ?? 0,
+                  pending_count: item.pending_count ?? (item.video_ids?.length || 0),
+                  processing_count: item.processing_count ?? 0,
+                });
+              }
+            }
+          } catch {}
+          setSavedSeries(Array.from(byKey.values()));
+        }
         if (kind === "collections") {
           const requestedId = collectionId === undefined ? selectedCollectionRef.current : collectionId;
           const activeId = list.some((item) => String(item.id) === String(requestedId)) ? String(requestedId) : list[0] ? String(list[0].id) : "";
@@ -222,7 +242,17 @@ export function LibraryPage({ kind }) {
   const deleteSavedSeriesItem = async (seriesKey) => {
     setError(null);
     try {
-      await client.json(`/api/library/series/saved/${encodeURIComponent(seriesKey)}`, { method: "DELETE" });
+      try {
+        await client.json(`/api/library/series/saved/${encodeURIComponent(seriesKey)}`, { method: "DELETE" });
+      } catch (err) {
+        if (!/not found|404/i.test(String(err?.message || ""))) throw err;
+      }
+      try {
+        const localRaw = JSON.parse(window.localStorage.getItem("reupai:saved-series-v1") || "[]");
+        if (Array.isArray(localRaw)) {
+          window.localStorage.setItem("reupai:saved-series-v1", JSON.stringify(localRaw.filter((item) => item?.series_key !== seriesKey)));
+        }
+      } catch {}
       setSavedSeries((prev) => prev.filter((item) => item.series_key !== seriesKey));
       setNotice("Đã xóa Series khỏi danh mục tiến độ.");
     } catch (requestError) {
@@ -234,6 +264,15 @@ export function LibraryPage({ kind }) {
   const activeCollection = collections.find((item) => String(item.id) === selectedCollection);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return <>
+    {kind === "collections" && (
+      <div className="panel" style={{ marginBottom: 16, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/series" className="btn secondary">Bộ Series đã lưu</Link>
+          <Link href="/collections" className="btn primary">Kênh nguồn &amp; Danh mục</Link>
+        </div>
+        <small className="muted">Series quản lý bộ tập theo thứ tự · Collections quản lý kênh nguồn &amp; nhóm video</small>
+      </div>
+    )}
     <ErrorMessage error={error} retry={() => load()} /><Notice>{notice}</Notice>
     {kind === "collections" && (
       <section className="panel" style={{ marginBottom: 18 }}>

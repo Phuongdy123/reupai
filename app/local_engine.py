@@ -912,6 +912,64 @@ def library_series(_: bool = Depends(require_token)):
     return api_series(local_library_request())
 
 
+def _saved_series_file() -> Path:
+    return get_config_dir() / "saved_series.json"
+
+
+def _read_saved_series() -> list[dict[str, Any]]:
+    path = _saved_series_file()
+    if not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _write_saved_series(items: list[dict[str, Any]]) -> None:
+    path = _saved_series_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.get("/api/library/series/saved")
+def list_saved_series(_: bool = Depends(require_token)):
+    return {"series": _read_saved_series()}
+
+
+@app.post("/api/library/series/saved")
+def upsert_saved_series(payload: dict[str, Any], _: bool = Depends(require_token)):
+    series_key = str(payload.get("series_key") or "").strip()
+    if not series_key:
+        raise HTTPException(status_code=400, detail="Thiếu series_key.")
+    items = [item for item in _read_saved_series() if item.get("series_key") != series_key]
+    entry = {
+        "series_key": series_key,
+        "name": str(payload.get("name") or series_key).strip(),
+        "source_key": str(payload.get("source_key") or "").strip(),
+        "source_label": str(payload.get("source_label") or "").strip(),
+        "sort_mode": str(payload.get("sort_mode") or "episode_asc"),
+        "config": payload.get("config") if isinstance(payload.get("config"), dict) else {},
+        "video_ids": payload.get("video_ids") if isinstance(payload.get("video_ids"), list) else [],
+        "total_count": len(payload.get("video_ids") or []),
+        "processed_count": int(payload.get("processed_count") or 0),
+        "pending_count": int(payload.get("pending_count") or len(payload.get("video_ids") or [])),
+        "processing_count": 0,
+        "saved_at": int(time.time()),
+    }
+    items.insert(0, entry)
+    _write_saved_series(items)
+    return {"series": entry}
+
+
+@app.delete("/api/library/series/saved/{series_key}")
+def remove_saved_series(series_key: str, _: bool = Depends(require_token)):
+    items = [item for item in _read_saved_series() if item.get("series_key") != series_key]
+    _write_saved_series(items)
+    return {"ok": True}
+
+
 @app.get("/api/library/meta")
 def library_meta(ids: str = "", _: bool = Depends(require_token)):
     return api_meta(local_library_request(), ids=ids)

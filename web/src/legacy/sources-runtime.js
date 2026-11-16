@@ -1414,6 +1414,7 @@ function renderVideos() {
     }
 
     renderPagination();
+    scheduleResumeActiveJobs();
 }
 
 
@@ -11074,6 +11075,15 @@ function labelForCurrentView() {
 // RESUME RUNNING JOBS
 // =========================================================
 
+let _resumeJobsTimer = 0;
+function scheduleResumeActiveJobs() {
+    if (_resumeJobsTimer) clearTimeout(_resumeJobsTimer);
+    _resumeJobsTimer = setTimeout(() => {
+        _resumeJobsTimer = 0;
+        resumeActiveJobs();
+    }, 250);
+}
+
 async function resumeActiveJobs() {
 
     try {
@@ -11121,14 +11131,6 @@ async function resumeActiveJobs() {
                 + `${mode}`
             );
 
-            if (
-                activePollKeys.has(
-                    key
-                )
-            ) {
-                continue;
-            }
-
             const card = (
                 document.querySelector(
                     `.card[data-video-id="${CSS.escape(String(video.video_id))}"]`
@@ -11136,6 +11138,11 @@ async function resumeActiveJobs() {
             );
 
             if (!card) {
+                continue;
+            }
+
+            const alreadyPolling = activePollKeys.has(key);
+            if (alreadyPolling && card.classList.contains('is-processing')) {
                 continue;
             }
 
@@ -11170,19 +11177,18 @@ async function resumeActiveJobs() {
 
             updateInlineProcessStatus(
                 card,
-                '…',
-                mode === 'subtitle'
-                    ? 'Đang làm Vietsub'
-                    : 'Đang tạo Voice'
+                job.progress != null ? `${Math.round(Number(job.progress))}%` : '…',
+                job.stage || (mode === 'subtitle' ? 'Đang làm Vietsub' : 'Đang tạo Voice')
             );
 
-            pollProcess(
-                video,
-                card,
-                channel,
-                mode
-            )
-            .catch(
+            if (!alreadyPolling) {
+                pollProcess(
+                    video,
+                    card,
+                    channel,
+                    mode
+                )
+                .catch(
                 error => {
 
                     console.warn(
@@ -11201,6 +11207,7 @@ async function resumeActiveJobs() {
                     saveUiState();
                 }
             );
+            }
         }
 
     } catch (

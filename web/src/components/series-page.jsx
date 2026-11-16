@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
@@ -81,6 +82,41 @@ function summarizeConfig(cfg) {
   return parts.join(" · ");
 }
 
+function _readLocalSavedSeries() {
+  try {
+    const raw = window.localStorage.getItem("reupai:saved-series-v1");
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function _writeLocalSavedSeries(list) {
+  try {
+    window.localStorage.setItem("reupai:saved-series-v1", JSON.stringify(list));
+  } catch {}
+}
+
+function _mergeSavedSeries(serverList = []) {
+  const byKey = new Map();
+  for (const item of serverList) {
+    if (item?.series_key) byKey.set(item.series_key, item);
+  }
+  for (const item of _readLocalSavedSeries()) {
+    if (item?.series_key && !byKey.has(item.series_key)) {
+      byKey.set(item.series_key, {
+        ...item,
+        total_count: item.total_count ?? (item.video_ids?.length || 0),
+        processed_count: item.processed_count ?? 0,
+        pending_count: item.pending_count ?? (item.video_ids?.length || 0),
+        processing_count: item.processing_count ?? 0,
+      });
+    }
+  }
+  return Array.from(byKey.values());
+}
+
 export function SeriesPage() {
   const { status, client, connect, check } = useEngine();
   const [series, setSeries] = useState([]);
@@ -137,7 +173,7 @@ export function SeriesPage() {
         client.json("/api/library/collections"),
       ]);
       setSeries(result.series || []);
-      setSavedSeries(savedRes.series || []);
+      setSavedSeries(_mergeSavedSeries(savedRes.series || []));
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
       setCollections(groups.collections || []);
@@ -167,7 +203,7 @@ export function SeriesPage() {
       ]);
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
-      setSavedSeries(savedRes.series || []);
+      setSavedSeries(_mergeSavedSeries(savedRes.series || []));
       setVideos((data.videos || []).filter((video) => fromSource(video, currentSource)));
     } catch (requestError) {
       setError(requestError.message || "Không thể tải danh sách tập.");
@@ -393,23 +429,33 @@ export function SeriesPage() {
     setError(null);
     try {
       const orderedIds = (customVideos || sortedLocalVideos).map((v) => v.video_id);
-      const res = await client.json("/api/library/series/saved", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          series_key: selected.series_key,
-          name: selected.name,
-          source_key: currentSource?.key || "",
-          source_label: currentSource?.name || selected.source_label || "",
-          sort_mode: sortMode,
-          config: seriesConfig,
-          video_ids: orderedIds,
-        }),
-      });
+      const payload = {
+        series_key: selected.series_key,
+        name: selected.name,
+        source_key: currentSource?.key || "",
+        source_label: currentSource?.name || selected.source_label || "",
+        sort_mode: sortMode,
+        config: seriesConfig,
+        video_ids: orderedIds,
+        total_count: orderedIds.length,
+      };
+      let res = null;
+      try {
+        res = await client.json("/api/library/series/saved", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (err) {
+        if (!/not found|404/i.test(String(err?.message || ""))) throw err;
+      }
+      const nextLocal = _readLocalSavedSeries().filter((s) => s.series_key !== selected.series_key);
+      nextLocal.unshift({ ...payload, saved_at: Date.now() });
+      _writeLocalSavedSeries(nextLocal);
       const updated = await client.json("/api/library/series/saved").catch(() => ({ series: [] }));
-      setSavedSeries(updated.series || []);
+      setSavedSeries(_mergeSavedSeries(updated.series || []));
       setNotice(`Đã lưu Series "${selected.name}" (${seriesProgress.done}/${seriesProgress.total}).`);
-      return res.series;
+      return res?.series || payload;
     } catch (requestError) {
       setError(requestError.message || "Không thể lưu Series.");
       return null;
@@ -538,9 +584,14 @@ export function SeriesPage() {
   const removeSavedSeries = async (seriesKey) => {
     setError(null);
     try {
-      await client.json(`/api/library/series/saved/${encodeURIComponent(seriesKey)}`, {
-        method: "DELETE",
-      });
+      try {
+        await client.json(`/api/library/series/saved/${encodeURIComponent(seriesKey)}`, {
+          method: "DELETE",
+        });
+      } catch (err) {
+        if (!/not found|404/i.test(String(err?.message || ""))) throw err;
+      }
+      _writeLocalSavedSeries(_readLocalSavedSeries().filter((item) => item.series_key !== seriesKey));
       setSavedSeries((prev) => prev.filter((item) => item.series_key !== seriesKey));
       setNotice("Đã xóa Series khỏi danh mục quản lý.");
     } catch (requestError) {
@@ -554,6 +605,13 @@ export function SeriesPage() {
 
   return (
     <>
+      <div className="panel" style={{ marginBottom: 16, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link href="/series" className="btn primary">Bộ Series đã lưu</Link>
+          <Link href="/collections" className="btn secondary">Kênh nguồn &amp; Danh mục</Link>
+        </div>
+        <small className="muted">Series quản lý bộ tập theo thứ tự · Collections quản lý kênh nguồn &amp; nhóm video</small>
+      </div>
       <ErrorMessage error={error} retry={selected ? loadEpisodes : loadSeries} />
       <Notice>{notice}</Notice>
 
