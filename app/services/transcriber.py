@@ -27,7 +27,7 @@ def _positive_int(name: str, default: int) -> int:
         return default
 
 
-WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 3)
+WHISPER_BEAM_SIZE = _positive_int("REUP_WHISPER_BEAM_SIZE", 1)
 _CUDA_DISABLED_FOR_SESSION = False
 _LONG_AUDIO_THRESHOLD_SECONDS = 60 * 60
 _CHUNK_SECONDS = 10 * 60
@@ -39,7 +39,7 @@ def _cpu_threads() -> int:
     configured = _positive_int("REUP_WHISPER_CPU_THREADS", 0)
     if configured:
         return configured
-    return min(8, max(4, (os.cpu_count() or 4) - 2))
+    return min(12, max(4, (os.cpu_count() or 4) - 1))
 
 
 @lru_cache(maxsize=1)
@@ -175,10 +175,24 @@ def _run_transcription(
     on_segment: Callable[[dict], None] | None = None,
 ):
     """Materialize segments while reporting decoded audio as Whisper yields it."""
-    options = {"beam_size": WHISPER_BEAM_SIZE}
+    options = {
+        "beam_size": WHISPER_BEAM_SIZE,
+        "best_of": 1,
+        "condition_on_previous_text": False,
+        "vad_filter": True,
+        "vad_parameters": {"min_silence_duration_ms": 450},
+    }
     if language:
         options["language"] = language
-    segments, info = model.transcribe(audio, **options)
+    try:
+        segments, info = model.transcribe(audio, **options)
+    except Exception as error:
+        if "vad" in str(error).lower() or "onnx" in str(error).lower():
+            options.pop("vad_filter", None)
+            options.pop("vad_parameters", None)
+            segments, info = model.transcribe(audio, **options)
+        else:
+            raise
     decoded = []
     for segment in segments:
         decoded.append(segment)
