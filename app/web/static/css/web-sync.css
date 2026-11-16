@@ -10403,6 +10403,11 @@ body.theme-xports .gemini-project-picker {
 body.theme-xports .page-content {
   z-index: auto !important;
 }
+body.theme-xports .topbar {
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+  min-height: 92px;
+}
 body.theme-xports :is(.modal, .source-runtime-host > .modal, #playerModal) {
   z-index: var(--ds-z-modal) !important;
   padding: 24px !important;
