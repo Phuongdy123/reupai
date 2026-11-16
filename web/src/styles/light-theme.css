@@ -742,3 +742,37 @@ html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-
   background: #ffffff !important;
   border-color: #e2e8f0 !important;
 }
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-toggle-btn {
+  background: #fef2f2 !important;
+  border-color: rgba(220, 38, 38, 0.45) !important;
+  color: #b91c1c !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-toggle-btn.active {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-onboarding-guide {
+  background: linear-gradient(135deg, #fff1f2, #ffffff) !important;
+  border-color: #ef4444 !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-head strong {
+  color: #991b1b !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-head span,
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step span {
+  color: #475569 !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step {
+  background: #ffffff !important;
+  border-color: rgba(239, 68, 68, 0.38) !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step.is-active,
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step:hover {
+  background: #fef2f2 !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step b {
+  color: #dc2626 !important;
+}
+html[data-theme="light"] body.theme-xports .source-panel .source-tour-step em {
+  color: #0f172a !important;
+}
