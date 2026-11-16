@@ -336,6 +336,20 @@ html[data-theme="light"] body.theme-xports :is(.dashboard-create, .assistant-sen
   color: var(--ds-on-primary) !important;
 }
 
+html[data-theme="light"] body.theme-xports .source-bar #syncSourceBtn {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border-color: #dc2626 !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.26) !important;
+}
+
+html[data-theme="light"] body.theme-xports .source-bar #syncSourceBtn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(220, 38, 38, 0.34) !important;
+}
+
 html[data-theme="light"] body.theme-xports #processConfigDialog .process-config-actions .btn:not(.primary) {
   background: var(--ds-surface-sunken);
   border-color: var(--ds-border-strong);
