@@ -6965,6 +6965,28 @@ function mergeCurrentVideoSeries() {
             : null
     );
 
+    const firstVid = currentVideos[0];
+    const detectedAuthor = firstVid && (firstVid.author_name || firstVid.uploader || firstVid.creator_name || firstVid.owner_name);
+    if (detectedAuthor && !isPlaceholderSourceName(detectedAuthor)) {
+        const curUrl = typeof currentSourceUrl === 'function' ? currentSourceUrl() : '';
+        if (curUrl) {
+            try {
+                const nameMap = JSON.parse(localStorage.getItem('reupai:channel-names-v1') || '{}');
+                nameMap[String(curUrl).trim()] = String(detectedAuthor).trim();
+                localStorage.setItem('reupai:channel-names-v1', JSON.stringify(nameMap));
+            } catch {}
+        }
+        if (savedSource && isPlaceholderSourceName(savedSource.name) && savedSource.id) {
+            const nextName = String(detectedAuthor).trim();
+            savedSource.name = nextName;
+            apiJson(`/api/library/sources/${encodeURIComponent(savedSource.id)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: nextName }),
+            }).then(() => loadSavedSources()).catch(() => {});
+        }
+    }
+
     const currentSourceId = (
         savedSource?.id
         || currentVideos.find(video => video.source_id)?.source_id
@@ -8567,6 +8589,12 @@ function savedSourceForCurrentUrl() {
 }
 
 
+function isPlaceholderSourceName(text) {
+    const val = String(text || '').trim();
+    if (!val) return true;
+    return /^(?:bilibili|douyin)\s+\d+$/i.test(val) || /^nguồn\s+mới$/i.test(val);
+}
+
 function sourceDisplayNameFromContext(
     platform,
     url
@@ -8580,11 +8608,12 @@ function sourceDisplayNameFromContext(
     );
 
     const candidates = [
-        firstVideo.source_name,
         firstVideo.author_name,
         firstVideo.uploader,
         firstVideo.creator_name,
         firstVideo.owner_name,
+        firstVideo.channel_name,
+        !isPlaceholderSourceName(firstVideo.source_name) ? firstVideo.source_name : '',
     ];
 
     for (
@@ -8601,6 +8630,13 @@ function sourceDisplayNameFromContext(
         );
 
         if (text) {
+            try {
+                if (url && !isPlaceholderSourceName(text)) {
+                    const nameMap = JSON.parse(localStorage.getItem('reupai:channel-names-v1') || '{}');
+                    nameMap[String(url).trim()] = text;
+                    localStorage.setItem('reupai:channel-names-v1', JSON.stringify(nameMap));
+                }
+            } catch {}
             return text;
         }
     }
@@ -9543,56 +9579,60 @@ function trackedSourceCardHtml(
         )
     );
 
+    const rawName = String(source.name || '').trim();
+    let displayName = rawName || 'Nguồn không tên';
+    if (isPlaceholderSourceName(displayName)) {
+        try {
+            const nameMap = JSON.parse(localStorage.getItem('reupai:channel-names-v1') || '{}');
+            const cached = nameMap[String(source.profile_url || '').trim()];
+            if (cached && !isPlaceholderSourceName(cached)) displayName = cached;
+        } catch {}
+    }
+
     return `
         <article
             class="tracked-channel-card"
             data-source-id="${escapeHtml(String(source.id))}"
         >
 
-            <div
-                class="tracked-channel-avatar ${escapeHtml(platform)}"
-            >
-                ${source.cover_url
-                    ? `<img data-engine-cover="${escapeHtml(coverUrl(source.cover_url))}" alt="">`
-                    : (
-                        platform
-                        === 'douyin'
-                        ? 'D'
+            <div class="tracked-channel-top">
+                <div
+                    class="tracked-channel-avatar ${escapeHtml(platform)}"
+                >
+                    ${source.cover_url
+                        ? `<img data-engine-cover="${escapeHtml(coverUrl(source.cover_url))}" alt="">`
                         : (
                             platform
-                            === 'bilibili'
-                            ? 'B'
-                            : '•'
+                            === 'douyin'
+                            ? 'D'
+                            : (
+                                platform
+                                === 'bilibili'
+                                ? 'B'
+                                : '•'
+                            )
                         )
-                    )
-                }
-            </div>
+                    }
+                </div>
 
-            <div class="tracked-channel-main">
-
-                <div class="tracked-channel-head">
-
-                    <div class="tracked-channel-copy">
-
-                        <div class="tracked-channel-name">
-                            ${escapeHtml(source.name || 'Nguồn không tên')}
-                        </div>
-
-                        <div class="tracked-channel-meta">
-                            ${escapeHtml(platformName)}
-                            <span>•</span>
-                            ${Number(source.video_count || 0)} video
-                        </div>
-
+                <div class="tracked-channel-copy">
+                    <div class="tracked-channel-name" title="${escapeHtml(displayName)}">
+                        ${escapeHtml(displayName)}
                     </div>
+                    <div class="tracked-channel-meta">
+                        <span class="tracked-platform-pill is-${escapeHtml(platform)}">${escapeHtml(platformName)}</span>
+                        <span>${Number(source.video_count || 0)} video</span>
+                    </div>
+                </div>
 
+                <div class="tracked-channel-tools">
                     <button
                         type="button"
                         class="tracked-channel-edit"
-                        title="Đổi tên nguồn"
-                        aria-label="Đổi tên nguồn"
+                        title="Đổi tên kênh"
+                        aria-label="Đổi tên kênh"
                     >
-                        ${uiIcon('edit', 16)}
+                        ${uiIcon('edit', 15)}
                     </button>
 
                     <button
@@ -9601,32 +9641,30 @@ function trackedSourceCardHtml(
                         title="Bỏ theo dõi"
                         aria-label="Bỏ theo dõi"
                     >
-                        ${uiIcon('trash', 16)}
+                        ${uiIcon('trash', 15)}
                     </button>
-
                 </div>
+            </div>
 
-                <div class="tracked-channel-url">
-                    ${escapeHtml(source.profile_url || '')}
-                </div>
+            <div class="tracked-channel-url" title="${escapeHtml(source.profile_url || '')}">
+                ${escapeHtml(source.profile_url || '')}
+            </div>
 
-                <div class="tracked-channel-actions">
+            <div class="tracked-channel-actions">
 
-                    <button
-                        type="button"
-                        class="tracked-channel-open"
-                    >
-                        Mở nguồn
-                    </button>
+                <button
+                    type="button"
+                    class="tracked-channel-open"
+                >
+                    Mở nguồn
+                </button>
 
-                    <button
-                        type="button"
-                        class="tracked-channel-series"
-                    >
-                        Xem series
-                    </button>
-
-                </div>
+                <button
+                    type="button"
+                    class="tracked-channel-series"
+                >
+                    Xem series
+                </button>
 
             </div>
 

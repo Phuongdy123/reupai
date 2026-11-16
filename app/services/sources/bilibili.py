@@ -38,6 +38,45 @@ session.headers.update({
     "Accept": "application/json,text/plain,*/*",
 })
 
+_BILIBILI_CARD_API = "https://api.bilibili.com/x/web-interface/card"
+_CHANNEL_NAME_CACHE = {}
+
+
+def fetch_bilibili_channel_name(mid):
+    key = str(mid or "").strip()
+    if not key:
+        return ""
+    if key in _CHANNEL_NAME_CACHE:
+        return _CHANNEL_NAME_CACHE[key]
+    try:
+        res = session.get(
+            _BILIBILI_CARD_API,
+            params={"mid": key},
+            headers={"Referer": f"https://space.bilibili.com/{key}/"},
+            timeout=4,
+        )
+        if res.ok:
+            name = str(((res.json().get("data") or {}).get("card") or {}).get("name") or "").strip()
+            if name:
+                _CHANNEL_NAME_CACHE[key] = name
+                return name
+    except Exception:
+        pass
+    return ""
+
+
+def _attach_channel_author(mid, videos):
+    if not videos:
+        return videos
+    known = next((v.get("author_name") for v in videos if v.get("author_name")), "") or fetch_bilibili_channel_name(mid)
+    if known:
+        for v in videos:
+            if not v.get("author_name"):
+                v["author_name"] = known
+            if not v.get("uploader"):
+                v["uploader"] = known
+    return videos
+
 
 # =========================================================
 # ERRORS
@@ -219,6 +258,13 @@ def normalize_video(item):
         except (TypeError, ValueError):
             return None
 
+    author_name = str(
+        item.get("author")
+        or (item.get("owner") or {}).get("name")
+        or item.get("uname")
+        or ""
+    ).strip()
+
     return {
         "platform":
             "bilibili",
@@ -235,6 +281,12 @@ def normalize_video(item):
         "title":
             item.get("title")
             or "",
+
+        "author_name":
+            author_name,
+
+        "uploader":
+            author_name,
 
         "cover_url":
             cover,
@@ -437,6 +489,8 @@ def fetch_page(
         reverse=True,
     )
 
+    _attach_channel_author(mid, videos)
+
     return videos[:limit]
 
 
@@ -520,6 +574,7 @@ def fetch_page_meta(
     )
 
     videos = videos[:limit]
+    _attach_channel_author(mid, videos)
 
     if total is not None:
         has_more = (
@@ -781,6 +836,12 @@ def fetch_latest_from_dynamic(
                     "title"
                 )
                 or "",
+
+            "author_name":
+                str(author.get("name") or "").strip(),
+
+            "uploader":
+                str(author.get("name") or "").strip(),
 
             "cover_url":
                 cover,

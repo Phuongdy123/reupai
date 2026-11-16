@@ -891,3 +891,27 @@ html[data-theme="light"] body.theme-xports .v13-manager .source-series-name-inpu
   color: #0f172a !important;
   border-color: rgba(15, 23, 42, 0.2) !important;
 }
+html[data-theme="light"] body.theme-xports .tracked-channel-card {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.12) !important;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04) !important;
+}
+html[data-theme="light"] body.theme-xports .tracked-channel-name {
+  color: #0f172a !important;
+}
+html[data-theme="light"] body.theme-xports .tracked-channel-url {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.08) !important;
+  color: #475569 !important;
+}
+html[data-theme="light"] body.theme-xports .tracked-channel-open {
+  background: #0f172a !important;
+  color: #ffffff !important;
+}
+html[data-theme="light"] body.theme-xports .tracked-channel-series,
+html[data-theme="light"] body.theme-xports .tracked-channel-edit,
+html[data-theme="light"] body.theme-xports .tracked-channel-delete {
+  background: #f8fafc !important;
+  color: #1e293b !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+}
