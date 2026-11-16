@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
+import { VIETNAMESE_TTS_VOICES } from "../lib/tts-voices";
 import {
   EngineGate,
   ErrorMessage,
@@ -870,14 +871,7 @@ export function SeriesPage() {
                   disabled={seriesConfig.mode === "subtitle"}
                   onChange={(e) => setSeriesConfig((c) => ({ ...c, voice: e.target.value }))}
                 >
-                  <option value="vi-VN-NamMinhNeural">Nam Minh (Nam · Edge Free)</option>
-                  <option value="vi-VN-HoaiMyNeural">Hoài My (Nữ · Edge Free)</option>
-                  <option value="Trúc Ly">Trúc Ly (Nữ · Offline)</option>
-                  <option value="Hải Đăng">Hải Đăng (Nam · Offline)</option>
-                  <option value="hoai_my_tram">Hoài My · Trầm ấm (Review)</option>
-                  <option value="nam_minh_tram">Nam Minh · Trầm ấm (Review)</option>
-                  <option value="hoai_my_shorts">Hoài My · Nhanh (Shorts)</option>
-                  <option value="nam_minh_shorts">Nam Minh · Nhanh (Shorts)</option>
+                  {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
                 </select>
               </label>
 

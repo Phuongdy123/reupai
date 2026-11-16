@@ -8,6 +8,7 @@ import { Icon } from "./icon";
 import { ACTIVE_JOBS, JOB_LABELS, Loading, ErrorMessage, Notice, VideoCover, PreviewDialog } from "./library-ui";
 import { OutputEditor } from "./output-editor";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
+import { VIETNAMESE_TTS_VOICES } from "../lib/tts-voices";
 
 function parseDurationSeconds(video) {
   if (Number.isFinite(Number(video?.duration_sec)) && Number(video.duration_sec) > 0) return Number(video.duration_sec);
@@ -567,14 +568,7 @@ export function StudioPage({ mode = "youtube" }) {
             <label>
               Giọng đọc
               <select value={voiceName} onChange={(e) => setVoiceName(e.target.value)}>
-                <option value="Trúc Ly">Trúc Ly (Nữ · mặc định)</option>
-                <option value="Hải Đăng">Hải Đăng (Nam · Offline)</option>
-                <option value="vi-VN-HoaiMyNeural">Hoài My (Nữ · Edge Free)</option>
-                <option value="vi-VN-NamMinhNeural">Nam Minh (Nam · Edge Free)</option>
-                <option value="hoai_my_tram">Hoài My · Trầm ấm (Review/Truyện)</option>
-                <option value="nam_minh_tram">Nam Minh · Trầm ấm (Review/Tin tức)</option>
-                <option value="hoai_my_shorts">Hoài My · Nhanh trẻ trung (Shorts)</option>
-                <option value="nam_minh_shorts">Nam Minh · Nhanh cuốn hút (Shorts)</option>
+                {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
               </select>
             </label>
             <label>

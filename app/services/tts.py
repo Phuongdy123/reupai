@@ -973,24 +973,12 @@ def _safe_voice_slug():
     if VOICE == "Trúc Ly":
         return "truc_ly"
 
-    value = (
-        VOICE.lower()
-        .replace(
-            " ",
-            "_",
-        )
-    )
+    import unicodedata
 
-    value = re.sub(
-        r"[^a-z0-9_]+",
-        "",
-        value,
-    )
-
-    return (
-        value
-        or "voice"
-    )
+    normalized = unicodedata.normalize("NFKD", VOICE).encode("ascii", "ignore").decode("ascii")
+    value = normalized.replace("đ", "d").replace("Đ", "D").lower().replace(" ", "_")
+    value = re.sub(r"[^a-z0-9_]+", "", value)
+    return value or "voice"
 
 
 def _tts_file_paths(subtitle_id, voice_slug):
