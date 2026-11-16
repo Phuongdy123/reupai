@@ -10,12 +10,12 @@ import { PENDING_SOURCE_KEY } from "./workspace-assistant";
 import { OutputEditor } from "./output-editor";
 
 import { useYoutubeConnection } from "./youtube-connection";
-import { SocialPublishDialog } from "./social-publish-dialog";
-import { YoutubePublishDialog } from "./youtube-publish-dialog";
+import { MxhConnectionCompact, UnifiedPublishModal, useSocialConnections } from "./social-platforms";
 
 export function SourcesPage() {
   const { status, error: connectionError, client, connect, check } = useEngine();
   const youtube = useYoutubeConnection();
+  const social = useSocialConnections();
   const [diagnostics, setDiagnostics] = useState(null);
   const loadDiagnostics = () => {
     if (status !== "connected") return;
@@ -33,13 +33,12 @@ export function SourcesPage() {
   const apiKeyConfigured = Boolean(diagnostics?.configuration?.gemini_api_key_configured);
   const geminiReady = apiKeyConfigured || Boolean(diagnostics?.readiness?.translation) || (Boolean(googleOAuth?.connected) && Boolean(googleOAuth?.project_id) && !googleOAuth?.needs_reauthorization);
   const geminiNeedsProject = Boolean(googleOAuth?.connected) && !googleOAuth?.project_id && !apiKeyConfigured;
-  const [socialItem, setSocialItem] = useState(null);
+  const [publishTarget, setPublishTarget] = useState(null);
   useEffect(() => {
-    const open = event => { if (event.detail?.video_id) setSocialItem(event.detail); };
+    const open = event => { if (event.detail?.video_id) setPublishTarget({ item: event.detail, platform: "facebook" }); };
     window.addEventListener("reupai:social-output", open);
     return () => window.removeEventListener("reupai:social-output", open);
   }, []);
-  const [publishing, setPublishing] = useState(null);
   const host = useRef(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
@@ -53,12 +52,11 @@ export function SourcesPage() {
   useEffect(() => {
     const publish = event => {
       if (!event.detail?.video_id) return;
-      if (!youtube.connection?.connected) { setError('Kết nối kênh YouTube ở phía trên trước khi đăng thành phẩm.'); return; }
-      setPublishing(event.detail);
+      setPublishTarget({ item: event.detail });
     };
     window.addEventListener('reupai:publish-output', publish);
     return () => window.removeEventListener('reupai:publish-output', publish);
-  }, [youtube.connection?.connected]);
+  }, []);
   const { beginWaiting, endWaiting } = useFeedback();
 
   useEffect(() => {
@@ -180,11 +178,10 @@ export function SourcesPage() {
           </Link>
         </section>
       )}
-      <section className={`source-youtube-banner is-youtube${youtube.connection?.connected ? " is-connected" : ""}`}><div><small>XUẤT BẢN THÀNH PHẨM</small><strong>YouTube Studio</strong><p>{youtube.connection?.connected ? `Kênh: ${youtube.connection.channel.title} · Sẵn sàng đăng và hẹn giờ` : 'Kết nối kênh để đăng video ngay sau khi xử lý.'}</p></div><button type="button" className={youtube.connection?.connected ? "btn secondary" : "btn primary"} onClick={youtube.connection?.connected ? youtube.refresh : youtube.connect} disabled={!youtube.supported || youtube.busy || youtube.connection?.connecting}>{youtube.connection?.connecting ? 'Đang chờ Google…' : youtube.connection?.connected ? 'Kiểm tra kết nối' : 'Kết nối YouTube'}</button>{youtube.error && <p role="alert">{youtube.error}</p>}</section>
+      <MxhConnectionCompact youtube={youtube} social={social} />
     </div>
     <div ref={host} className="source-runtime-host" data-product-runtime="sources" />
-    {socialItem && <SocialPublishDialog client={client} item={socialItem} onClose={() => setSocialItem(null)} />}
-    {publishing && youtube.connection?.connected && <YoutubePublishDialog client={client} item={publishing} connection={youtube.connection} onClose={() => setPublishing(null)} />}
+    {publishTarget && <UnifiedPublishModal client={client} item={publishTarget.item} youtube={youtube} social={social} initialPlatform={publishTarget.platform} onClose={() => setPublishTarget(null)} />}
     {editor && <OutputEditor client={client} item={editor} onClose={() => setEditor(null)} onError={setError} onQueued={() => { setEditor(null); sendFeedback("success", "Đã vào hàng đợi xuất lại. Theo dõi ở Lịch sử hoặc Thành phẩm."); }} />}
   </div>;
 }

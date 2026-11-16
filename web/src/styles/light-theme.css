@@ -776,3 +776,32 @@ html[data-theme="light"] body.theme-xports .source-panel .source-tour-step b {
 html[data-theme="light"] body.theme-xports .source-panel .source-tour-step em {
   color: #0f172a !important;
 }
+html[data-theme="light"] body.theme-xports .mxh-connect-bar {
+  background: var(--ds-surface);
+  border-color: var(--ds-border);
+}
+html[data-theme="light"] body.theme-xports .mxh-logo-btn,
+html[data-theme="light"] body.theme-xports .unified-platform-tab {
+  background: #f8fafc;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #334155;
+}
+html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-selected,
+html[data-theme="light"] body.theme-xports .unified-platform-tab.is-active {
+  background: #eef2ff;
+  border-color: #6366f1;
+  color: #0f172a;
+}
+html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-connected {
+  border-color: rgba(22, 163, 74, 0.55);
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+}
+html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn:hover {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.35) !important;
+}

@@ -5,6 +5,14 @@ import { createSingleFlight } from "../lib/single-flight.js";
 import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices.js";
 import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
 
+function threePlatformSvgs(size = 13) {
+  return [
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#FF0000"/><path d="M10 8.8l6 3.2-6 3.2V8.8z" fill="#FFFFFF"/></svg>`,
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#1877F2"/><path d="M13.55 19.8v-6.9h2.3l.35-2.7h-2.65V8.48c0-.78.22-1.32 1.35-1.32h1.43V4.75c-.25-.03-1.1-.1-2.08-.1-2.06 0-3.47 1.26-3.47 3.57V10.2H8.45v2.7h2.33v6.9h2.77z" fill="#FFFFFF"/></svg>`,
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#111827"/><path d="M15.65 6.45a4.2 4.2 0 0 0 2.7 1.02v2.2a6.3 6.3 0 0 1-2.7-.64v4.77a4.65 4.65 0 1 1-4.65-4.65c.26 0 .51.02.75.07v2.3a2.35 2.35 0 1 0 1.65 2.24V5.2h2.25v1.25z" fill="#25F4EE" transform="translate(-0.55 -0.35)"/><path d="M15.65 6.45a4.2 4.2 0 0 0 2.7 1.02v2.2a6.3 6.3 0 0 1-2.7-.64v4.77a4.65 4.65 0 1 1-4.65-4.65c.26 0 .51.02.75.07v2.3a2.35 2.35 0 1 0 1.65 2.24V5.2h2.25v1.25z" fill="#FE2C55" transform="translate(0.55 0.35)"/><path d="M15.65 6.45a4.2 4.2 0 0 0 2.7 1.02v2.2a6.3 6.3 0 0 1-2.7-.64v4.77a4.65 4.65 0 1 1-4.65-4.65c.26 0 .51.02.75.07v2.3a2.35 2.35 0 1 0 1.65 2.24V5.2h2.25v1.25z" fill="#FFFFFF"/></svg>`,
+  ].join('');
+}
+
 export function startSourcesRuntime(environment) {
 const { document, window, localStorage, setTimeout, clearTimeout, setInterval, clearInterval, fetch, history, signal } = environment;
 const runAction = createSingleFlight();
@@ -1987,12 +1995,12 @@ function renderCardResultRow(card, video) {
     if (hasVoice) addChip('voiceover', 'VOICE', 'Xem bản Voice');
 
     if (hasSub || hasVoice) {
-        const youtube = document.createElement('button');
-        youtube.type = 'button';
-        youtube.className = 'result-youtube-btn';
-        youtube.title = 'Đăng video này lên YouTube';
-        youtube.innerHTML = `${uiIcon('play', 13)}<span>Đăng YouTube</span>`;
-        youtube.onclick = () => {
+        const publishBtn = document.createElement('button');
+        publishBtn.type = 'button';
+        publishBtn.className = 'result-youtube-btn';
+        publishBtn.title = 'Đăng lên nền tảng liên kết (YouTube · Facebook · TikTok)';
+        publishBtn.innerHTML = `<span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(12)}</span><span>Đăng lên nền tảng liên kết</span>`;
+        publishBtn.onclick = () => {
             window.dispatchEvent(new CustomEvent('reupai:publish-output', {
                 detail: {
                     ...video,
@@ -2001,7 +2009,7 @@ function renderCardResultRow(card, video) {
                 },
             }));
         };
-        group.appendChild(youtube);
+        group.appendChild(publishBtn);
     }
 
     row.hidden = !(hasSub || hasVoice || (dynamic && dynamic.childElementCount > 0));
@@ -3399,7 +3407,7 @@ async function openPlayer(
         layout.appendChild(stage);
         actions = document.createElement('aside');
         actions.className = 'result-preview-actions';
-        actions.innerHTML = '<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh của bạn.</p><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg></span>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg>Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong class="result-card-title"><span class="result-card-icon is-youtube"><svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg></span>Đăng YouTube</strong><p>AI gợi ý nội dung, chọn ảnh bìa và lên lịch đăng.</p><button type="button" class="btn primary player-publish-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-play"></use></svg>Đăng YouTube</button></div><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-external"></use></svg></span>Facebook &amp; TikTok</strong><p>Đăng lên Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn secondary player-social-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-external"></use></svg>Facebook / TikTok</button></div>';
+        actions.innerHTML = `<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh đã liên kết.</p><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg></span>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg>Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong class="result-card-title"><span class="result-card-icon"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(14)}</span></span>Đăng lên nền tảng liên kết</strong><p>Đăng lên YouTube, Facebook Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn primary player-publish-output"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(13)}</span>Đăng lên nền tảng liên kết</button></div>`;
         layout.appendChild(actions);
     }
     const output = { ...video, channel: channel || video.channel || 'default', mode };
@@ -3407,14 +3415,20 @@ async function openPlayer(
         closePlayer();
         window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: output }));
     };
-    actions.querySelector('.player-social-output').onclick = () => {
-        closePlayer();
-        window.dispatchEvent(new CustomEvent('reupai:social-output', { detail: output }));
-    };
-    actions.querySelector('.player-publish-output').onclick = () => {
-        closePlayer();
-        window.dispatchEvent(new CustomEvent('reupai:publish-output', { detail: output }));
-    };
+    const socialBtn = actions.querySelector('.player-social-output');
+    if (socialBtn) {
+        socialBtn.onclick = () => {
+            closePlayer();
+            window.dispatchEvent(new CustomEvent('reupai:social-output', { detail: output }));
+        };
+    }
+    const publishBtn = actions.querySelector('.player-publish-output');
+    if (publishBtn) {
+        publishBtn.onclick = () => {
+            closePlayer();
+            window.dispatchEvent(new CustomEvent('reupai:publish-output', { detail: output }));
+        };
+    }
 
     const title = (
         document

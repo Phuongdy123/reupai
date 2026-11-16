@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icon";
+import { ThreePlatformIcons } from "./social-platforms";
 import { ErrorMessage, Loading, Notice, modeLabel } from "./library-ui";
 import { OutputTranscriptEditor } from "./output-transcript-editor";
 import { OutputYoutubeActions } from "./output-youtube-actions";
@@ -337,7 +338,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
             <div className="output-editor-tabs" role="tablist" aria-label="Bảng tùy chỉnh">
               <button type="button" role="tab" aria-selected={activeTab === "voice"} className={`btn ${activeTab === "voice" ? "is-active" : ""}`} onClick={() => setActiveTab("voice")}><Icon name="captions" size={14} />{item.mode === "voiceover" ? "Thoại & Voice" : "Lời thoại"}</button>
               <button type="button" role="tab" aria-selected={activeTab === "regions"} className={`btn ${activeTab === "regions" ? "is-active" : ""}`} onClick={() => setActiveTab("regions")}><Icon name="edit" size={14} />Vùng mờ{intervals.length > 0 ? ` (${intervals.length})` : ""}</button>
-              <button type="button" role="tab" aria-selected={activeTab === "publish"} className={`btn ${activeTab === "publish" ? "is-active" : ""}`} onClick={() => setActiveTab("publish")}><Icon name="upload" size={14} />Đăng YouTube</button>
+              <button type="button" role="tab" aria-selected={activeTab === "publish"} className={`btn ${activeTab === "publish" ? "is-active" : ""}`} onClick={() => setActiveTab("publish")}><ThreePlatformIcons size={13} />Đăng lên nền tảng liên kết</button>
             </div>
 
             <div className="output-editor-pane">

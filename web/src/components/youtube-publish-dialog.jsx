@@ -7,7 +7,7 @@ import { Icon } from "./icon";
 import { recordChannelActivity } from "../lib/channel-activity";
 import { ThumbnailDesigner } from "./thumbnail-designer";
 
-export function YoutubePublishDialog({ client, item, connection, onClose }) {
+export function YoutubePublishDialog({ client, item, connection, platformTabs, onClose }) {
   const dialog = useRef(null);
   const live = useRef(false);
   const requestId = useRef(null);
@@ -169,8 +169,9 @@ export function YoutubePublishDialog({ client, item, connection, onClose }) {
   if (typeof document === "undefined") return null;
   return createPortal(<dialog ref={dialog} className="youtube-publish-dialog" onCancel={onClose}>
     <form onSubmit={submit}>
-      <header><div><small>ĐĂNG THÀNH PHẨM</small><h2>Chuẩn bị đăng YouTube</h2><p>Kênh: <strong>{connection.channel.title}</strong></p></div><button type="button" className="modern-icon-btn" onClick={onClose} aria-label="Đóng">×</button></header>
+      <header><div><small>ĐĂNG THÀNH PHẨM</small><h2>{platformTabs ? "Đăng lên nền tảng liên kết" : "Chuẩn bị đăng YouTube"}</h2><p>Kênh: <strong>{connection.channel.title}</strong></p></div><button type="button" className="modern-icon-btn" onClick={onClose} aria-label="Đóng">×</button></header>
       <div className="youtube-publish-workspace"><aside className="youtube-publish-preview"><small>VIDEO SẮP ĐĂNG</small><div className="youtube-publish-stage">{previewUrl ? <video crossOrigin="anonymous" src={previewUrl} controls playsInline /> : <p>Chưa mở được bản xem trước. Bạn vẫn có thể chuẩn bị nội dung đăng.</p>}</div><strong>{item.title || item.video_id}</strong><div className="youtube-publish-target"><span>ĐĂNG LÊN KÊNH</span><strong>{connection.channel.title}</strong><p>{scheduleMode === "scheduled" ? 'Hẹn giờ · Tải lên riêng tư trước' : privacy === "public" ? 'Công khai' : privacy === "unlisted" ? 'Không công khai' : 'Riêng tư'}</p>{publishAt && <p>{new Date(publishAt).toLocaleString("vi-VN")} · {timezone}</p>}</div></aside><div className="youtube-publish-body">
+        {platformTabs}
         <p className="muted">AI chỉ chuẩn bị nội dung. Bạn kiểm tra và xác nhận trước khi đăng.</p>
         {error && <p className="youtube-error" role="alert">{error}</p>}
         {job && <section className="youtube-upload-status" role="status"><strong>{job.state === "completed" ? "Đã tải lên YouTube" : job.state === "failed" ? "Chưa hoàn tất lượt đăng" : "Đang tải lên YouTube"}</strong><progress aria-label="Tiến độ tải lên YouTube" value={job.percent || 0} max="100" /><span>{job.percent || 0}%</span>{job.error && <p>{job.error}</p>}{job.warning && <p>{job.warning}</p>}{job.url && <a href={job.url} target="_blank" rel="noopener noreferrer">Mở video trên YouTube ↗</a>}{job.state === "completed" && <p>YouTube có thể cần thêm thời gian xử lý video. Chế độ: {job.privacy === "private" ? "Riêng tư" : job.privacy === "unlisted" ? "Không công khai" : job.privacy === "public" ? "Công khai" : "Chưa xác nhận; kiểm tra trong YouTube Studio"}.</p>}</section>}

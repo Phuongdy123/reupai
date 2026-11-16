@@ -20,11 +20,11 @@ async function signedInAccount() {
   return id;
 }
 
-export function SocialPublishDialog({ client, item, onClose }) {
+export function SocialPublishDialog({ client, item, initialProvider = "facebook", onProviderChange, platformTabs, onClose }) {
   const dialog = useRef(null);
   const live = useRef(false);
   const requestId = useRef(null);
-  const [provider, setProvider] = useState("facebook");
+  const [provider, setProvider] = useState(initialProvider === "tiktok" ? "tiktok" : "facebook");
   const [token, setToken] = useState("");
   const [target, setTarget] = useState(null);
   const [message, setMessage] = useState(item.title || "");
@@ -46,6 +46,21 @@ export function SocialPublishDialog({ client, item, onClose }) {
       .then((data) => { if (data && live.current) setOauthConfig(data); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (initialProvider !== "facebook" && initialProvider !== "tiktok") return;
+    setProvider((prev) => {
+      if (prev === initialProvider) return prev;
+      setToken("");
+      setFbPages([]);
+      setTarget(null);
+      setConfirmed(false);
+      setJob(null);
+      setError("");
+      requestId.current = null;
+      return initialProvider;
+    });
+  }, [initialProvider]);
 
   useEffect(() => {
     try {
@@ -73,13 +88,19 @@ export function SocialPublishDialog({ client, item, onClose }) {
           setToken(first.token);
           setTarget(nextTarget);
           setError("");
-          try { window.localStorage.setItem("reupai:social-saved:facebook", JSON.stringify({ token: first.token, target: nextTarget, pages: data.pages })); } catch {}
+          try {
+            window.localStorage.setItem("reupai:social-saved:facebook", JSON.stringify({ token: first.token, target: nextTarget, pages: data.pages }));
+            window.dispatchEvent(new CustomEvent("reupai:social-updated", { detail: { provider: "facebook" } }));
+          } catch {}
         } else if (data.provider === "tiktok" && data.token && data.target) {
           const nextTarget = { ...data.target, accountId };
           setToken(data.token);
           setTarget(nextTarget);
           setError("");
-          try { window.localStorage.setItem("reupai:social-saved:tiktok", JSON.stringify({ token: data.token, target: nextTarget })); } catch {}
+          try {
+            window.localStorage.setItem("reupai:social-saved:tiktok", JSON.stringify({ token: data.token, target: nextTarget }));
+            window.dispatchEvent(new CustomEvent("reupai:social-updated", { detail: { provider: "tiktok" } }));
+          } catch {}
         }
       } catch (err) {
         setError(err?.message || "Chưa xác minh được tài khoản ReupAI.");
@@ -137,7 +158,10 @@ export function SocialPublishDialog({ client, item, onClose }) {
       if (live.current) {
         const nextTarget = { ...result, accountId };
         setTarget(nextTarget);
-        try { window.localStorage.setItem(`reupai:social-saved:${provider}`, JSON.stringify({ token: token.trim(), target: nextTarget, pages: fbPages })); } catch {}
+        try {
+          window.localStorage.setItem(`reupai:social-saved:${provider}`, JSON.stringify({ token: token.trim(), target: nextTarget, pages: fbPages }));
+          window.dispatchEvent(new CustomEvent("reupai:social-updated", { detail: { provider } }));
+        } catch {}
         recordChannelActivity(accountId, provider, result);
       }
     } catch (failure) { if (live.current) setError(failure.message); }
@@ -181,8 +205,9 @@ export function SocialPublishDialog({ client, item, onClose }) {
   if (typeof document === "undefined") return null;
   return createPortal(<dialog ref={dialog} className="youtube-publish-dialog social-publish-dialog" aria-labelledby="social-publish-title" onCancel={event => { if (working) event.preventDefault(); else onClose(); }}>
     <form onSubmit={publish}>
-      <header><div><h2 id="social-publish-title">Đăng lên mạng xã hội</h2><p>{item.title || item.video_id}</p></div><button type="button" className="btn secondary" onClick={onClose} disabled={working}>Đóng</button></header>
+      <header><div><h2 id="social-publish-title">{platformTabs ? "Đăng lên nền tảng liên kết" : "Đăng lên mạng xã hội"}</h2><p>{item.title || item.video_id}</p></div><button type="button" className="btn secondary" onClick={onClose} disabled={working}>Đóng</button></header>
       <div className="youtube-publish-body">
+        {platformTabs}
         {!supported ? <p>Cần <a href="/api/engine/download">Local Engine 0.2.53</a> để gửi video lên TikTok hoặc đăng Facebook Page.</p> : <>
           {error && <p role="alert" className="youtube-error">{error}</p>}
           {job ? <section className="youtube-upload-status" role="status">
@@ -192,7 +217,7 @@ export function SocialPublishDialog({ client, item, onClose }) {
             {job.error && <p>{job.error}</p>}
             {job.url && <a href={job.url} target="_blank" rel="noopener noreferrer">Mở bài trên Facebook</a>}
           </section> : <fieldset disabled={working} className="youtube-publish-fields">
-            <div className="library-actions" aria-label="Nền tảng đăng">{Object.entries(labels).map(([key, name]) => <button type="button" key={key} aria-pressed={key === provider} className={`btn ${key === provider ? "primary" : "secondary"}`} onClick={() => { if (key !== provider) { setProvider(key); setToken(""); setFbPages([]); resetTarget(); } }}>{name}</button>)}</div>
+            {!platformTabs && <div className="library-actions" aria-label="Nền tảng đăng">{Object.entries(labels).map(([key, name]) => <button type="button" key={key} aria-pressed={key === provider} className={`btn ${key === provider ? "primary" : "secondary"}`} onClick={() => { if (key !== provider) { setProvider(key); setToken(""); setFbPages([]); resetTarget(); onProviderChange?.(key); } }}>{name}</button>)}</div>}
             <section className="youtube-ai-draft">
               <div className="library-actions" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
                 <button
@@ -214,7 +239,10 @@ export function SocialPublishDialog({ client, item, onClose }) {
                       setToken("");
                       setFbPages([]);
                       resetTarget();
-                      try { window.localStorage.removeItem(`reupai:social-saved:${provider}`); } catch {}
+                      try {
+                        window.localStorage.removeItem(`reupai:social-saved:${provider}`);
+                        window.dispatchEvent(new CustomEvent("reupai:social-updated", { detail: { provider } }));
+                      } catch {}
                     }}
                   >
                     Ngắt kết nối

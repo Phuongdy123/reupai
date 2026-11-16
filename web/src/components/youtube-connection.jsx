@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useEngine } from "./engine-provider";
 import { googleConsentUrl, youtubeRequest } from "../lib/youtube-client";
-import { Icon } from "./icon";
+import { MxhConnectionCompact, useSocialConnections } from "./social-platforms";
 
 export function useYoutubeConnection(enabled = true) {
   const { status, client, capabilities } = useEngine();
@@ -74,23 +74,15 @@ export function useYoutubeConnection(enabled = true) {
 
 export function YoutubeConnection() {
   const youtube = useYoutubeConnection();
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const social = useSocialConnections();
   const url = googleConsentUrl(youtube.connection?.authorization_url);
   return <section className="panel youtube-connection" id="channels">
-    <div className="panel-head"><div><h3>Kênh đã kết nối</h3><p>Kết nối tùy chọn. Bạn chọn video và xác nhận trước khi đăng.</p></div></div>
-    <div className="youtube-channel-row"><span className="youtube-channel-icon"><Icon name="video" size={22} /></span><div><strong>YouTube</strong><p>{youtube.connection?.channel?.title || "Chưa kết nối kênh"}</p></div><span className="status">{youtube.connection?.connecting ? "Đang chờ Google" : youtube.connection?.connected ? "Đã kết nối" : "Chưa kết nối"}</span></div>
-    {!youtube.supported ? <p className="muted">{youtube.engineStatus !== "connected" ? "Mở và kết nối Local Engine để quản lý kênh." : "Local Engine này chưa hỗ trợ đăng YouTube. Cần bản cập nhật có tính năng YouTube."} <Link href="/settings">Mở Cài đặt</Link></p> : <div className="library-actions">
-      <button type="button" className="btn primary" onClick={youtube.connect} disabled={youtube.busy || youtube.connection?.connecting}>{youtube.connection?.connected ? "Kết nối lại / Đổi kênh" : "Kết nối YouTube"}</button>
-      {youtube.connection?.connected && !confirmDisconnect && <button type="button" className="btn secondary" disabled={youtube.busy} onClick={() => setConfirmDisconnect(true)}>Ngắt kết nối</button>}
-      {confirmDisconnect && <><span>Ngắt kênh khỏi ReupAI trên máy này?</span><button type="button" className="btn secondary" disabled={youtube.busy} onClick={async () => { await youtube.disconnect(); setConfirmDisconnect(false); }}>Xác nhận ngắt</button><button type="button" className="btn secondary" onClick={() => setConfirmDisconnect(false)}>Giữ kết nối</button></>}
-      {youtube.connection?.connecting && <button type="button" className="btn secondary" onClick={youtube.disconnect} disabled={youtube.busy}>Hủy kết nối</button>}
-      {url && <a className="btn secondary" href={url} target="_blank" rel="noopener noreferrer">Mở Google để cấp quyền</a>}
-      <button type="button" className="btn secondary" onClick={youtube.refresh} disabled={youtube.busy}>Kiểm tra lại</button>
+    <MxhConnectionCompact youtube={youtube} social={social} />
+    {!youtube.supported && <p className="muted" style={{ marginTop: 10 }}>{youtube.engineStatus !== "connected" ? "Mở và kết nối Local Engine để quản lý kênh YouTube." : "Local Engine này chưa hỗ trợ đăng YouTube."} <Link href="/settings">Mở Cài đặt</Link></p>}
+    {url && <div className="library-actions" style={{ marginTop: 10 }}><a className="btn secondary" href={url} target="_blank" rel="noopener noreferrer">Mở Google để cấp quyền YouTube</a></div>}
+    {youtube.connection?.connected === false && <div className="google-notice-box" style={{ marginTop: 12 }}>
+      <p><strong>Kết nối Google cho YouTube:</strong> Quyền được lưu mã hóa an toàn trên máy Windows này.</p>
+      <small className="muted">💡 <em>Nếu gặp màn hình &quot;Ứng dụng chưa được xác minh&quot;, bạn chọn <strong>Nâng cao (Advanced)</strong> &rarr; <strong>Đi tới ReupAI (Vẫn an toàn)</strong>.</em></small>
     </div>}
-    {youtube.error && <p className="youtube-error" role="alert">{youtube.error}</p>}
-    <div style={{ marginTop: "10px", padding: "10px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "6px", fontSize: "0.85rem" }}>
-      <p style={{ margin: "0 0 4px 0" }}><strong>Chúng tôi cần quyền Google của bạn để tiếp tục</strong> kết nối kênh YouTube. Quyền được lưu mã hóa an toàn trên máy Windows này.</p>
-      <small className="muted" style={{ display: "block" }}>💡 <em>Nếu gặp màn hình &quot;Ứng dụng chưa được xác minh&quot;, bạn chọn <strong>Nâng cao (Advanced)</strong> &rarr; <strong>Đi tới ReupAI (Vẫn an toàn)</strong>.</em></small>
-    </div>
   </section>;
 }
