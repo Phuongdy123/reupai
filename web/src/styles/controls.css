@@ -757,7 +757,9 @@ body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary,
   line-height: 1 !important;
   transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease, border-color 140ms ease !important;
 }
-body.theme-xports #videos .compact-video-card {
+body.theme-xports #videos > .compact-video-card {
+  display: grid !important;
+  grid-template-columns: 210px minmax(0, 1fr) !important;
   padding: 12px 14px !important;
   gap: 14px !important;
   align-items: center !important;
