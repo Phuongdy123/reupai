@@ -17,8 +17,28 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <p><span id="processConfigMode">Vietsub</span> · Kiểm tra và bắt đầu khi bạn sẵn sàng</p>
                 </div>
                 <div class="process-flow-switch" role="group" aria-label="Chế độ xử lý">
+                    <button type="button" class="btn secondary process-tour-toggle-btn" id="processTourToggleBtn" title="Xem hướng dẫn nhanh cho phiên mới">? Hướng dẫn</button>
                     <button type="button" class="btn secondary" id="processFlowWizardBtn">Từng bước (5 bước)</button>
                     <button type="button" class="btn primary" id="processFlowQuickBtn">Xử lý nhanh</button>
+                </div>
+            </div>
+
+            <div class="process-onboarding-guide" id="processTourGuide" hidden>
+                <div class="process-tour-head">
+                    <div>
+                        <strong>Hướng dẫn thiết lập video cho phiên mới</strong>
+                        <span>Các nút viền đỏ là chỗ cần chỉnh. Nhấn từng bước để chỉ đúng vị trí hoặc để AI tự cài tối ưu.</span>
+                    </div>
+                    <div class="process-tour-actions">
+                        <button type="button" class="btn primary process-tour-auto-btn" id="processTourAutoBtn">⚡ Để AI tự điều chỉnh</button>
+                        <button type="button" class="btn secondary process-tour-done-btn" id="processTourDoneBtn">Đã hiểu · Tắt gợi ý</button>
+                    </div>
+                </div>
+                <div class="process-tour-steps">
+                    <button type="button" class="process-tour-step" data-tour-target="#processDownloadSource"><b>Bước 1 · Tải video xem trước</b><span>Bấm <em>Tải video để xem trước</em> để xem khung hình gốc (hoặc bỏ qua để hệ thống tự tải).</span></button>
+                    <button type="button" class="process-tour-step" data-tour-target="#processAutoBlurPreview,#toggleProcessPicker,#processAutoBrandBlur" data-tour-tab="video"><b>Bước 2 · Làm mờ vùng sub / logo</b><span>Bấm <em>AI dò vùng mờ</em>, <em>Kéo chọn vùng</em>, hoặc bật <em>Tự động làm mờ watermark</em>.</span></button>
+                    <button type="button" class="process-tour-step" data-tour-target="#processSummaryVoice,#processSummaryVoicePreviewBtn,#processInspectorTabAudio" data-tour-tab="audio"><b>Bước 3 · Chọn giọng &amp; Âm lượng</b><span>Chọn giọng AI + <em>Nghe thử</em> hoặc mở tab <em>Âm thanh</em> chỉnh âm lượng &amp; nhạc nền.</span></button>
+                    <button type="button" class="process-tour-step" data-tour-target="#processFlowWizardBtn,#processFlowQuickBtn,#runProcessConfig"><b>Bước 4 · Chọn luồng &amp; Bắt đầu</b><span>Chọn <em>Từng bước (5 bước)</em> hoặc <em>Xử lý nhanh</em> rồi bấm <em>Bắt đầu xử lý</em>.</span></button>
                 </div>
             </div>
 

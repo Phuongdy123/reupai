@@ -1542,136 +1542,115 @@ body.theme-xports .boost-gpu-toggle:has(input:checked) {
   box-shadow: 0 0 0 1px rgb(239 68 68 / 18%);
 }
 
-/* ---------- 10. New-session Onboarding Guide & Red Targets on /sources ---------- */
-body.theme-xports .source-panel .source-intro-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-body.theme-xports .source-panel .source-tour-toggle-btn {
+/* ---------- 10. New-session Onboarding Guide & Red Targets inside Thiết lập video (#processConfigDialog) ---------- */
+body.theme-xports #processConfigDialog .process-tour-toggle-btn {
   flex-shrink: 0;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 7px 2px 7px 2px;
-  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-color: rgba(239, 68, 68, 0.45);
   background: rgba(220, 38, 38, 0.12);
   color: #fca5a5;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
 }
-body.theme-xports .source-panel .source-tour-toggle-btn.active {
+body.theme-xports #processConfigDialog .process-tour-toggle-btn.active {
   background: rgba(220, 38, 38, 0.24);
   border-color: #ef4444;
   color: #ffffff;
 }
-body.theme-xports .source-panel .source-onboarding-guide {
-  margin: 0 0 14px;
-  padding: 14px 16px;
+body.theme-xports #processConfigDialog .process-onboarding-guide {
+  margin: 0 18px 10px;
+  padding: 12px 14px;
   border: 1.5px solid rgba(239, 68, 68, 0.55);
   border-radius: 10px 4px 10px 4px;
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.11), rgba(16, 18, 26, 0.86));
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.11), rgba(16, 18, 26, 0.92));
   box-shadow: 0 10px 26px rgba(220, 38, 38, 0.12);
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
-body.theme-xports .source-panel .source-onboarding-guide[hidden] {
+body.theme-xports #processConfigDialog .process-onboarding-guide[hidden] {
   display: none !important;
 }
-body.theme-xports .source-panel .source-tour-head {
+body.theme-xports #processConfigDialog .process-tour-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
-body.theme-xports .source-panel .source-tour-head strong {
+body.theme-xports #processConfigDialog .process-tour-head strong {
   display: block;
   font-size: 13.5px;
   color: #fef2f2;
 }
-body.theme-xports .source-panel .source-tour-head span {
+body.theme-xports #processConfigDialog .process-tour-head span {
   display: block;
   margin-top: 2px;
   font-size: 12px;
   color: #cbd5e1;
 }
-body.theme-xports .source-panel .source-tour-actions {
+body.theme-xports #processConfigDialog .process-tour-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-body.theme-xports .source-panel .source-tour-actions button {
-  height: 34px;
-  padding: 0 13px;
-  border-radius: 7px 2px 7px 2px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-body.theme-xports .source-panel .source-tour-steps {
+body.theme-xports #processConfigDialog .process-tour-steps {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 @media (max-width: 980px) {
-  body.theme-xports .source-panel .source-tour-steps {
+  body.theme-xports #processConfigDialog .process-tour-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 560px) {
-  body.theme-xports .source-panel .source-tour-steps {
+  body.theme-xports #processConfigDialog .process-tour-steps {
     grid-template-columns: 1fr;
   }
 }
-body.theme-xports .source-panel .source-tour-step {
+body.theme-xports #processConfigDialog .process-tour-step {
   display: grid;
   gap: 4px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   border: 1px solid rgba(239, 68, 68, 0.35);
   border-radius: 8px 2px 8px 2px;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.62);
   color: #e2e8f0;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
-body.theme-xports .source-panel .source-tour-step:hover,
-body.theme-xports .source-panel .source-tour-step.is-active {
+body.theme-xports #processConfigDialog .process-tour-step:hover,
+body.theme-xports #processConfigDialog .process-tour-step.is-active {
   border-color: #ef4444;
   background: rgba(220, 38, 38, 0.18);
   transform: translateY(-1px);
 }
-body.theme-xports .source-panel .source-tour-step b {
+body.theme-xports #processConfigDialog .process-tour-step b {
   font-size: 12px;
   color: #fca5a5;
 }
-body.theme-xports .source-panel .source-tour-step span {
+body.theme-xports #processConfigDialog .process-tour-step span {
   font-size: 11.5px;
   line-height: 1.4;
   color: #cbd5e1;
 }
-body.theme-xports .source-panel .source-tour-step em {
+body.theme-xports #processConfigDialog .process-tour-step em {
   font-style: normal;
   color: #ffffff;
   font-weight: 600;
 }
-body.theme-xports .source-panel.tour-active :is(
-  #sourceUrl,
-  #syncSourceBtn,
-  .source-voice-picker,
-  #sourceInstantRunWrap,
-  #videos .compact-video-card:first-child .sub-btn,
-  #videos .compact-video-card:first-child .voice-btn
+body.theme-xports #processConfigDialog.tour-active :is(
+  #processDownloadSource,
+  #processAutoBlurPreview,
+  #toggleProcessPicker,
+  #processSummaryVoice,
+  #processSummaryVoicePreviewBtn,
+  #runProcessConfig
 ) {
   outline: 2px solid #ef4444 !important;
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2), 0 0 18px rgba(239, 68, 68, 0.28) !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18), 0 0 14px rgba(239, 68, 68, 0.24) !important;
 }
-body.theme-xports .source-panel .reupai-tour-spotlight {
+body.theme-xports #processConfigDialog .reupai-tour-spotlight {
   outline: 2.5px solid #ef4444 !important;
   outline-offset: 3px;
   animation: reupaiTourPulse 0.9s ease-in-out infinite alternate !important;

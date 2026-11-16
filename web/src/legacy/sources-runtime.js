@@ -2183,116 +2183,6 @@ function initSourceVoiceControls() {
     }
 }
 
-function initSourceOnboardingTour() {
-    const panel = document.querySelector('.source-panel');
-    const guide = document.getElementById('sourceTourGuide');
-    const toggleBtn = document.getElementById('sourceTourToggleBtn');
-    const autoBtn = document.getElementById('sourceTourAutoBtn');
-    const doneBtn = document.getElementById('sourceTourDoneBtn');
-    if (!panel || !guide) return;
-
-    const STORAGE_KEY = 'reupai:sources-tour-done';
-    let spotlightTimer = null;
-
-    const clearSpotlight = () => {
-        if (spotlightTimer) {
-            clearTimeout(spotlightTimer);
-            spotlightTimer = null;
-        }
-        panel.querySelectorAll('.reupai-tour-spotlight').forEach((el) => {
-            el.classList.remove('reupai-tour-spotlight');
-        });
-    };
-
-    const setTourOpen = (open, persistDone = false) => {
-        guide.hidden = !open;
-        panel.classList.toggle('tour-active', open);
-        if (toggleBtn) {
-            toggleBtn.classList.toggle('active', open);
-            toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
-        if (!open) {
-            clearSpotlight();
-        }
-        if (persistDone) {
-            try {
-                localStorage.setItem(STORAGE_KEY, '1');
-            } catch {}
-        }
-    };
-
-    if (!guide.dataset.bound) {
-        guide.dataset.bound = '1';
-
-        toggleBtn?.addEventListener('click', () => {
-            const nextOpen = guide.hidden;
-            setTourOpen(nextOpen, !nextOpen);
-        });
-
-        doneBtn?.addEventListener('click', () => {
-            setTourOpen(false, true);
-        });
-
-        autoBtn?.addEventListener('click', () => {
-            const voiceSelect = document.getElementById('sourceVoiceSelect');
-            if (voiceSelect) {
-                voiceSelect.value = 'Trúc Ly';
-                voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            const instantToggle = document.getElementById('sourceInstantRunToggle');
-            if (instantToggle) {
-                instantToggle.checked = true;
-                instantToggle.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-            try {
-                localStorage.setItem('reupai:instant-run', '1');
-            } catch {}
-            setTourOpen(false, true);
-            const infoEl = document.getElementById('info');
-            if (infoEl) {
-                infoEl.textContent = 'AI đã cài sẵn: Giọng Trúc Ly · Chế độ Bấm là chạy luôn. Bạn chỉ cần dán link rồi bấm Vietsub hoặc Voice.';
-            }
-        });
-
-        guide.querySelectorAll('.source-tour-step[data-tour-target]').forEach((stepBtn) => {
-            stepBtn.addEventListener('click', () => {
-                clearSpotlight();
-                guide.querySelectorAll('.source-tour-step.is-active').forEach((btn) => {
-                    btn.classList.remove('is-active');
-                });
-                stepBtn.classList.add('is-active');
-                const selectors = (stepBtn.dataset.tourTarget || '').split(',').map((s) => s.trim()).filter(Boolean);
-                let firstTarget = null;
-                selectors.forEach((sel) => {
-                    const matched = panel.querySelector(sel);
-                    if (matched) {
-                        matched.classList.add('reupai-tour-spotlight');
-                        if (!firstTarget) firstTarget = matched;
-                    }
-                });
-                if (firstTarget) {
-                    firstTarget.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    if (typeof firstTarget.focus === 'function' && (firstTarget.tagName === 'INPUT' || firstTarget.tagName === 'SELECT' || firstTarget.tagName === 'BUTTON')) {
-                        firstTarget.focus({ preventScroll: true });
-                    }
-                } else {
-                    const infoEl = document.getElementById('info');
-                    if (infoEl) {
-                        infoEl.textContent = 'Hãy lấy danh sách video ở Bước 1 trước để thấy nút Vietsub và Voice trên từng video.';
-                    }
-                }
-                spotlightTimer = setTimeout(clearSpotlight, 2400);
-            });
-        });
-    }
-
-    let isDone = false;
-    try {
-        isDone = localStorage.getItem(STORAGE_KEY) === '1';
-    } catch {}
-    setTourOpen(!isDone, false);
-}
-
 function processConfigDefaults() {
     const boostGpu = isBoostGpuEnabled();
     // Mỗi job bắt đầu sạch theo flow mặc định, tích hợp sẵn chế độ ổn định & checkpoint video dài.
@@ -8291,7 +8181,6 @@ function bindV13Manager() {
 
     initBoostGpuToggle();
     initSourceVoiceControls();
-    initSourceOnboardingTour();
 
     bind(
         'sourceInputMode',

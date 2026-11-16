@@ -742,38 +742,38 @@ html[data-theme="light"] body.theme-xports #processConfigDialog .process-wizard-
   background: #ffffff !important;
   border-color: #e2e8f0 !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-toggle-btn {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-toggle-btn {
   background: #fef2f2 !important;
   border-color: rgba(220, 38, 38, 0.45) !important;
   color: #b91c1c !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-toggle-btn.active {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-toggle-btn.active {
   background: #dc2626 !important;
   color: #ffffff !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-onboarding-guide {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-onboarding-guide {
   background: linear-gradient(135deg, #fff1f2, #ffffff) !important;
   border-color: #ef4444 !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-head strong {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-head strong {
   color: #991b1b !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-head span,
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step span {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-head span,
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step span {
   color: #475569 !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step {
   background: #ffffff !important;
   border-color: rgba(239, 68, 68, 0.38) !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step.is-active,
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step:hover {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step.is-active,
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step:hover {
   background: #fef2f2 !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step b {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step b {
   color: #dc2626 !important;
 }
-html[data-theme="light"] body.theme-xports .source-panel .source-tour-step em {
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-step em {
   color: #0f172a !important;
 }
 html[data-theme="light"] body.theme-xports .mxh-connect-bar {

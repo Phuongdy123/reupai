@@ -327,6 +327,113 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             syncWizardUi();
         };
     }
+
+    const bindProcessOnboardingTour = () => {
+        const guide = dialog.querySelector('#processTourGuide');
+        const toggleBtn = dialog.querySelector('#processTourToggleBtn');
+        const autoBtn = dialog.querySelector('#processTourAutoBtn');
+        const doneBtn = dialog.querySelector('#processTourDoneBtn');
+        if (!guide) return;
+        const TOUR_KEY = 'reupai:process-tour-done';
+        let spotlightTimer = null;
+
+        const clearSpotlight = () => {
+            if (spotlightTimer) {
+                clearTimeout(spotlightTimer);
+                spotlightTimer = null;
+            }
+            dialog.querySelectorAll('.reupai-tour-spotlight').forEach((el) => {
+                el.classList.remove('reupai-tour-spotlight');
+            });
+        };
+
+        const setTourOpen = (open, persistDone = false) => {
+            guide.hidden = !open;
+            dialog.classList.toggle('tour-active', open);
+            if (toggleBtn) {
+                toggleBtn.classList.toggle('active', open);
+                toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+            if (!open) clearSpotlight();
+            if (persistDone) {
+                try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+            }
+        };
+
+        if (toggleBtn) {
+            toggleBtn.onclick = () => {
+                const nextOpen = guide.hidden;
+                setTourOpen(nextOpen, !nextOpen);
+            };
+        }
+        if (doneBtn) {
+            doneBtn.onclick = () => setTourOpen(false, true);
+        }
+        if (autoBtn) {
+            autoBtn.onclick = () => {
+                const autoBrand = dialog.querySelector('#processAutoBrandBlur');
+                if (autoBrand) {
+                    autoBrand.checked = true;
+                    autoBrand.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                const boostGpu = dialog.querySelector('#processBoostGpu');
+                if (boostGpu) {
+                    boostGpu.checked = true;
+                    boostGpu.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                set('processPreviewSeconds', '');
+                set('processAspectRatio', '');
+                set('processOriginalVolume', 0.15);
+                set('processVoiceVolume', 1);
+                set('processTtsSpeed', 1);
+                set('processVoice', 'Trúc Ly');
+                if (summaryVoiceSelect) summaryVoiceSelect.value = 'Trúc Ly';
+                flowMode = 'quick';
+                try {
+                    localStorage.setItem('reupai:process-flow-mode', 'quick');
+                    localStorage.setItem(TOUR_KEY, '1');
+                } catch {}
+                syncWizardUi();
+                setTourOpen(false, true);
+                const statusEl = dialog.querySelector('#processAutoBlurStatus');
+                if (statusEl) {
+                    statusEl.textContent = 'AI đã tự cài đặt tối ưu: Giọng Trúc Ly · Tự làm mờ watermark · Boost GPU · Xử lý nhanh. Bạn chỉ cần bấm Bắt đầu xử lý!';
+                }
+            };
+        }
+
+        guide.querySelectorAll('.process-tour-step[data-tour-target]').forEach((stepBtn) => {
+            stepBtn.onclick = () => {
+                clearSpotlight();
+                guide.querySelectorAll('.process-tour-step.is-active').forEach((b) => b.classList.remove('is-active'));
+                stepBtn.classList.add('is-active');
+                if (stepBtn.dataset.tourTab) {
+                    selectInspectorTab(stepBtn.dataset.tourTab);
+                }
+                const selectors = (stepBtn.dataset.tourTarget || '').split(',').map((s) => s.trim()).filter(Boolean);
+                let firstTarget = null;
+                selectors.forEach((sel) => {
+                    const matched = dialog.querySelector(sel);
+                    if (matched) {
+                        matched.classList.add('reupai-tour-spotlight');
+                        if (!firstTarget) firstTarget = matched;
+                    }
+                });
+                if (firstTarget) {
+                    firstTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    if (typeof firstTarget.focus === 'function' && (firstTarget.tagName === 'INPUT' || firstTarget.tagName === 'SELECT' || firstTarget.tagName === 'BUTTON')) {
+                        firstTarget.focus({ preventScroll: true });
+                    }
+                }
+                spotlightTimer = setTimeout(clearSpotlight, 2600);
+            };
+        });
+
+        let isDone = false;
+        try { isDone = localStorage.getItem(TOUR_KEY) === '1'; } catch {}
+        setTourOpen(!isDone, false);
+    };
+    bindProcessOnboardingTour();
     if (wizardPrev) {
         wizardPrev.onclick = () => {
             wizardStep = Math.max(1, wizardStep - 1);
