@@ -839,3 +839,6 @@ html[data-theme="light"] body.theme-xports .social-connected-strip {
 html[data-theme="light"] body.theme-xports .social-connected-badge {
   color: #15803d;
 }
+html[data-theme="light"] body.theme-xports .output-voice-optin {
+  color: #0f172a !important;
+}

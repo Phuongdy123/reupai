@@ -5547,12 +5547,18 @@ def api_output_rerender(video_id: str, body: RenderEditRequest, request: Request
             voice_changed = snapshot["mode"] == "voiceover"
     if "voice" in body.model_fields_set:
         if snapshot["mode"] != "voiceover":
-            raise HTTPException(status_code=400, detail="Chỉ thành phẩm Voice mới thay được giọng.")
+            previous_config["mode"] = "voiceover"
+            if float(previous_config.get("original_volume") or 1.0) >= 0.9:
+                previous_config["original_volume"] = 0.15
+            previous_config.setdefault("voice_volume", 1.0)
         previous_config["voice"] = (body.voice or "Trúc Ly").strip() or "Trúc Ly"
         voice_changed = True
     if "tts_speed" in body.model_fields_set:
         if snapshot["mode"] != "voiceover":
-            raise HTTPException(status_code=400, detail="Chỉ thành phẩm Voice mới chỉnh được tốc độ giọng.")
+            previous_config["mode"] = "voiceover"
+            if float(previous_config.get("original_volume") or 1.0) >= 0.9:
+                previous_config["original_volume"] = 0.15
+            previous_config.setdefault("voice_volume", 1.0)
         speed = float(body.tts_speed or 0)
         if not 0.5 <= speed <= 1.6:
             raise HTTPException(status_code=400, detail="Tốc độ giọng phải từ 0.50x đến 1.60x.")

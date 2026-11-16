@@ -7,7 +7,7 @@ import { ThreePlatformIcons } from "./social-platforms";
 import { ErrorMessage, Loading, Notice, modeLabel } from "./library-ui";
 import { OutputTranscriptEditor } from "./output-transcript-editor";
 import { OutputYoutubeActions } from "./output-youtube-actions";
-import { VIETNAMESE_TTS_VOICES } from "../lib/tts-voices";
+import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
 
 const cleanRect = (value) => {
   if (!value || !["x", "y", "width", "height"].every((key) => Number.isFinite(Number(value[key])))) return null;
@@ -90,6 +90,8 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const [newRegionKind, setNewRegionKind] = useState("logo");
   const [voiceName, setVoiceName] = useState("Trúc Ly");
   const [ttsSpeed, setTtsSpeed] = useState(1.00);
+  const [addVoice, setAddVoice] = useState(false);
+  const previewVoiceBtnRef = useRef(null);
   const [dimensions, setDimensions] = useState(null);
   const [duration, setDuration] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,9 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
   const cueEnd = useRef(null);
   const normalizedCues = cues.map(cue => ({ start: Number(cue.start), end: Number(cue.end), text: cue.text.trim() }));
   const transcriptChanged = JSON.stringify(normalizedCues) !== originalCues.current;
-  const voiceChanged = item.mode === "voiceover" && (voiceName !== (meta?.voice || "Trúc Ly") || Number(ttsSpeed) !== Number(meta?.tts_speed || 1.00));
+  const voiceChanged = item.mode === "voiceover"
+    ? (voiceName !== (meta?.voice || "Trúc Ly") || Number(ttsSpeed) !== Number(meta?.tts_speed || 1.00))
+    : addVoice;
   const intervalKey = items => JSON.stringify(items.map(entry => ({ ...cleanRect(entry), start: Number(entry.start) || 0, end: Number(entry.end) || 0, kind: entry.kind === "logo" ? "logo" : "detail" })));
   const hasChanges = transcriptChanged || voiceChanged || Boolean(editMode) || JSON.stringify(cleanRect(meta?.blur_region)) !== JSON.stringify(region) || intervalKey(meta?.blur_intervals || []) !== intervalKey(intervals);
 
@@ -146,6 +150,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
       setIntervals((details.blur_intervals || []).map((entry) => ({ ...cleanRect(entry), start: Number(entry.start) || 0, end: Number(entry.end) || 0, id: crypto.randomUUID(), kind: entry.kind === "logo" ? "logo" : "detail" })).filter((entry) => entry.x !== undefined));
       setVoiceName(details.voice || "Trúc Ly");
       setTtsSpeed(Number(details.tts_speed) || 1.00);
+      setAddVoice(false);
       setResultUrl(renderedUrl);
       setSourceUrl(rawSourceUrl);
       if (!rawSourceUrl) setNotice("Không tìm thấy video gốc trên máy. Bạn vẫn có thể xem thành phẩm, nhưng cần tải lại video nguồn để chỉnh vùng mờ chính xác.");
@@ -336,17 +341,33 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
 
           <aside className="output-editor-right">
             <div className="output-editor-tabs" role="tablist" aria-label="Bảng tùy chỉnh">
-              <button type="button" role="tab" aria-selected={activeTab === "voice"} className={`btn ${activeTab === "voice" ? "is-active" : ""}`} onClick={() => setActiveTab("voice")}><Icon name="captions" size={14} />{item.mode === "voiceover" ? "Thoại & Voice" : "Lời thoại"}</button>
+              <button type="button" role="tab" aria-selected={activeTab === "voice"} className={`btn ${activeTab === "voice" ? "is-active" : ""}`} onClick={() => setActiveTab("voice")}><Icon name="captions" size={14} />Thoại &amp; Voice</button>
               <button type="button" role="tab" aria-selected={activeTab === "regions"} className={`btn ${activeTab === "regions" ? "is-active" : ""}`} onClick={() => setActiveTab("regions")}><Icon name="edit" size={14} />Vùng mờ{intervals.length > 0 ? ` (${intervals.length})` : ""}</button>
-              <button type="button" role="tab" aria-selected={activeTab === "publish"} className={`btn ${activeTab === "publish" ? "is-active" : ""}`} onClick={() => setActiveTab("publish")}><ThreePlatformIcons size={13} />Đăng lên nền tảng liên kết</button>
+              <button type="button" role="tab" aria-selected={activeTab === "publish"} className={`btn ${activeTab === "publish" ? "is-active" : ""}`} title="Đăng lên nền tảng liên kết (YouTube · Facebook · TikTok)" onClick={() => setActiveTab("publish")}><ThreePlatformIcons size={12} /><span>Đăng MXH</span></button>
             </div>
 
             <div className="output-editor-pane">
               {activeTab === "voice" && <>
-                {item.mode === "voiceover" && <section className="output-editor-voice">
-                  <label>Giọng đọc<select value={voiceName} onChange={(event) => setVoiceName(event.target.value)}>{VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}</select></label>
-                  <label><span>Tốc độ đọc <output>{Number(ttsSpeed).toFixed(2)}x</output></span><input type="range" min="0.5" max="1.6" step="0.05" value={ttsSpeed} onChange={(event) => setTtsSpeed(Number(event.target.value))} /></label>
-                </section>}
+                <section className="output-editor-voice output-editor-voice-always">
+                  {item.mode !== "voiceover" && (
+                    <label className="output-voice-optin">
+                      <input type="checkbox" checked={addVoice} onChange={(event) => setAddVoice(event.target.checked)} />
+                      <span>Xuất kèm giọng đọc AI (tạo bản Voice)</span>
+                    </label>
+                  )}
+                  <div className="output-voice-picker-row">
+                    <label>Giọng đọc<select value={voiceName} onChange={(event) => { setVoiceName(event.target.value); if (item.mode !== "voiceover") setAddVoice(true); }}>{VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}</select></label>
+                    <button
+                      ref={previewVoiceBtnRef}
+                      type="button"
+                      className="btn secondary output-voice-preview-btn"
+                      onClick={() => playVoicePreview(voiceName, { button: previewVoiceBtnRef.current, onError: (msg) => setError(msg) })}
+                    >
+                      <Icon name="voice" size={13} /> Nghe thử
+                    </button>
+                  </div>
+                  <label><span>Tốc độ đọc <output>{Number(ttsSpeed).toFixed(2)}x</output></span><input type="range" min="0.5" max="1.6" step="0.05" value={ttsSpeed} onChange={(event) => { setTtsSpeed(Number(event.target.value)); if (item.mode !== "voiceover") setAddVoice(true); }} /></label>
+                </section>
                 <OutputTranscriptEditor cues={cues} supported={Boolean(meta?.subtitle_edit_supported)} onChange={(index,key,value)=>setCues(current=>current.map((cue,i)=>i===index?{...cue,[key]:value}:cue))} onSeek={cue=>{ const video=videoRef.current; if(video) { video.currentTime=Number(cue.start); cueEnd.current=Number(cue.end); video.play().catch(()=>{}); } }} />
               </>}
 

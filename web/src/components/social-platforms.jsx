@@ -196,7 +196,7 @@ export function useSocialConnections(enabled = true) {
   };
 }
 
-export function MxhConnectionCompact({ youtube, social, onSelectPlatform }) {
+export function MxhConnectionCompact({ youtube, social, onSelectPlatform, title = "Kết nối MXH", className = "" }) {
   const [selected, setSelected] = useState(null);
   const statusMap = {
     youtube: {
@@ -221,11 +221,11 @@ export function MxhConnectionCompact({ youtube, social, onSelectPlatform }) {
   };
 
   return (
-    <section className={`mxh-connect-bar${linkedCount > 0 ? " has-linked" : ""}`} aria-label="Kết nối MXH">
+    <section className={`mxh-connect-bar${linkedCount > 0 ? " has-linked" : ""}${className ? ` ${className}` : ""}`} aria-label={title}>
       <div className="mxh-connect-main">
         <div className="mxh-connect-info">
           <div className="mxh-connect-title">
-            <strong>Kết nối MXH</strong>
+            <strong>{title}</strong>
             <span className={`mxh-count-badge${linkedCount > 0 ? " is-ready" : ""}`}>
               <span className="mxh-badge-pulse" aria-hidden="true" />
               {linkedCount > 0 ? `${linkedCount}/3 đã liên kết` : "Chưa liên kết"}

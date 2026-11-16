@@ -7,7 +7,7 @@ import { useEngine } from "./engine-provider";
 import { EngineGate, ErrorMessage, Loading, Notice, Pager, PreviewDialog, VideoCover, dateText, outputPath, sourceHref, sourcePath } from "./library-ui";
 import { OutputEditor } from "./output-editor";
 import { useYoutubeConnection } from "./youtube-connection";
-import { MxhConnectionCompact, ThreePlatformIcons, UnifiedPublishModal, useSocialConnections } from "./social-platforms";
+import { ThreePlatformIcons, UnifiedPublishModal, useSocialConnections } from "./social-platforms";
 
 const PAGE_SIZE = 12;
 const isSubtitleFile = (item) => item.asset_type === "subtitle" || item.mode === "srt";
@@ -60,7 +60,6 @@ export function FilesPage({ kind }) {
   return <>
     <ErrorMessage error={error} retry={load} /><Notice>{notice}</Notice>
     <section className="panel"><div className="panel-head"><div><h2>{isOutputs ? "Thành phẩm" : "Thư viện video đã tải"}</h2><p>{items.length} {isOutputs ? "file final hiện có." : "video nguồn đang có trên máy."}</p></div><div className="library-actions"><button className="btn secondary" onClick={() => load(true)} disabled={loading}><Icon name="refresh" size={16} />Làm mới</button>{!isOutputs && <Link className="btn primary" href="/sources">Lấy thêm video</Link>}</div></div>
-      {isOutputs && <MxhConnectionCompact youtube={youtube} social={social} />}
       <div className="control-bar" style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}><input aria-label={`Tìm ${title.toLowerCase()}`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm theo tên hoặc ID video..." style={{ flex: "1 1 220px" }} />{isOutputs && <select aria-label="Lọc chế độ" value={mode} onChange={(event) => setMode(event.target.value)}><option value="">Tất cả thành phẩm</option><option value="subtitle">Vietsub</option><option value="voiceover">Vietsub + Voice</option><option value="srt">Chỉ SRT</option></select>}</div>
       {loading && <Loading label="Đang đọc thư viện trên máy" />}
       {!loading && !items.length && <div className="empty-state">{isOutputs ? <>Chưa tìm thấy thành phẩm. Chạy Vietsub hoặc Voice từ <Link className="text-link" href="/sources">Nguồn video</Link> để tạo video hoàn tất.</> : <>Chưa có video tải về. Vào <Link className="text-link" href="/sources">Nguồn video</Link> để tải video đầu tiên.</>}</div>}

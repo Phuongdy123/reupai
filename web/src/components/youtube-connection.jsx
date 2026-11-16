@@ -77,7 +77,7 @@ export function YoutubeConnection() {
   const social = useSocialConnections();
   const url = googleConsentUrl(youtube.connection?.authorization_url);
   return <section className="panel youtube-connection" id="channels">
-    <MxhConnectionCompact youtube={youtube} social={social} />
+    <MxhConnectionCompact youtube={youtube} social={social} title="Kênh & Tài khoản liên kết" />
     {!youtube.supported && <p className="muted" style={{ marginTop: 10 }}>{youtube.engineStatus !== "connected" ? "Mở và kết nối Local Engine để quản lý kênh YouTube." : "Local Engine này chưa hỗ trợ đăng YouTube."} <Link href="/settings">Mở Cài đặt</Link></p>}
     {url && <div className="library-actions" style={{ marginTop: 10 }}><a className="btn secondary" href={url} target="_blank" rel="noopener noreferrer">Mở Google để cấp quyền YouTube</a></div>}
     {youtube.connection?.connected === false && <div className="google-notice-box" style={{ marginTop: 12 }}>
