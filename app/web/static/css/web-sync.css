@@ -9721,16 +9721,20 @@ body.theme-xports .compact-video-card :is(.sub-btn, .voice-btn, .action-primary,
 }
 body.theme-xports #videos > .compact-video-card {
   display: grid !important;
+  grid-template-areas: "cover content" !important;
   grid-template-columns: 210px minmax(0, 1fr) !important;
   padding: 12px 14px !important;
   gap: 14px !important;
   align-items: center !important;
 }
 body.theme-xports #videos .compact-video-card .compact-cover {
+  grid-area: cover !important;
   position: relative !important;
   width: 210px !important;
   min-width: 210px !important;
+  max-width: 210px !important;
   height: auto !important;
+  max-height: none !important;
   aspect-ratio: 16 / 9 !important;
   border-radius: 8px !important;
   overflow: hidden !important;
