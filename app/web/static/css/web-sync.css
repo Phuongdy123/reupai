@@ -10859,13 +10859,13 @@ body.theme-xports .mxh-connect-bar {
   flex-direction: column;
   gap: 12px;
   padding: 14px 18px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  background: linear-gradient(125deg, rgba(99, 102, 241, 0.08) 0%, rgba(15, 23, 42, 0.58) 52%, rgba(16, 185, 129, 0.07) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 8px 24px rgba(0, 0, 0, 0.22);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(16, 17, 22, 0.92) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.28);
 }
 body.theme-xports .mxh-connect-bar.has-linked {
-  border-color: rgba(34, 197, 94, 0.24);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 body.theme-xports .mxh-connect-main {
   display: flex;
@@ -10897,16 +10897,16 @@ body.theme-xports .mxh-count-badge {
   height: 22px;
   padding: 0 9px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ds-text-muted);
   font-size: 11px;
   font-weight: 600;
 }
 body.theme-xports .mxh-count-badge.is-ready {
-  border-color: rgba(34, 197, 94, 0.36);
-  background: rgba(34, 197, 94, 0.12);
-  color: #4ade80;
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f4f4f5;
 }
 body.theme-xports .mxh-badge-pulse {
   width: 6px;
@@ -10915,7 +10915,7 @@ body.theme-xports .mxh-badge-pulse {
   background: currentColor;
 }
 body.theme-xports .mxh-count-badge.is-ready .mxh-badge-pulse {
-  box-shadow: 0 0 8px rgba(74, 222, 128, 0.85);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 body.theme-xports .mxh-connect-sub {
   margin: 0;
@@ -10936,50 +10936,48 @@ body.theme-xports .mxh-logo-btn {
   gap: 8px;
   height: 38px;
   padding: 0 13px 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--ds-text);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   transition: transform 130ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+body.theme-xports .mxh-logo-btn .platform-logo-svg,
+body.theme-xports .mxh-detail-label .platform-logo-svg {
+  filter: grayscale(1) brightness(1.15) contrast(1.15);
 }
 body.theme-xports .mxh-logo-btn:hover {
   transform: translateY(-1px);
-  border-color: rgba(255, 255, 255, 0.32);
+  border-color: rgba(255, 255, 255, 0.34);
   background: rgba(255, 255, 255, 0.08);
 }
 body.theme-xports .mxh-logo-name {
   letter-spacing: -0.01em;
 }
-body.theme-xports .mxh-logo-btn.is-youtube.is-connected {
-  border-color: rgba(239, 68, 68, 0.42);
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.14), rgba(15, 23, 42, 0.48));
-}
-body.theme-xports .mxh-logo-btn.is-facebook.is-connected {
-  border-color: rgba(59, 130, 246, 0.44);
-  background: linear-gradient(135deg, rgba(24, 119, 242, 0.16), rgba(15, 23, 42, 0.48));
-}
+body.theme-xports .mxh-logo-btn.is-youtube.is-connected,
+body.theme-xports .mxh-logo-btn.is-facebook.is-connected,
 body.theme-xports .mxh-logo-btn.is-tiktok.is-connected {
-  border-color: rgba(45, 212, 191, 0.42);
-  background: linear-gradient(135deg, rgba(37, 244, 238, 0.1), rgba(254, 44, 85, 0.1));
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.07);
 }
 body.theme-xports .mxh-logo-btn.is-selected {
-  border-color: var(--ds-accent) !important;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 body.theme-xports .mxh-logo-dot {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.45);
+  background: rgba(161, 161, 170, 0.4);
   flex-shrink: 0;
 }
 body.theme-xports .mxh-logo-dot.is-connected {
-  background: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.75);
+  background: #ffffff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 body.theme-xports .mxh-connect-detail {
   display: flex;
@@ -12409,22 +12407,22 @@ html[data-theme="light"] body.theme-xports #processConfigDialog .process-tour-st
   color: #0f172a !important;
 }
 html[data-theme="light"] body.theme-xports .mxh-connect-bar {
-  background: linear-gradient(125deg, #f8faff 0%, #ffffff 55%, #f0fdf4 100%);
+  background: #ffffff;
   border-color: rgba(15, 23, 42, 0.12);
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
 }
 html[data-theme="light"] body.theme-xports .mxh-connect-bar.has-linked {
-  border-color: rgba(22, 163, 74, 0.28);
+  border-color: rgba(15, 23, 42, 0.24);
 }
 html[data-theme="light"] body.theme-xports .mxh-count-badge {
-  background: #f1f5f9;
-  border-color: rgba(15, 23, 42, 0.12);
-  color: #475569;
+  background: #f4f4f5;
+  border-color: rgba(15, 23, 42, 0.14);
+  color: #52525b;
 }
 html[data-theme="light"] body.theme-xports .mxh-count-badge.is-ready {
-  background: #dcfce7;
-  border-color: rgba(22, 163, 74, 0.35);
-  color: #15803d;
+  background: #18181b;
+  border-color: #18181b;
+  color: #ffffff;
 }
 html[data-theme="light"] body.theme-xports .mxh-connect-sub {
   color: #64748b;
@@ -12433,26 +12431,27 @@ html[data-theme="light"] body.theme-xports .mxh-logo-btn,
 html[data-theme="light"] body.theme-xports .unified-platform-tab {
   background: #ffffff;
   border-color: rgba(15, 23, 42, 0.14);
-  color: #1e293b;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  color: #18181b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-youtube.is-connected {
-  background: linear-gradient(135deg, #fff1f2, #ffffff);
-  border-color: rgba(239, 68, 68, 0.38);
+html[data-theme="light"] body.theme-xports .mxh-logo-btn .platform-logo-svg {
+  filter: grayscale(1) contrast(1.25);
 }
-html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-facebook.is-connected {
-  background: linear-gradient(135deg, #eff6ff, #ffffff);
-  border-color: rgba(59, 130, 246, 0.42);
-}
+html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-youtube.is-connected,
+html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-facebook.is-connected,
 html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-tiktok.is-connected {
-  background: linear-gradient(135deg, #ecfeff, #fff1f2);
-  border-color: rgba(20, 184, 166, 0.38);
+  background: #f4f4f5;
+  border-color: rgba(15, 23, 42, 0.28);
+}
+html[data-theme="light"] body.theme-xports .mxh-logo-dot.is-connected {
+  background: #18181b;
+  box-shadow: none;
 }
 html[data-theme="light"] body.theme-xports .mxh-logo-btn.is-selected,
 html[data-theme="light"] body.theme-xports .unified-platform-tab.is-active {
-  background: #eef2ff;
-  border-color: #6366f1;
-  color: #0f172a;
+  background: #18181b;
+  border-color: #18181b;
+  color: #ffffff;
 }
 html[data-theme="light"] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn {
   background: #ffffff !important;
