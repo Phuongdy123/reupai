@@ -1,3 +1,5 @@
+import gc
+import hashlib
 import json
 
 
@@ -11,6 +13,7 @@ import os
 
 
 import re
+import shutil
 
 
 
@@ -106,6 +109,8 @@ SRT_PATH = (
 
 
 )
+
+RENDER_PROGRESS_CALLBACK = None
 
 
 
@@ -7248,6 +7253,365 @@ def run_ffmpeg_with_fallback(
 
 
 
+def _is_stability_mode():
+    return (
+        str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
+        or str(os.getenv("REUP_OFFLINE_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
+    )
+
+
+def _probe_media_duration(path):
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=25,
+            check=False,
+            **_detached_media_process_kwargs(),
+        )
+        value = float((result.stdout or "").strip())
+        return value if math.isfinite(value) and value > 0 else 0.0
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0.0
+
+
+def _probe_has_audio(path):
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_type",
+                "-of",
+                "csv=p=0",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+            check=False,
+            **_detached_media_process_kwargs(),
+        )
+        return result.returncode == 0 and "audio" in (result.stdout or "")
+    except (OSError, subprocess.SubprocessError):
+        return True
+
+
+def _parse_ass_time(text: str) -> float | None:
+    match = re.match(r"^\s*(\d+):(\d{1,2}):(\d{1,2})[.,](\d{1,2})\s*$", text or "")
+    if not match:
+        return None
+    hours, minutes, seconds, centis = (int(group) for group in match.groups())
+    return hours * 3600.0 + minutes * 60.0 + seconds + centis / 100.0
+
+
+def _format_ass_time(seconds: float) -> str:
+    clamped = max(0.0, float(seconds))
+    total_centis = int(round(clamped * 100))
+    centis = total_centis % 100
+    total_secs = total_centis // 100
+    secs = total_secs % 60
+    mins = (total_secs // 60) % 60
+    hours = total_secs // 3600
+    return f"{hours}:{mins:02d}:{secs:02d}.{centis:02d}"
+
+
+def _slice_ass_file(source_ass: str | Path, target_ass: str | Path, seg_start: float, seg_end: float) -> None:
+    """Copy ASS headers/styles and emit events overlapping [seg_start, seg_end) shifted to 0."""
+    lines = Path(source_ass).read_text(encoding="utf-8-sig").splitlines()
+    out_lines: list[str] = []
+    seg_dur = max(0.05, seg_end - seg_start)
+    for line in lines:
+        if line.startswith("Dialogue:"):
+            parts = line[9:].split(",", 9)
+            if len(parts) < 10:
+                continue
+            ev_start = _parse_ass_time(parts[1])
+            ev_end = _parse_ass_time(parts[2])
+            if ev_start is None or ev_end is None:
+                continue
+            if ev_end <= seg_start or ev_start >= seg_end:
+                continue
+            parts[1] = _format_ass_time(max(0.0, ev_start - seg_start))
+            parts[2] = _format_ass_time(min(seg_dur, ev_end - seg_start))
+            out_lines.append("Dialogue:" + ",".join(parts))
+        else:
+            out_lines.append(line)
+    Path(target_ass).write_text("\n".join(out_lines) + "\n", encoding="utf-8-sig")
+
+
+def _render_checkpoint_signature(region, mode: str, use_voice: bool, use_music: bool, use_logo: bool) -> str:
+    def _file_sig(path_value) -> str:
+        if not path_value:
+            return ""
+        try:
+            st = Path(path_value).stat()
+            return f"{Path(path_value).name}:{st.st_size}:{st.st_mtime_ns}"
+        except OSError:
+            return ""
+
+    ass_digest = ""
+    try:
+        ass_digest = hashlib.sha256(Path(ASS_PATH).read_bytes()).hexdigest()[:16]
+    except OSError:
+        pass
+
+    payload = {
+        "schema": 1,
+        "video": _file_sig(VIDEO_PATH),
+        "voice": _file_sig(VOICE_PATH) if use_voice else "",
+        "music": _file_sig(MUSIC_PATH) if use_music else "",
+        "ass": ass_digest,
+        "mode": mode,
+        "region": normalize_region(region),
+        "aspect": OUTPUT_ASPECT_RATIO,
+        "orig_vol": float(ORIGINAL_VOLUME),
+        "voice_vol": float(VOICE_VOLUME),
+        "music_vol": float(MUSIC_VOLUME),
+        "blur_intervals": BLUR_INTERVALS or [],
+        "auto_brand": bool(AUTO_BRAND_BLUR_ENABLED),
+        "logo_mode": LOGO_MODE,
+        "logo_text": LOGO_TEXT,
+        "use_logo": bool(use_logo),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _segment_video_ok(path: Path) -> bool:
+    if not file_ok(path) or path.stat().st_size < 1024:
+        return False
+    return _probe_media_duration(path) > 0.05
+
+
+def _render_segmented_long_video(
+    region,
+    *,
+    mode: str,
+    duration_sec: float,
+    chunk_seconds: int,
+    use_voice: bool,
+    use_music: bool,
+    use_logo: bool,
+    logo_path,
+    logo_is_prepared: bool,
+    output_path: Path,
+) -> bool:
+    """Render long multi-hour videos in resumable segments and stream-concat at the end."""
+    global ASS_PATH, BLUR_INTERVALS
+
+    chunk_dir = output_path.with_name(f"{output_path.stem}.render_chunks")
+    ckpt_path = chunk_dir / "checkpoint.json"
+    signature = _render_checkpoint_signature(region, mode, use_voice, use_music, use_logo)
+
+    reuse = False
+    if ckpt_path.is_file():
+        try:
+            saved = json.loads(ckpt_path.read_text(encoding="utf-8"))
+            reuse = isinstance(saved, dict) and saved.get("signature") == signature and int(saved.get("chunk_seconds", 0)) == chunk_seconds
+        except (OSError, ValueError):
+            reuse = False
+
+    if not reuse and chunk_dir.exists():
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    if not reuse:
+        try:
+            tmp_ckpt = chunk_dir / "checkpoint.json.tmp"
+            tmp_ckpt.write_text(json.dumps({"signature": signature, "chunk_seconds": chunk_seconds, "duration": duration_sec}), encoding="utf-8")
+            os.replace(tmp_ckpt, ckpt_path)
+        except OSError:
+            pass
+
+    total_chunks = max(1, int(math.ceil(duration_sec / chunk_seconds)))
+    seg_files: list[Path] = []
+    source_has_audio = _probe_has_audio(VIDEO_PATH)
+    orig_ass_path = ASS_PATH
+    orig_blur_intervals = list(BLUR_INTERVALS or [])
+
+    print()
+    print("==================================")
+    print(f"SEGMENTED RENDER ({total_chunks} DOAN · {chunk_seconds}s/DOAN · CO CHECKPOINT)")
+    print("==================================")
+
+    try:
+        for idx in range(total_chunks):
+            seg_start = idx * chunk_seconds
+            seg_end = min(duration_sec, seg_start + chunk_seconds)
+            seg_dur = seg_end - seg_start
+            if seg_dur <= 0.02:
+                continue
+
+            seg_path = chunk_dir / f"seg_{idx:05d}.mp4"
+            seg_tmp = chunk_dir / f"seg_{idx:05d}.tmp.mp4"
+            if reuse and _segment_video_ok(seg_path):
+                seg_files.append(seg_path)
+                print(f"[CHECKPOINT] Bo qua doan render {idx + 1}/{total_chunks} ({seg_end / 60:.1f}/{duration_sec / 60:.1f} phut)")
+                if callable(RENDER_PROGRESS_CALLBACK):
+                    RENDER_PROGRESS_CALLBACK(seg_end, duration_sec)
+                continue
+
+            seg_ass = chunk_dir / f"seg_{idx:05d}.ass"
+            _slice_ass_file(orig_ass_path, seg_ass, seg_start, seg_end)
+
+            shifted_intervals = []
+            for item in orig_blur_intervals:
+                try:
+                    iv_start = float(item.get("start", 0))
+                    iv_end = float(item.get("end", 0))
+                except (TypeError, ValueError):
+                    continue
+                if iv_end <= seg_start or iv_start >= seg_end:
+                    continue
+                shifted_intervals.append({
+                    **item,
+                    "start": max(0.0, iv_start - seg_start),
+                    "end": min(seg_dur, iv_end - seg_start),
+                })
+
+            ASS_PATH = str(seg_ass)
+            BLUR_INTERVALS = shifted_intervals
+
+            logo_input_index = ((2 if use_voice else 1) + (1 if use_music else 0)) if use_logo else None
+            seg_video_filter = build_video_filter(
+                region,
+                logo_input_index=logo_input_index,
+                logo_is_prepared=logo_is_prepared,
+            )
+
+            cmd = [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
+                "-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VIDEO_PATH),
+            ]
+            if use_voice:
+                cmd.extend(["-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VOICE_PATH)])
+            if use_music:
+                cmd.extend(["-stream_loop", "-1", "-i", str(MUSIC_PATH)])
+            if use_logo:
+                cmd.extend(["-loop", "1", "-i", str(logo_path)])
+
+            seg_use_voice = use_voice
+            if seg_use_voice:
+                music_index = 2
+                music_filter = (
+                    f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                    "[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                    if use_music
+                    else "[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                )
+                audio_part = (
+                    f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
+                    f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                    + music_filter
+                )
+                filter_complex = f"{seg_video_filter};{audio_part}"
+            elif use_music:
+                music_filter = (
+                    f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
+                    "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                    if source_has_audio
+                    else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97[aout]"
+                )
+                filter_complex = f"{seg_video_filter};{music_filter}"
+                seg_use_voice = True
+            else:
+                filter_complex = seg_video_filter
+
+            cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]"])
+            if seg_use_voice:
+                cmd.extend(["-map", "[aout]"])
+            elif source_has_audio:
+                cmd.extend(["-map", "0:a?"])
+
+            if ffmpeg_has_nvenc():
+                cmd.extend([
+                    "-c:v", "h264_nvenc",
+                    "-preset", NVENC_PRESET,
+                    "-tune", NVENC_TUNE,
+                    "-rc", "constqp",
+                    "-qp", NVENC_QP,
+                    "-bf", NVENC_BFRAMES,
+                    "-pix_fmt", "yuv420p",
+                ])
+            else:
+                cmd.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p"])
+                if _is_stability_mode():
+                    cmd.extend(["-threads", "4"])
+
+            if seg_use_voice or source_has_audio:
+                cmd.extend(["-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2"])
+
+            cmd.extend([
+                "-t", f"{seg_dur:.3f}",
+                "-video_track_timescale", "90000",
+                str(seg_tmp),
+            ])
+            print(f"\n[RENDER SEGMENT {idx + 1}/{total_chunks}] {seg_start / 60:.1f} -> {seg_end / 60:.1f} phut")
+            seg_tmp.unlink(missing_ok=True)
+            run_ffmpeg_with_fallback(cmd, use_voice=seg_use_voice)
+            if not _segment_video_ok(seg_tmp):
+                raise RuntimeError(f"Doan render {idx + 1}/{total_chunks} bi hong hoac rong.")
+            os.replace(seg_tmp, seg_path)
+            seg_files.append(seg_path)
+            seg_ass.unlink(missing_ok=True)
+            gc.collect()
+            if callable(RENDER_PROGRESS_CALLBACK):
+                RENDER_PROGRESS_CALLBACK(seg_end, duration_sec)
+    finally:
+        ASS_PATH = orig_ass_path
+        BLUR_INTERVALS = orig_blur_intervals
+
+    concat_list = chunk_dir / "concat.txt"
+    concat_list.write_text(
+        "".join(f"file '{path.resolve().as_posix()}'\n" for path in seg_files),
+        encoding="utf-8",
+    )
+    final_tmp = output_path.with_name(f"{output_path.stem}.concat.tmp{output_path.suffix}")
+    final_tmp.unlink(missing_ok=True)
+    concat_result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "warning",
+            "-f", "concat", "-safe", "0", "-i", str(concat_list),
+            "-c", "copy", "-movflags", "+faststart",
+            str(final_tmp),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        **_detached_media_process_kwargs(),
+    )
+    if concat_result.returncode != 0 or not file_ok(final_tmp):
+        final_tmp.unlink(missing_ok=True)
+        raise RuntimeError("Ghep cac doan render that bai: " + _ffmpeg_error_tail(concat_result.stderr))
+    os.replace(final_tmp, output_path)
+    shutil.rmtree(chunk_dir, ignore_errors=True)
+    return True
+
+
 def render_final(region):
 
 
@@ -7496,6 +7860,32 @@ def render_final(region):
             print(f"[WARN] Khong cache duoc logo tron, dung filter cu: {exc}")
 
     use_music = bool(MUSIC_PATH and file_ok(MUSIC_PATH))
+
+    try:
+        chunk_seconds = max(120, int(os.getenv("REUP_RENDER_CHUNK_SECONDS", "600")))
+    except ValueError:
+        chunk_seconds = 600
+    long_threshold = 300 if _is_stability_mode() else 1800
+    duration_sec = 0.0 if PREVIEW_SECONDS else _probe_media_duration(VIDEO_PATH)
+    if not PREVIEW_SECONDS and duration_sec >= long_threshold:
+        _render_segmented_long_video(
+            region,
+            mode=mode,
+            duration_sec=duration_sec,
+            chunk_seconds=chunk_seconds,
+            use_voice=use_voice,
+            use_music=use_music,
+            use_logo=use_logo,
+            logo_path=logo_path,
+            logo_is_prepared=logo_is_prepared,
+            output_path=output_path,
+        )
+        print()
+        print("==================================")
+        print("RENDER HOAN TAT")
+        print(OUTPUT_PATH)
+        print("==================================")
+        return
 
     logo_input_index = (
         ((2 if use_voice else 1) + (1 if use_music else 0))
@@ -8042,6 +8432,8 @@ def render_final(region):
 
 
         ])
+        if _is_stability_mode():
+            command.extend(["-threads", "4"])
 
 
 
@@ -8142,6 +8534,8 @@ def render_final(region):
 
 
         ])
+        if _is_stability_mode():
+            command.extend(["-threads", "4"])
 
 
 

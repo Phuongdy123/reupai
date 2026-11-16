@@ -2118,6 +2118,16 @@ function isInstantRunEnabled() {
     }
 }
 
+function isStabilityOfflineEnabled() {
+    const toggle = document.getElementById('sourceStabilityOfflineToggle');
+    if (toggle) return Boolean(toggle.checked);
+    try {
+        return localStorage.getItem('reupai:stability-offline') === '1';
+    } catch {
+        return false;
+    }
+}
+
 function getDefaultSourceVoice() {
     const select = document.getElementById('sourceVoiceSelect');
     const fromSelect = select?.value?.trim();
@@ -2170,6 +2180,18 @@ function initSourceVoiceControls() {
         instantToggle.addEventListener('change', () => {
             try {
                 localStorage.setItem('reupai:instant-run', instantToggle.checked ? '1' : '0');
+            } catch {}
+        });
+    }
+    const stabilityToggle = document.getElementById('sourceStabilityOfflineToggle');
+    if (stabilityToggle && !stabilityToggle.dataset.bound) {
+        stabilityToggle.dataset.bound = '1';
+        try {
+            stabilityToggle.checked = localStorage.getItem('reupai:stability-offline') === '1';
+        } catch {}
+        stabilityToggle.addEventListener('change', () => {
+            try {
+                localStorage.setItem('reupai:stability-offline', stabilityToggle.checked ? '1' : '0');
             } catch {}
         });
     }
@@ -2287,6 +2309,7 @@ function initSourceOnboardingTour() {
 
 function processConfigDefaults() {
     const boostGpu = isBoostGpuEnabled();
+    const stabilityOffline = isStabilityOfflineEnabled();
     // Mỗi job bắt đầu sạch theo flow mặc định, không lấy cấu hình cũ.
     return {
         // Logo chỉ được chèn khi người dùng chủ động chọn trong phần nâng cao.
@@ -2299,6 +2322,8 @@ function processConfigDefaults() {
         ocr_parallelism: boostGpu ? 4 : 2,
         ocr_use_gpu: boostGpu,
         boost_gpu: boostGpu,
+        stability_mode: stabilityOffline,
+        offline_mode: stabilityOffline,
         ocr_merge_similar: true,
         ocr_similarity_threshold: 0.82,
     };

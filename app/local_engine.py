@@ -18,7 +18,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote, urlsplit, parse_qs, unquote
 from types import SimpleNamespace
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import gc
+import hashlib
 import json
 import math
+import os
 import re
 import statistics
 import time
@@ -251,11 +254,70 @@ def extract_subtitle_srt(
 
     total = max(1, int(math.ceil(duration * fps)))
     interval = 1.0 / fps
+    checkpoint_path = output_path.with_name(f"{output_path.stem}.ocr.partial.json")
+    try:
+        stat = video_path.stat()
+        signature = hashlib.sha256(
+            f"1|{stat.st_size}|{stat.st_mtime_ns}|{language}|{fps:.3f}|{confidence:.3f}".encode("utf-8")
+        ).hexdigest()
+    except OSError:
+        signature = ""
+
     detections = []
+    start_index = 0
+    if signature and checkpoint_path.is_file():
+        try:
+            saved = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            if (
+                isinstance(saved, dict)
+                and saved.get("signature") == signature
+                and isinstance(saved.get("detections"), list)
+                and 0 < int(saved.get("next_index", 0)) < total
+            ):
+                start_index = int(saved["next_index"])
+                detections = [
+                    {
+                        "time": float(item["time"]),
+                        "text": str(item["text"]),
+                        "confidence": float(item["confidence"]),
+                    }
+                    for item in saved["detections"]
+                    if isinstance(item, dict)
+                ]
+                print(
+                    f"[subtitle-ocr] Tiep tuc tu checkpoint khung hinh {start_index}/{total} "
+                    f"({len(detections)} dong)."
+                )
+        except (OSError, ValueError, KeyError, TypeError):
+            detections = []
+            start_index = 0
+
+    def persist_ocr_checkpoint(next_index: int) -> None:
+        if not signature:
+            return
+        try:
+            tmp = checkpoint_path.with_name(checkpoint_path.name + ".tmp")
+            tmp.write_text(
+                json.dumps(
+                    {
+                        "signature": signature,
+                        "next_index": next_index,
+                        "detections": detections,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                encoding="utf-8",
+            )
+            os.replace(tmp, checkpoint_path)
+        except OSError:
+            pass
+
     started = time.monotonic()
     last_report = started
+    last_saved = start_index
     try:
-        for index in range(total):
+        for index in range(start_index, total):
             timestamp = min(index * interval, max(0, duration - 0.01))
             cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
             ok, frame = cap.read()
@@ -267,16 +329,23 @@ def extract_subtitle_srt(
             if on_progress and (now - last_report >= 0.75 or index + 1 == total):
                 on_progress(timestamp, duration)
                 last_report = now
+            if index + 1 - last_saved >= 240:
+                persist_ocr_checkpoint(index + 1)
+                last_saved = index + 1
+            if index > 0 and index % 1000 == 0:
+                gc.collect()
     finally:
         cap.release()
 
     count = _write_srt(detections, duration, interval, output_path, bool(merge_similar), threshold)
     if count == 0:
+        checkpoint_path.unlink(missing_ok=True)
         output_path.unlink(missing_ok=True)
         raise RuntimeError(
             "OCR chưa đọc được phụ đề trên video. Thử tăng tốc độ lấy mẫu, giảm ngưỡng tin cậy, "
             "chọn đúng ngôn ngữ OCR hoặc chuyển sang lấy lời thoại từ âm thanh."
         )
+    checkpoint_path.unlink(missing_ok=True)
     elapsed = time.monotonic() - started
     print(f"[subtitle-ocr] Đã tạo {count} dòng SRT từ {len(detections)} lần nhận diện trong {elapsed:.1f}s.")
     return count

@@ -1018,6 +1018,38 @@ def clear_directory(path: Path):
 
 
 
+def _record_stage_checkpoint(job_dir: Path, stage: str, details: dict | None = None) -> None:
+    """Persist an atomic per-stage checkpoint ledger for multi-hour resume."""
+    path = job_dir / "checkpoints.json"
+    existing = {}
+    if path.is_file():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, ValueError):
+            existing = {}
+    stages = existing.get("stages")
+    if not isinstance(stages, dict):
+        stages = {}
+    stages[stage] = {
+        "completed_at": datetime.now().isoformat(timespec="seconds"),
+        **(details or {}),
+    }
+    payload = {
+        "schema": 1,
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "last_stage": stage,
+        "stages": stages,
+    }
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+
+
 def build_ytdlp_command(
     url: str,
     output_template: str,
@@ -1033,21 +1065,28 @@ def build_ytdlp_command(
         "yt_dlp",
         "--continue",
         "--retries",
-        "20",
-        "--fragment-retries",
-        "20",
-        "--retry-sleep",
-        "1",
-        "--socket-timeout",
         "30",
+        "--fragment-retries",
+        "30",
+        "--socket-timeout",
+        "45",
     )
 
     # Bilibili can advertise premium 1080p formats to anonymous users, then
     # reject the actual transfer.  This pipeline only needs a stable source
     # for subtitle/voice processing, so consistently request an accessible
-    # 720p-or-lower stream and avoid parallel fragments that Bilibili often
-    # truncates mid-transfer.
+    # 720p-or-lower stream and keep resilient retry sleep/access flags.
     command.extend(["--concurrent-fragments", "1"])
+    perf_args = ytdlp_performance_args()
+    skip_next = False
+    for token in perf_args:
+        if skip_next:
+            skip_next = False
+            continue
+        if token == "--concurrent-fragments":
+            skip_next = True
+            continue
+        command.append(token)
 
     if use_browser_cookies:
 
@@ -1493,77 +1532,33 @@ def extract_audio(source_video: Path, audio_path: Path, force=False):
 
 
 
-    run(
-
-
-
-        [
-
-
-
-            "ffmpeg",
-
-
-
-            "-y",
-
-
-
-            "-i",
-
-
-
-            rel(source_video),
-
-
-
-            "-vn",
-
-
-
-            "-ac",
-
-
-
-            "1",
-
-
-
-            "-ar",
-
-
-
-            "16000",
-
-
-
-            "-c:a",
-
-
-
-            "pcm_s16le",
-
-
-
-            rel(audio_path),
-
-
-
-        ]
-
-
-
-    )
-
-
-
-
-
-
+    tmp_audio_path = audio_path.with_name(f"{audio_path.stem}.tmp{audio_path.suffix}")
+    remove_file(tmp_audio_path)
+    try:
+        run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                rel(source_video),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                rel(tmp_audio_path),
+            ]
+        )
+        if not file_ok(tmp_audio_path):
+            raise RuntimeError("Khong tao duoc source_16k.wav.")
+        os.replace(tmp_audio_path, audio_path)
+    except Exception:
+        remove_file(tmp_audio_path)
+        raise
 
     if not file_ok(audio_path):
-
-
 
         raise RuntimeError("Khong tao duoc source_16k.wav.")
 
@@ -2193,21 +2188,15 @@ def create_voice(
 
 
 
-    tts.build_voice_timeline(
+    actual_voice = tts.build_voice_timeline(
         manifest, video_duration, on_progress=on_progress,
     )
+    resolved_voice_path = Path(actual_voice) if actual_voice else voice_path
 
+    if not file_ok(resolved_voice_path):
+        raise RuntimeError(f"Khong tao duoc {resolved_voice_path.name}.")
 
-
-
-
-
-
-    if not file_ok(voice_path):
-
-
-
-        raise RuntimeError("Khong tao duoc voice.wav.")
+    return resolved_voice_path
 
 
 
@@ -2638,8 +2627,9 @@ def render_voiceover(
 
     music_volume=0.25,
     auto_brand_blur=False,
-    
-    
+    on_render_progress=None,
+
+
 
     force=False,
 
@@ -2702,12 +2692,12 @@ def render_voiceover(
     renderer.PREVIEW_SECONDS = preview_seconds
 
     renderer.RENDER_MODE = "voiceover"
-
-
-
-    renderer.create_ass(region)
-
-    renderer.render_final(region)
+    renderer.RENDER_PROGRESS_CALLBACK = on_render_progress
+    try:
+        renderer.create_ass(region)
+        renderer.render_final(region)
+    finally:
+        renderer.RENDER_PROGRESS_CALLBACK = None
 
 
 
@@ -2784,6 +2774,7 @@ def render_subtitle_only(
 
     music_volume=0.25,
     auto_brand_blur=False,
+    on_render_progress=None,
 
     force=False,
 
@@ -2838,12 +2829,12 @@ def render_subtitle_only(
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
 
     renderer.RENDER_MODE = "subtitle"
-
-
-
-    renderer.create_ass(region)
-
-    renderer.render_final(region)
+    renderer.RENDER_PROGRESS_CALLBACK = on_render_progress
+    try:
+        renderer.create_ass(region)
+        renderer.render_final(region)
+    finally:
+        renderer.RENDER_PROGRESS_CALLBACK = None
 
 
 
@@ -3284,7 +3275,9 @@ def pipeline(
 
 
 
-    voice_path = job_dir / "voice.wav"
+    voice_flac = job_dir / "voice.flac"
+    voice_wav = job_dir / "voice.wav"
+    voice_path = voice_flac if voice_flac.is_file() else voice_wav
 
 
 
@@ -3520,21 +3513,40 @@ def pipeline(
 
 
 
-        # Validate Gemini before downloading or transcribing. A completed
-        # Google OAuth login does not imply that the Gemini API is enabled for
-        # its Cloud project.
+        offline_mode = bool(config.get("offline_mode"))
+        stability_mode = bool(config.get("stability_mode") or offline_mode)
+        _saved_env = {}
+        _env_updates = {}
+        if stability_mode:
+            _env_updates["REUP_STABILITY_MODE"] = "1"
+            _env_updates["REUP_TTS_ONNX_WORKERS"] = "1"
+            _env_updates.setdefault("REUP_RENDER_CHUNK_SECONDS", os.getenv("REUP_RENDER_CHUNK_SECONDS", "600"))
+        if offline_mode:
+            _env_updates["REUP_OFFLINE_MODE"] = "1"
+            _env_updates["REUP_TTS_EDGE_FALLBACK"] = "0"
+            _env_updates["LOCAL_TRANSLATION_FALLBACK"] = "1"
+        for _k, _v in _env_updates.items():
+            _saved_env[_k] = os.environ.get(_k)
+            os.environ[_k] = _v
+
+        # Validate Gemini before downloading or transcribing unless running in
+        # Offline mode or using an already-approved translation.
         write_progress(
             job_dir,
             stage="prepare",
             percent=2,
             status="running",
-            message="Dang kiem tra quyen Gemini.",
+            message=(
+                "Che do Offline · Uu tien on dinh dang kich hoat."
+                if offline_mode
+                else "Dang kiem tra quyen Gemini."
+            ),
             mode=mode,
         )
         from services.reviewed_subtitles import reviewed_translation_lines
 
         approved_translation = reviewed_translation_lines(config.get("manual_transcript"))
-        if approved_translation is None:
+        if approved_translation is None and not offline_mode:
             from services.translator import ensure_translation_ready
 
             ensure_translation_ready()
@@ -3632,6 +3644,12 @@ def pipeline(
 
 
         )
+        _record_stage_checkpoint(job_dir, "source", {"source_video": rel(source_video)})
+        from services.final_renderer import _probe_media_duration as _probe_video_duration_seconds
+        source_duration_seconds = _probe_video_duration_seconds(source_video)
+        if source_duration_seconds >= 10800 and not voice_wav.is_file():
+            # Avoid WAV's 4 GB RIFF limit (~6.76h at 44.1kHz stereo) on long videos.
+            voice_path = voice_flac
 
         check_processing_storage(
             source_video, job_dir, audio_path, mode,
@@ -3693,6 +3711,7 @@ def pipeline(
 
         if transcript_source == "audio":
             extract_audio(source_video, audio_path, force=force)
+            _record_stage_checkpoint(job_dir, "extract_audio", {"audio": rel(audio_path)})
 
 
 
@@ -3813,6 +3832,7 @@ def pipeline(
                 vietnamese_srt.write_text("", encoding="utf-8")
 
         transcription_signature_path.write_text(transcription_signature, encoding="utf-8")
+        _record_stage_checkpoint(job_dir, "transcript", {"chinese_srt": rel(chinese_srt), "no_speech": no_speech})
 
 
 
@@ -4014,7 +4034,7 @@ def pipeline(
                     message=f"{label}: {fraction:.0%}.",
                     mode=mode,
                 )
-            create_voice(
+            voice_path = create_voice(
 
 
 
@@ -4055,6 +4075,7 @@ def pipeline(
             )
             write_cache_fingerprint(tts_fingerprint_path, tts_fingerprint)
             tts_in_progress_fingerprint_path.unlink(missing_ok=True)
+            _record_stage_checkpoint(job_dir, "tts", {"voice": rel(voice_path)})
 
 
 
@@ -4187,49 +4208,46 @@ def pipeline(
 
 
 
+        last_render_percent = 80
+        def on_render_progress(done_seconds, total_seconds):
+            nonlocal last_render_percent
+            if total_seconds <= 0:
+                return
+            fraction = min(1.0, max(0.0, done_seconds / total_seconds))
+            percent = 80 + min(18, int(18 * fraction))
+            if percent <= last_render_percent:
+                return
+            last_render_percent = percent
+            write_progress(
+                job_dir,
+                stage="render",
+                percent=percent,
+                status="running",
+                message=f"Dang render tung doan co checkpoint: {done_seconds / 60:.0f}/{total_seconds / 60:.0f} phut ({fraction:.0%}).",
+                mode=mode,
+            )
+
         if mode == "voiceover" and not no_speech:
-
-
 
             render_voiceover(
 
-
-
                 source_video,
-
-
 
                 voice_path,
 
-
-
                 vietnamese_srt,
-
-
 
                 region_path,
 
-
-
                 ass_path,
-
-
 
                 output_path,
 
-
-
                 region,
-
-
 
                 preview_seconds=preview_seconds,
 
-
-
                 original_volume=original_volume,
-
-
 
                 voice_volume=voice_volume,
 
@@ -4256,48 +4274,27 @@ def pipeline(
 
                 music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
-
-
+                on_render_progress=on_render_progress,
 
                 force=render_force,
 
-
-
             )
-
-
 
         else:
 
-
-
             render_subtitle_only(
-
-
 
                 source_video,
 
-
-
                 vietnamese_srt,
-
-
 
                 region_path,
 
-
-
                 ass_path,
-
-
 
                 output_path,
 
-
-
                 region,
-
-
 
                 preview_seconds=preview_seconds,
 
@@ -4324,12 +4321,9 @@ def pipeline(
 
                 music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
-
-
+                on_render_progress=on_render_progress,
 
                 force=render_force,
-
-
 
             )
 
@@ -4422,11 +4416,7 @@ def pipeline(
 
         save_job_info(job_dir, completed_job)
 
-
-
-
-
-
+        _record_stage_checkpoint(job_dir, "completed", {"final_video": rel(output_path)})
 
         write_progress(
 
@@ -4573,6 +4563,12 @@ def pipeline(
 
 
         raise
+    finally:
+        for _k, _old in locals().get("_saved_env", {}).items():
+            if _old is None:
+                os.environ.pop(_k, None)
+            else:
+                os.environ[_k] = _old
 
 
 

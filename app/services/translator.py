@@ -1,3 +1,4 @@
+import gc
 import hashlib
 from pathlib import Path
 import json
@@ -73,15 +74,39 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 SOURCE_LANGUAGE = "auto"
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
 
-if not API_KEY and not OAUTH_CREDENTIALS:
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_offline_mode() -> bool:
+    return _env_flag("REUP_OFFLINE_MODE", False)
+
+
+def _is_stability_mode() -> bool:
+    return _env_flag("REUP_STABILITY_MODE", False) or _is_offline_mode()
+
+
+def _local_fallback_active() -> bool:
+    return bool(LOCAL_FALLBACK_ENABLED or _env_flag("LOCAL_TRANSLATION_FALLBACK", False) or _is_offline_mode())
+
+
+def _require_gemini_credentials_error() -> Exception:
     oauth_health = google_oauth_status()
     if oauth_health.get("needs_reauthorization"):
-        raise ValueError("Phiên Google đã hết hạn hoặc cần quyền mới. Mở Cài đặt Local Engine và chọn Kết nối lại Google.")
+        return ValueError("Phiên Google đã hết hạn hoặc cần quyền mới. Mở Cài đặt Local Engine và chọn Kết nối lại Google.")
     if oauth_health.get("temporary_error"):
-        raise RuntimeError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
-    raise ValueError(
+        return RuntimeError("Tạm thời không làm mới được phiên Google. Kiểm tra Internet rồi thử lại; chưa cần đăng nhập lại.")
+    return ValueError(
         "Chưa kết nối Google cho Gemini. Mở Cài đặt Local Engine, chọn Kết nối Google rồi thử lại."
     )
+
+
+if not API_KEY and not OAUTH_CREDENTIALS and not _env_flag("LOCAL_TRANSLATION_FALLBACK", False) and not _env_flag("REUP_OFFLINE_MODE", False):
+    raise _require_gemini_credentials_error()
 
 # google-genai 2.x only applies ``credentials=`` to its Vertex AI transport.
 # ReupAI uses Gemini Developer API OAuth, whose REST API takes an OAuth bearer
@@ -130,6 +155,13 @@ def _is_gemini_api_disabled(error: Exception) -> bool:
 
 def ensure_translation_ready() -> None:
     """Fail before download/transcription when Google API access is unavailable."""
+    if _is_offline_mode():
+        print("[translator] Che do Offline dang bat -> bo qua kiem tra Gemini online.")
+        return
+    if not API_KEY and not OAUTH_CREDENTIALS:
+        if _local_fallback_active():
+            return
+        raise GeminiSetupError(str(_require_gemini_credentials_error()))
     if not OAUTH_CREDENTIALS:
         return
     credentials = get_credentials()
@@ -792,16 +824,45 @@ def _is_transient_error(error):
 # LOCAL NLLB FALLBACK
 # =========================================================
 
-def _load_local_translator():
+NLLB_SOURCE_LANG_MAP = {
+    "auto": "zho_Hans",
+    "zh": "zho_Hans",
+    "en": "eng_Latn",
+    "ja": "jpn_Jpan",
+    "ko": "kor_Hang",
+    "th": "tha_Thai",
+    "id": "ind_Latn",
+    "es": "spa_Latn",
+    "pt": "por_Latn",
+    "fr": "fra_Latn",
+    "de": "deu_Latn",
+    "ru": "rus_Cyrl",
+    "it": "ita_Latn",
+    "hi": "hin_Deva",
+    "ar": "arb_Arab",
+    "tr": "tur_Latn",
+    "ms": "zsm_Latn",
+}
+
+
+def _nllb_source_lang(source_language: str | None) -> str:
+    code = str(source_language or SOURCE_LANGUAGE or "auto").strip().lower()
+    return NLLB_SOURCE_LANG_MAP.get(code, LOCAL_SOURCE_LANG)
+
+
+def _load_local_translator(source_language: str | None = None):
     global _LOCAL_TOKENIZER
     global _LOCAL_MODEL
     global _LOCAL_TORCH
     global _LOCAL_DEVICE
 
+    nllb_src = _nllb_source_lang(source_language)
     if (
         _LOCAL_TOKENIZER is not None
         and _LOCAL_MODEL is not None
     ):
+        if hasattr(_LOCAL_TOKENIZER, "src_lang"):
+            _LOCAL_TOKENIZER.src_lang = nllb_src
         return (
             _LOCAL_TOKENIZER,
             _LOCAL_MODEL,
@@ -817,6 +878,11 @@ def _load_local_translator():
         )
 
     except ImportError as error:
+        if _is_offline_mode():
+            raise RuntimeError(
+                "Che do Offline chua co thu vien dich cuc bo (transformers/torch). "
+                "Vui long dung video tieng Viet, duyet/luu san ban dich, hoac cai transformers + torch."
+            ) from error
         raise RuntimeError(
             "Tat ca Gemini deu khong dung duoc va local fallback "
             "chua duoc cai. Chay: "
@@ -825,7 +891,7 @@ def _load_local_translator():
 
     device = (
         "cuda"
-        if torch.cuda.is_available()
+        if torch.cuda.is_available() and not _is_stability_mode()
         else "cpu"
     )
 
@@ -842,34 +908,34 @@ def _load_local_translator():
         f"Model: {LOCAL_MODEL_NAME}"
     )
     print(
-        f"Device: {device}"
+        f"Source: {nllb_src} | Device: {device}"
     )
-    print(
-        "Lan dau co the mat thoi gian tai model ve may."
-    )
-
-    tokenizer = (
-        AutoTokenizer.from_pretrained(
-            LOCAL_MODEL_NAME,
-            src_lang=
-                LOCAL_SOURCE_LANG,
+    if not _is_offline_mode():
+        print(
+            "Lan dau co the mat thoi gian tai model ve may."
         )
-    )
 
-    model_kwargs = {}
-
-    if device == "cuda":
-        model_kwargs[
-            "torch_dtype"
-        ] = torch.float16
-
-    model = (
-        AutoModelForSeq2SeqLM
-        .from_pretrained(
+    offline_only = _is_offline_mode()
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            LOCAL_MODEL_NAME,
+            src_lang=nllb_src,
+            local_files_only=offline_only,
+        )
+        model_kwargs = {"local_files_only": offline_only}
+        if device == "cuda":
+            model_kwargs["torch_dtype"] = torch.float16
+        model = AutoModelForSeq2SeqLM.from_pretrained(
             LOCAL_MODEL_NAME,
             **model_kwargs,
         )
-    )
+    except Exception as error:
+        if offline_only:
+            raise RuntimeError(
+                "Chua co san model dich Offline NLLB trong cache may. "
+                "Hay ket noi mang 1 lan de tai model hoac dung ban dich da luu/duyet san."
+            ) from error
+        raise
 
     model.to(
         device
@@ -892,6 +958,7 @@ def _load_local_translator():
 def translate_batch_local(
     batch,
     previous_context="",
+    source_language=None,
 ):
     del previous_context
 
@@ -900,7 +967,7 @@ def translate_batch_local(
         model,
         torch,
         device,
-    ) = _load_local_translator()
+    ) = _load_local_translator(source_language=source_language)
 
     forced_bos_token_id = (
         tokenizer.convert_tokens_to_ids(
@@ -1029,6 +1096,24 @@ def translate_batch(
     source_language=None,
     translation_model=None,
 ):
+    effective_source = source_language or SOURCE_LANGUAGE
+    if _is_offline_mode():
+        print("\n[OFFLINE] Dich cuc bo bang model NLLB noi bo...")
+        return translate_batch_local(
+            batch,
+            previous_context,
+            source_language=effective_source,
+        )
+
+    if not OAUTH_CREDENTIALS and client is None:
+        if _local_fallback_active():
+            return translate_batch_local(
+                batch,
+                previous_context,
+                source_language=effective_source,
+            )
+        raise _require_gemini_credentials_error()
+
     prompt = build_prompt(
         batch,
         previous_context,
@@ -1216,7 +1301,7 @@ def translate_batch(
                 )
                 break
 
-    if LOCAL_FALLBACK_ENABLED and SOURCE_LANGUAGE == "zh":
+    if _local_fallback_active():
         print(
             "\nTat ca Gemini hien tai deu khong dung duoc."
         )
@@ -1227,6 +1312,7 @@ def translate_batch(
         return translate_batch_local(
             batch,
             previous_context,
+            source_language=effective_source,
         )
 
     raise RuntimeError(
@@ -1442,26 +1528,27 @@ def translate_all(
     if not remaining:
         return translated
 
+    effective_batch_size = min(BATCH_SIZE, 25) if _is_stability_mode() else BATCH_SIZE
     total_batches = (
         len(remaining)
-        + BATCH_SIZE
+        + effective_batch_size
         - 1
-    ) // BATCH_SIZE
+    ) // effective_batch_size
 
     for start_index in range(
         0,
         len(remaining),
-        BATCH_SIZE
+        effective_batch_size
     ):
         batch = remaining[
             start_index:
             start_index
-            + BATCH_SIZE
+            + effective_batch_size
         ]
 
         batch_number = (
             start_index
-            // BATCH_SIZE
+            // effective_batch_size
         ) + 1
 
         print(
@@ -1572,6 +1659,8 @@ def translate_all(
         )
 
         # Khong sleep 1 giay/batch.
+        if batch_number % 20 == 0:
+            gc.collect()
         time.sleep(
             0.05
         )

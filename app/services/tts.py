@@ -1,9 +1,12 @@
 import atexit
 import asyncio
 import ctypes
+import gc
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -752,7 +755,7 @@ def generate_tts(
 
             if (
                 provider == "vieneu"
-                and EDGE_FALLBACK_ENABLED
+                and _edge_fallback_allowed()
             ):
                 print(
                     "[TTS] Thu Edge-TTS fallback..."
@@ -998,7 +1001,29 @@ def _tts_file_paths(subtitle_id, voice_slug):
     return raw_wav, fitted_wav
 
 
+def _is_offline_mode():
+    return str(os.getenv("REUP_OFFLINE_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_stability_mode():
+    return str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"} or _is_offline_mode()
+
+
+def _edge_fallback_allowed():
+    if _is_offline_mode():
+        return False
+    env_flag = os.getenv("REUP_TTS_EDGE_FALLBACK")
+    if env_flag is not None:
+        return env_flag.strip().lower() in {"1", "true", "yes", "on"}
+    return EDGE_FALLBACK_ENABLED
+
+
 def _parallel_onnx_enabled():
+    if _is_stability_mode():
+        return False
+    workers_env = os.getenv("REUP_TTS_ONNX_WORKERS", "").strip()
+    if workers_env == "1":
+        return False
     return (
         TTS_PROVIDER == "vieneu"
         and VIENEU_BACKEND == "onnx"
@@ -1273,6 +1298,20 @@ def create_tts_clips(
 # BUILD FULL TIMELINE
 # =========================================================
 
+def _timeline_manifest_signature(manifest, duration_ms: int, output_suffix: str) -> str:
+    hasher = hashlib.sha256()
+    hasher.update(f"v1|{duration_ms}|{output_suffix}|{VOICE}|{BASE_TTS_SPEED:.3f}|{len(manifest)}".encode("utf-8"))
+    for item in manifest:
+        audio_file = str(item.get("audio_file") or "")
+        size = 0
+        try:
+            size = os.path.getsize(audio_file)
+        except OSError:
+            pass
+        hasher.update(f"|{item.get('start_ms')}:{size}:{item.get('final_audio_duration')}".encode("utf-8"))
+    return hasher.hexdigest()
+
+
 def build_voice_timeline(
     manifest,
     total_duration_ms,
@@ -1291,16 +1330,17 @@ def build_voice_timeline(
     )
 
     # Overlaying each line onto a full-length AudioSegment copies the entire
-    # timeline per line.  A one-hour 44.1 kHz stereo timeline is ~635 MB, so
-    # thousands of subtitles would copy terabytes of data and can exhaust RAM.
-    # Assemble fixed-size windows and append PCM to one WAV instead.  The
-    # output format and overlapping-clip mix stay the same as before.
+    # timeline per line. Assemble 30s windows inside 10-minute resumable
+    # checkpoint blocks so multi-hour/multi-dozen-hour jobs resume cleanly and
+    # use FLAC when >3.8 GB PCM would exceed WAV's 4 GB RIFF limit.
     duration_ms = max(0, int(total_duration_ms))
     output_path = Path(OUTPUT_AUDIO)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = output_path.with_name(output_path.name + ".tmp.wav")
+
     window_ms = 30_000
-    window_count = (duration_ms + window_ms - 1) // window_ms
+    windows_per_block = 20  # 10 minutes per checkpoint block
+    block_ms = window_ms * windows_per_block
+    window_count = max(1, (duration_ms + window_ms - 1) // window_ms) if duration_ms else 1
     window_clips = [[] for _ in range(window_count)]
     for item in manifest:
         audio_path = str(item["audio_file"])
@@ -1312,43 +1352,140 @@ def build_voice_timeline(
         if clip_duration_ms and start_ms < duration_ms:
             clip_end = min(duration_ms, start_ms + clip_duration_ms)
             for window_index in range(start_ms // window_ms, (clip_end - 1) // window_ms + 1):
-                window_clips[window_index].append((start_ms, clip_end, audio_path))
+                if window_index < window_count:
+                    window_clips[window_index].append((start_ms, clip_end, audio_path))
 
-    try:
-        with wave.open(str(temporary_path), "wb") as output:
-            output.setnchannels(2)
-            output.setsampwidth(2)
-            output.setframerate(44100)
+    chunk_dir = output_path.with_name(f"{output_path.stem}.timeline_chunks")
+    meta_path = chunk_dir / "checkpoint.json"
+    signature = _timeline_manifest_signature(manifest, duration_ms, output_path.suffix.lower())
+    reuse_chunks = False
+    if meta_path.is_file():
+        try:
+            saved = json.loads(meta_path.read_text(encoding="utf-8"))
+            reuse_chunks = isinstance(saved, dict) and saved.get("signature") == signature
+        except (OSError, ValueError):
+            reuse_chunks = False
+    if not reuse_chunks and chunk_dir.exists():
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    if not reuse_chunks:
+        try:
+            tmp_meta = chunk_dir / "checkpoint.json.tmp"
+            tmp_meta.write_text(json.dumps({"signature": signature, "duration_ms": duration_ms}), encoding="utf-8")
+            os.replace(tmp_meta, meta_path)
+        except OSError:
+            pass
 
-            for window_index, window_start in enumerate(range(0, duration_ms, window_ms)):
-                window_end = min(duration_ms, window_start + window_ms)
-                timeline = (
-                    AudioSegment.silent(
-                        duration=window_end - window_start,
-                        frame_rate=44100,
-                    )
-                    .set_channels(2)
-                    .set_sample_width(2)
-                )
-                for clip_start, clip_end, audio_path in window_clips[window_index]:
-                    audio = AudioSegment.from_file(audio_path)
-                    audio = audio.set_frame_rate(44100).set_channels(2).set_sample_width(2)
-                    clip_offset = max(0, window_start - clip_start)
-                    clip_limit = min(len(audio), window_end - clip_start)
-                    if clip_limit <= clip_offset:
+    block_files: list[Path] = []
+    block_starts = list(range(0, duration_ms, block_ms)) or [0]
+    for block_index, block_start in enumerate(block_starts):
+        block_end = min(duration_ms, block_start + block_ms)
+        block_path = chunk_dir / f"block_{block_index:05d}.wav"
+        block_tmp = chunk_dir / f"block_{block_index:05d}.tmp.wav"
+        expected_frames = max(0, int(round((block_end - block_start) * 44.1)))
+        min_valid_bytes = 44 + max(0, expected_frames * 4 - 4096)
+        if reuse_chunks and block_path.is_file() and block_path.stat().st_size >= min_valid_bytes:
+            block_files.append(block_path)
+            if on_progress is not None:
+                on_progress("timeline", block_end, duration_ms)
+            print(f"[CHECKPOINT] Bo qua block voice da hoan thanh: {block_end / 1000:.0f}/{duration_ms / 1000:.0f}s")
+            continue
+
+        try:
+            with wave.open(str(block_tmp), "wb") as output:
+                output.setnchannels(2)
+                output.setsampwidth(2)
+                output.setframerate(44100)
+                first_w = block_start // window_ms
+                last_w = max(first_w, (max(block_start + 1, block_end) - 1) // window_ms)
+                for window_index in range(first_w, min(window_count, last_w + 1)):
+                    window_start = window_index * window_ms
+                    window_end = min(block_end, window_start + window_ms)
+                    if window_end <= window_start:
                         continue
-                    timeline = timeline.overlay(
-                        audio[clip_offset:clip_limit],
-                        position=max(0, clip_start - window_start),
+                    timeline = (
+                        AudioSegment.silent(
+                            duration=window_end - window_start,
+                            frame_rate=44100,
+                        )
+                        .set_channels(2)
+                        .set_sample_width(2)
                     )
-                output.writeframes(timeline.raw_data)
-                if on_progress is not None:
-                    on_progress("timeline", window_end, duration_ms)
-                print(
-                    f"Voice timeline: {window_end / 1000:.0f}/"
-                    f"{duration_ms / 1000:.0f}s"
-                )
-        temporary_path.replace(output_path)
+                    for clip_start, clip_end, audio_path in window_clips[window_index]:
+                        audio = AudioSegment.from_file(audio_path)
+                        audio = audio.set_frame_rate(44100).set_channels(2).set_sample_width(2)
+                        clip_offset = max(0, window_start - clip_start)
+                        clip_limit = min(len(audio), window_end - clip_start)
+                        if clip_limit <= clip_offset:
+                            continue
+                        timeline = timeline.overlay(
+                            audio[clip_offset:clip_limit],
+                            position=max(0, clip_start - window_start),
+                        )
+                    output.writeframes(timeline.raw_data)
+                    if on_progress is not None:
+                        on_progress("timeline", window_end, duration_ms)
+                    print(
+                        f"Voice timeline: {window_end / 1000:.0f}/"
+                        f"{duration_ms / 1000:.0f}s"
+                    )
+            os.replace(block_tmp, block_path)
+            block_files.append(block_path)
+            gc.collect()
+        except Exception:
+            block_tmp.unlink(missing_ok=True)
+            raise
+
+    estimated_pcm_bytes = int(duration_ms / 1000.0 * 44100 * 4)
+    use_ffmpeg_concat = output_path.suffix.lower() != ".wav" or estimated_pcm_bytes >= 3_800_000_000
+    temporary_path = output_path.with_name(f"{output_path.stem}.tmp{output_path.suffix}")
+    try:
+        if use_ffmpeg_concat:
+            if output_path.suffix.lower() == ".wav" and estimated_pcm_bytes >= 3_800_000_000:
+                print("[WARN] Timeline vuot 3.8 GB cho chuan WAV -> dong goi FLAC de khong bi loi 4GB.")
+                output_path = output_path.with_suffix(".flac")
+                temporary_path = output_path.with_name(f"{output_path.stem}.tmp.flac")
+            concat_list = chunk_dir / "concat.txt"
+            concat_list.write_text(
+                "".join(f"file '{path.resolve().as_posix()}'\n" for path in block_files),
+                encoding="utf-8",
+            )
+            codec_args = (
+                ["-c:a", "flac", "-compression_level", "3"]
+                if output_path.suffix.lower() == ".flac"
+                else ["-c:a", "aac", "-b:a", "192k"]
+            )
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-nostdin",
+                    "-f", "concat", "-safe", "0", "-i", str(concat_list),
+                    *codec_args,
+                    str(temporary_path),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                creationflags=MEDIA_CREATIONFLAGS,
+            )
+            if result.returncode != 0:
+                raise RuntimeError("Ghep voice timeline FLAC that bai: " + (result.stderr or "")[-400:])
+        else:
+            with wave.open(str(temporary_path), "wb") as final_wav:
+                final_wav.setnchannels(2)
+                final_wav.setsampwidth(2)
+                final_wav.setframerate(44100)
+                for block_path in block_files:
+                    with wave.open(str(block_path), "rb") as part_wav:
+                        while True:
+                            frames = part_wav.readframes(65536)
+                            if not frames:
+                                break
+                            final_wav.writeframes(frames)
+        os.replace(temporary_path, output_path)
+        shutil.rmtree(chunk_dir, ignore_errors=True)
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
@@ -1360,6 +1497,7 @@ def build_voice_timeline(
     print(
         output_path
     )
+    return str(output_path)
 
 
 # =========================================================

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
@@ -95,7 +96,10 @@ def _cpu_threads() -> int:
     configured = _positive_int("REUP_WHISPER_CPU_THREADS", 0)
     if configured:
         return configured
-    return min(12, max(4, (os.cpu_count() or 4) - 1))
+    threads = min(12, max(4, (os.cpu_count() or 4) - 1))
+    if str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}:
+        return min(6, threads)
+    return threads
 
 
 @lru_cache(maxsize=1)
@@ -402,6 +406,9 @@ def _transcribe_long_wav(
             if on_progress:
                 on_progress(processed, duration)
             persist(core_end)
+            del raw, pcm, audio
+            if (core_start // chunk_frames) % 6 == 5:
+                gc.collect()
     return results
 
 

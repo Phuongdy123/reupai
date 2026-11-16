@@ -516,7 +516,7 @@ class ProcessRequest(BaseModel):
     transcript_source: Literal["audio", "video_subtitles"] = "audio"
     # Optional Whisper/OCR transcript reviewed in the web editor. When present,
     # the pipeline uses it as the source SRT and skips a second recognition pass.
-    manual_transcript: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=10000)
+    manual_transcript: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     output_format: Literal["video", "srt"] = "video"
     ocr_language: Literal["auto", "zh", "en", "ja", "ko", "vi", "th"] = "auto"
     ocr_fps: float = Field(default=2.0, ge=0.5, le=10.0)
@@ -555,8 +555,10 @@ class ProcessRequest(BaseModel):
     # and generated voice. It is only produced by the authenticated editor.
     render_only: bool = False
     regenerate_voice: bool = False
-    revised_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=10000)
+    revised_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     rerender_music_path: Optional[str] = None
+    stability_mode: bool = False
+    offline_mode: bool = False
 
 
 class RenderEditRequest(BaseModel):
@@ -1534,8 +1536,7 @@ def sync_job_files(
         ),
         (
             "voice",
-            job_dir
-            / "voice.wav",
+            (job_dir / "voice.flac") if (job_dir / "voice.flac").is_file() else (job_dir / "voice.wav"),
         ),
         (
             "subtitle_region",
@@ -3990,13 +3991,11 @@ def build_ytdlp_download_command(
         "yt_dlp",
         "--continue",
         "--retries",
-        "20",
-        "--fragment-retries",
-        "20",
-        "--retry-sleep",
-        "1",
-        "--socket-timeout",
         "30",
+        "--fragment-retries",
+        "30",
+        "--socket-timeout",
+        "45",
     )
 
     command.extend(ytdlp_performance_args())
@@ -5094,14 +5093,20 @@ def api_download(
                     # handles a source completed by an older engine request.
                     existing = find_valid_downloaded_video(folder)
                     if not existing:
-                        # Remove only known invalid/staging files inside this video's
-                        # own download folder. A valid source is never touched.
+                        # Remove corrupt finalized/empty stubs while keeping .part/.ytdl
+                        # download sessions intact so multi-hour downloads resume cleanly.
                         for stale in folder.glob("source.pending.*"):
-                            if stale.is_file():
-                                stale.unlink(missing_ok=True)
-                                stale.with_name(
-                                    f".{stale.name}.probe.json"
-                                ).unlink(missing_ok=True)
+                            if not stale.is_file():
+                                continue
+                            if stale.name.endswith((".part", ".ytdl")) and stale.stat().st_size > 0:
+                                continue
+                            if stale.suffix.lower() in {".mp4", ".mkv", ".webm", ".mov"} and media_file_ok(stale):
+                                finalize_staged_download(folder)
+                                existing = find_valid_downloaded_video(folder)
+                                break
+                            stale.unlink(missing_ok=True)
+                            stale.with_name(f".{stale.name}.probe.json").unlink(missing_ok=True)
+                    if not existing:
                         for suffix in (".mp4", ".mkv", ".webm", ".mov"):
                             invalid = folder / f"source{suffix}"
                             if invalid.exists() and not media_file_ok(invalid):
@@ -5119,17 +5124,25 @@ def api_download(
                             finalize_staged_download(folder)
                             downloaded_now = True
                         finally:
-                            # Keep cleanup under the per-video lock. A later
-                            # request must never lose its in-flight staging.
+                            # Remove staging files once finalized or empty; keep non-empty
+                            # .part/.ytdl artifacts so an interrupted download session resumes.
                             for staged in folder.glob("source.pending.*"):
-                                if staged.is_file():
-                                    try:
-                                        staged.unlink(missing_ok=True)
-                                        staged.with_name(
-                                            f".{staged.name}.probe.json"
-                                        ).unlink(missing_ok=True)
-                                    except OSError:
-                                        pass
+                                if not staged.is_file():
+                                    continue
+                                keep_partial = (
+                                    not downloaded_now
+                                    and staged.name.endswith((".part", ".ytdl"))
+                                    and staged.stat().st_size > 0
+                                )
+                                if keep_partial:
+                                    continue
+                                try:
+                                    staged.unlink(missing_ok=True)
+                                    staged.with_name(
+                                        f".{staged.name}.probe.json"
+                                    ).unlink(missing_ok=True)
+                                except OSError:
+                                    pass
 
     except Exception as error:
 

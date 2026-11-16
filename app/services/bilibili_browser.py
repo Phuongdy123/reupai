@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import shutil
 import os
 import re
@@ -237,10 +239,13 @@ def _open_persistent_bilibili_page(playwright, browser_path: str, url: str):
 def _download(url: str, destination: Path, referer: str, *, user_agent: str = USER_AGENT) -> None:
     """Download a CDN stream with bounded retries and HTTP Range resume."""
     partial = destination.with_name(destination.name + ".part")
-    max_attempts = 5
+    max_attempts = 10
+    reset_range_once = False
 
     def retry_delay(error: BaseException, attempt: int) -> float | None:
         if isinstance(error, HTTPError):
+            if error.code == 416:
+                return 0.5
             if error.code not in {408, 425, 429, 500, 502, 503, 504}:
                 return None
             retry_after = error.headers.get("Retry-After", "") if error.headers else ""
@@ -251,13 +256,13 @@ def _download(url: str, destination: Path, referer: str, *, user_agent: str = US
                     when = parsedate_to_datetime(retry_after).timestamp()
                     return min(30.0, max(1.0, when - time.time()))
                 except (TypeError, ValueError, OverflowError):
-                    return min(8.0, 1.5 ** attempt)
+                    return min(20.0, 1.5 ** min(attempt, 6))
         if isinstance(error, URLError):
             reason = error.reason
             if isinstance(reason, OSError) and getattr(reason, "errno", None) in {28, 39}:
                 return None
         if isinstance(error, (TimeoutError, socket.timeout, ConnectionError, IncompleteRead, URLError)):
-            return min(8.0, 1.5 ** attempt)
+            return min(20.0, 1.5 ** min(attempt, 6))
         return None
 
     last_error: BaseException | None = None
@@ -269,7 +274,7 @@ def _download(url: str, destination: Path, referer: str, *, user_agent: str = US
                 headers["Range"] = f"bytes={offset}-"
             try:
                 request = Request(url, headers=headers)
-                with urlopen(request, timeout=90) as response:
+                with urlopen(request, timeout=120) as response:
                     status = getattr(response, "status", response.getcode())
                     # Some CDNs ignore Range. In that case, restart the
                     # temporary file rather than append a duplicate payload.
@@ -322,6 +327,9 @@ def _download(url: str, destination: Path, referer: str, *, user_agent: str = US
                 partial.replace(destination)
                 return
             except (HTTPError, URLError, TimeoutError, socket.timeout, ConnectionError, IncompleteRead) as error:
+                if isinstance(error, HTTPError) and error.code == 416 and not reset_range_once:
+                    reset_range_once = True
+                    partial.unlink(missing_ok=True)
                 last_error = error
                 delay = retry_delay(error, attempt)
                 if delay is None or attempt + 1 >= max_attempts:
@@ -329,14 +337,14 @@ def _download(url: str, destination: Path, referer: str, *, user_agent: str = US
                         raise RuntimeError(f"CDN Bilibili trả HTTP {error.code} khi tải luồng video.") from error
                     raise RuntimeError(
                         f"Kết nối CDN Bilibili bị gián đoạn sau {attempt + 1} lần thử; "
-                        "không thể hoàn tất luồng video."
+                        "phiên tải tạm vẫn được giữ để thử lại."
                     ) from error
                 print(f"[bilibili] stream interrupted; resuming byte {partial.stat().st_size if partial.exists() else 0} after retry {attempt + 1}/{max_attempts}")
                 time.sleep(delay)
     finally:
-        # Partial data is intentionally retained only for retries within this
-        # call. The caller's temporary job folder removes it after failure.
-        if partial.exists() and not destination.exists():
+        # Preserve non-empty partial transfers so the caller can keep the
+        # download session across retries/restarts; remove only empty stubs.
+        if partial.exists() and not destination.exists() and partial.stat().st_size == 0:
             partial.unlink(missing_ok=True)
 
 
@@ -349,6 +357,9 @@ def _download_stream(
     user_agent: str,
 ) -> None:
     """Try the primary CDN then each Bilibili-provided backup URL."""
+    if destination.is_file() and destination.stat().st_size >= 1024:
+        print(f"[bilibili] Tai dung luong da hoan thanh tu phien truoc: {destination.name}")
+        return
     urls = _stream_urls(stream, *names)
     if not urls:
         raise RuntimeError("Bilibili trả về luồng video không có URL tải.")
@@ -501,79 +512,147 @@ def download_video(url: str, output_path: Path) -> Path:
     video_url = _value(video or {}, "baseUrl", "base_url")
     audio_url = _value(audio or {}, "baseUrl", "base_url")
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    url_key = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+    session_dir = output_path.parent.parent / ".download_sessions" / f"bili-{url_key}"
+    stream_signature = hashlib.sha256(
+        json.dumps(
+            {
+                "url": url,
+                "v_id": (video or {}).get("id"),
+                "v_codec": (video or {}).get("codecid"),
+                "a_id": (audio or {}).get("id"),
+                "durl_count": len(data.get("durl") or []),
+            },
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    def _restore_session(folder_path: Path) -> None:
+        meta_file = session_dir / "session.json"
+        if not meta_file.is_file():
+            return
+        try:
+            saved = json.loads(meta_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if not isinstance(saved, dict) or saved.get("signature") != stream_signature:
+            return
+        restored = 0
+        for item in session_dir.iterdir():
+            if item.name in {"session.json", "session.json.tmp"} or not item.is_file():
+                continue
+            if item.stat().st_size <= 0:
+                continue
+            try:
+                shutil.move(str(item), str(folder_path / item.name))
+                restored += 1
+            except OSError:
+                pass
+        if restored:
+            print(f"[bilibili] Khoi phuc {restored} tep phien tai tam de tiep tuc tai.")
+
+    def _preserve_session(folder_path: Path) -> None:
+        kept = 0
+        for item in folder_path.iterdir():
+            if not item.is_file() or item.stat().st_size < 1024:
+                continue
+            if not (item.name.endswith(".part") or item.name in {"video.m4s", "audio.m4s"} or item.name.startswith("part-")):
+                continue
+            session_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.move(str(item), str(session_dir / item.name))
+                kept += 1
+            except OSError:
+                pass
+        if kept:
+            try:
+                tmp_meta = session_dir / "session.json.tmp"
+                tmp_meta.write_text(json.dumps({"signature": stream_signature, "url": url, "updated_at": time.time()}), encoding="utf-8")
+                os.replace(tmp_meta, session_dir / "session.json")
+                print(f"[bilibili] Da giu lai {kept} tep tai do ({session_dir.name}) cho lan tai tiep theo.")
+            except OSError:
+                pass
+
     with _staged_output(output_path) as staged_path, tempfile.TemporaryDirectory(
         prefix="reupai-bilibili-", dir=output_path.parent
     ) as folder:
         folder_path = Path(folder)
+        _restore_session(folder_path)
+        try:
+            # Bilibili returns a classic progressive MP4 (``durl``) for some
+            # videos, usually when an anonymous session only receives 480p.
+            # Those responses intentionally have no DASH video/audio lists.
+            durls = data.get("durl") or []
+            if durls:
+                parts: list[Path] = []
+                for index, item in enumerate(durls):
+                    part = folder_path / f"part-{index:06d}.mp4"
+                    _download_stream(
+                        item,
+                        part,
+                        url,
+                        names=("url", "baseUrl", "base_url"),
+                        user_agent=user_agent,
+                    )
+                    parts.append(part)
 
-        # Bilibili returns a classic progressive MP4 (``durl``) for some
-        # videos, usually when an anonymous session only receives 480p.
-        # Those responses intentionally have no DASH video/audio lists.
-        durls = data.get("durl") or []
-        if durls:
-            parts: list[Path] = []
-            for index, item in enumerate(durls):
-                part = folder_path / f"part-{index:06d}.mp4"
-                _download_stream(
-                    item,
-                    part,
-                    url,
-                    names=("url", "baseUrl", "base_url"),
-                    user_agent=user_agent,
-                )
-                parts.append(part)
+                if len(parts) == 1:
+                    ensure_download_space(
+                        output_path.parent,
+                        expected_bytes=parts[0].stat().st_size,
+                        operation="lưu video nguồn",
+                    )
+                    shutil.copyfile(parts[0], staged_path)
+                else:
+                    ensure_download_space(
+                        output_path.parent,
+                        expected_bytes=sum(part.stat().st_size for part in parts),
+                        operation="ghép video nguồn",
+                    )
+                    manifest = folder_path / "concat.txt"
+                    manifest.write_text(
+                        "".join(f"file '{part.as_posix()}'\n" for part in parts),
+                        encoding="utf-8",
+                    )
+                    result = subprocess.run(
+                        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(staged_path)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        check=False,
+                    )
+                    if result.returncode != 0:
+                        raise RuntimeError("Bilibili browser fallback không ghép được các đoạn MP4: " + result.stderr[-500:])
+                if not staged_path.is_file() or staged_path.stat().st_size < 1024:
+                    raise RuntimeError("Bilibili browser fallback không tạo được MP4 hoàn chỉnh.")
+                staged_path.replace(output_path)
+                shutil.rmtree(session_dir, ignore_errors=True)
+                return output_path
 
-            if len(parts) == 1:
-                ensure_download_space(
-                    output_path.parent,
-                    expected_bytes=parts[0].stat().st_size,
-                    operation="lưu video nguồn",
-                )
-                shutil.copyfile(parts[0], staged_path)
-            else:
-                ensure_download_space(
-                    output_path.parent,
-                    expected_bytes=sum(part.stat().st_size for part in parts),
-                    operation="ghép video nguồn",
-                )
-                manifest = folder_path / "concat.txt"
-                manifest.write_text(
-                    "".join(f"file '{part.as_posix()}'\n" for part in parts),
-                    encoding="utf-8",
-                )
-                result = subprocess.run(
-                    ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(manifest), "-c", "copy", str(staged_path)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError("Bilibili browser fallback không ghép được các đoạn MP4: " + result.stderr[-500:])
-            if not staged_path.is_file() or staged_path.stat().st_size < 1024:
-                raise RuntimeError("Bilibili browser fallback không tạo được MP4 hoàn chỉnh.")
+            if not video_url or not audio_url:
+                raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
+
+            video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
+            _download_stream(video or {}, video_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
+            _download_stream(audio or {}, audio_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
+            ensure_download_space(
+                output_path.parent,
+                expected_bytes=video_file.stat().st_size + audio_file.stat().st_size,
+                operation="ghép video và âm thanh",
+            )
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", str(video_file), "-i", str(audio_file), "-c", "copy", str(staged_path)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0 or not staged_path.is_file() or staged_path.stat().st_size < 1024:
+                raise RuntimeError("Bilibili browser fallback không ghép được video: " + result.stderr[-500:])
             staged_path.replace(output_path)
+            shutil.rmtree(session_dir, ignore_errors=True)
             return output_path
-
-        if not video_url or not audio_url:
-            raise RuntimeError("Bilibili browser fallback không lấy được stream video hoặc audio.")
-
-        video_file, audio_file = folder_path / "video.m4s", folder_path / "audio.m4s"
-        _download_stream(video or {}, video_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
-        _download_stream(audio or {}, audio_file, url, names=("baseUrl", "base_url"), user_agent=user_agent)
-        ensure_download_space(
-            output_path.parent,
-            expected_bytes=video_file.stat().st_size + audio_file.stat().st_size,
-            operation="ghép video và âm thanh",
-        )
-        result = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video_file), "-i", str(audio_file), "-c", "copy", str(staged_path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0 or not staged_path.is_file() or staged_path.stat().st_size < 1024:
-            raise RuntimeError("Bilibili browser fallback không ghép được video: " + result.stderr[-500:])
-        staged_path.replace(output_path)
-        return output_path
+        except Exception:
+            _preserve_session(folder_path)
+            raise

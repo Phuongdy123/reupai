@@ -18,15 +18,35 @@ def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
     return max(minimum, min(value, maximum))
 
 
+def is_stability_mode() -> bool:
+    return (
+        os.getenv("REUP_STABILITY_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+        or os.getenv("REUP_OFFLINE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+    )
+
+
 def ytdlp_performance_args() -> list[str]:
     """Return conservative yt-dlp speed options with an optional chunk override."""
-    fragments = _bounded_int(
-        "REUP_YTDLP_CONCURRENT_FRAGMENTS",
-        2,
-        minimum=1,
-        maximum=8,
+    fragments = (
+        1
+        if is_stability_mode()
+        else _bounded_int(
+            "REUP_YTDLP_CONCURRENT_FRAGMENTS",
+            2,
+            minimum=1,
+            maximum=8,
+        )
     )
-    args = ["--concurrent-fragments", str(fragments)]
+    args = [
+        "--concurrent-fragments",
+        str(fragments),
+        "--file-access-retries",
+        "10",
+        "--retry-sleep",
+        "http:exp=1:30",
+        "--retry-sleep",
+        "fragment:exp=1:30",
+    ]
 
     # Preserve the project's existing 2M setting, while letting users turn
     # it off when the source does not benefit from chunked HTTP requests.

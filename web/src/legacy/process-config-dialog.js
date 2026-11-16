@@ -241,6 +241,11 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     Boost GPU
                     <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
                 </label>
+                <label class="process-check-option">
+                    <input id="processStabilityOffline" type="checkbox">
+                    🛡 Xử lý Offline · Ưu tiên ổn định (Video dài)
+                    <small>Tách render &amp; giọng từng đoạn có checkpoint, giữ phiên tải và chạy VieNeu TTS 100% nội bộ.</small>
+                </label>
                 </div>
             </section>
 
