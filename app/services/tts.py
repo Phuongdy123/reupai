@@ -156,6 +156,17 @@ VOICE_ALIASES = {
     "truc_ly": "Trúc Ly",
     "truc ly": "Trúc Ly",
     "trúc ly": "Trúc Ly",
+    "hoai_my": "vi-VN-HoaiMyNeural",
+    "nam_minh": "vi-VN-NamMinhNeural",
+}
+
+EDGE_VOICE_PROFILES = {
+    "vi-VN-HoaiMyNeural": ("vi-VN-HoaiMyNeural", "+0Hz", "+0%"),
+    "vi-VN-NamMinhNeural": ("vi-VN-NamMinhNeural", "+0Hz", "+0%"),
+    "hoai_my_tram": ("vi-VN-HoaiMyNeural", "-6Hz", "+4%"),
+    "nam_minh_tram": ("vi-VN-NamMinhNeural", "-6Hz", "+4%"),
+    "hoai_my_shorts": ("vi-VN-HoaiMyNeural", "+8Hz", "+8%"),
+    "nam_minh_shorts": ("vi-VN-NamMinhNeural", "+8Hz", "+8%"),
 }
 
 
@@ -606,12 +617,14 @@ async def _generate_edge_mp3_once(
             "edge-tts chua duoc cai."
         )
 
+    profile = EDGE_VOICE_PROFILES.get(VOICE)
+    edge_voice, edge_pitch, edge_rate = profile or (EDGE_VOICE, EDGE_PITCH, EDGE_RATE)
     communicate = (
         edge_tts.Communicate(
             text=text,
-            voice=EDGE_VOICE,
-            rate=EDGE_RATE,
-            pitch=EDGE_PITCH,
+            voice=edge_voice,
+            rate=edge_rate,
+            pitch=edge_pitch,
         )
     )
 
@@ -684,9 +697,7 @@ def generate_tts(
     output_path,
     engine=None,
 ):
-    provider = (
-        TTS_PROVIDER
-    )
+    provider = "edge" if VOICE in EDGE_VOICE_PROFILES else TTS_PROVIDER
 
     if provider not in {
         "vieneu",

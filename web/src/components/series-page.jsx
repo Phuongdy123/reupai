@@ -870,8 +870,14 @@ export function SeriesPage() {
                   disabled={seriesConfig.mode === "subtitle"}
                   onChange={(e) => setSeriesConfig((c) => ({ ...c, voice: e.target.value }))}
                 >
-                  <option value="vi-VN-NamMinhNeural">Nam Minh (Nam)</option>
-                  <option value="vi-VN-HoaiMyNeural">Hoài My (Nữ)</option>
+                  <option value="vi-VN-NamMinhNeural">Nam Minh (Nam · Edge Free)</option>
+                  <option value="vi-VN-HoaiMyNeural">Hoài My (Nữ · Edge Free)</option>
+                  <option value="Trúc Ly">Trúc Ly (Nữ · Offline)</option>
+                  <option value="Hải Đăng">Hải Đăng (Nam · Offline)</option>
+                  <option value="hoai_my_tram">Hoài My · Trầm ấm (Review)</option>
+                  <option value="nam_minh_tram">Nam Minh · Trầm ấm (Review)</option>
+                  <option value="hoai_my_shorts">Hoài My · Nhanh (Shorts)</option>
+                  <option value="nam_minh_shorts">Nam Minh · Nhanh (Shorts)</option>
                 </select>
               </label>
 

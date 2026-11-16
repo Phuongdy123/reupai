@@ -342,7 +342,7 @@ export function OutputEditor({ client, item, onClose, onQueued, onError }) {
             <div className="output-editor-pane">
               {activeTab === "voice" && <>
                 {item.mode === "voiceover" && <section className="output-editor-voice">
-                  <label>Giọng đọc<select value={voiceName} onChange={(event) => setVoiceName(event.target.value)}><option value="Trúc Ly">Trúc Ly</option><option value="Hải Đăng">Hải Đăng</option></select></label>
+                  <label>Giọng đọc<select value={voiceName} onChange={(event) => setVoiceName(event.target.value)}><option value="Trúc Ly">Trúc Ly (Nữ)</option><option value="Hải Đăng">Hải Đăng (Nam)</option><option value="vi-VN-HoaiMyNeural">Hoài My (Edge Free)</option><option value="vi-VN-NamMinhNeural">Nam Minh (Edge Free)</option><option value="hoai_my_tram">Hoài My · Trầm ấm (Review)</option><option value="nam_minh_tram">Nam Minh · Trầm ấm (Review)</option><option value="hoai_my_shorts">Hoài My · Shorts</option><option value="nam_minh_shorts">Nam Minh · Shorts</option></select></label>
                   <label><span>Tốc độ đọc <output>{Number(ttsSpeed).toFixed(2)}x</output></span><input type="range" min="0.5" max="1.6" step="0.05" value={ttsSpeed} onChange={(event) => setTtsSpeed(Number(event.target.value))} /></label>
                 </section>}
                 <OutputTranscriptEditor cues={cues} supported={Boolean(meta?.subtitle_edit_supported)} onChange={(index,key,value)=>setCues(current=>current.map((cue,i)=>i===index?{...cue,[key]:value}:cue))} onSeek={cue=>{ const video=videoRef.current; if(video) { video.currentTime=Number(cue.start); cueEnd.current=Number(cue.end); video.play().catch(()=>{}); } }} />

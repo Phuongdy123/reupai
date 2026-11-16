@@ -567,8 +567,14 @@ export function StudioPage({ mode = "youtube" }) {
             <label>
               Giọng đọc
               <select value={voiceName} onChange={(e) => setVoiceName(e.target.value)}>
-                <option value="Trúc Ly">Trúc Ly</option>
-                <option value="Hải Đăng">Hải Đăng</option>
+                <option value="Trúc Ly">Trúc Ly (Nữ · mặc định)</option>
+                <option value="Hải Đăng">Hải Đăng (Nam · Offline)</option>
+                <option value="vi-VN-HoaiMyNeural">Hoài My (Nữ · Edge Free)</option>
+                <option value="vi-VN-NamMinhNeural">Nam Minh (Nam · Edge Free)</option>
+                <option value="hoai_my_tram">Hoài My · Trầm ấm (Review/Truyện)</option>
+                <option value="nam_minh_tram">Nam Minh · Trầm ấm (Review/Tin tức)</option>
+                <option value="hoai_my_shorts">Hoài My · Nhanh trẻ trung (Shorts)</option>
+                <option value="nam_minh_shorts">Nam Minh · Nhanh cuốn hút (Shorts)</option>
               </select>
             </label>
             <label>

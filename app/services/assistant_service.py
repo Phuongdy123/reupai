@@ -40,7 +40,16 @@ def mark_model_exhausted(model_name: str, ttl: int = 900) -> None:
     with _MODEL_COOLDOWN_LOCK:
         _MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
 _ASPECT_RATIOS = {"", "shorts", "youtube", "facebook", "tiktok"}
-_VOICES = {"Trúc Ly", "Hải Đăng"}
+_VOICES = {
+    "Trúc Ly",
+    "Hải Đăng",
+    "vi-VN-HoaiMyNeural",
+    "vi-VN-NamMinhNeural",
+    "hoai_my_tram",
+    "nam_minh_tram",
+    "hoai_my_shorts",
+    "nam_minh_shorts",
+}
 _BLUR_PRESETS = {"", "top", "bottom", "center"}
 
 
