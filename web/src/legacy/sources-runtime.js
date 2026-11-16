@@ -2,7 +2,6 @@
 // All API and media transport is supplied by the shared LocalEngineClient.
 import { prepareSourceInput, isDirectVideoInput, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
-import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices.js";
 import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
 
 function threePlatformSvgs(size = 13) {
@@ -1862,10 +1861,6 @@ function buildCard(
         '.sub-btn'
     )
     .onclick = () => {
-        if (isInstantRunEnabled()) {
-            processVideo(video, card, 'subtitle', processConfigDefaults());
-            return;
-        }
         openProcessConfig(video, card, 'subtitle');
     };
 
@@ -1875,10 +1870,6 @@ function buildCard(
         '.voice-btn'
     )
     .onclick = () => {
-        if (isInstantRunEnabled()) {
-            processVideo(video, card, 'voiceover', processConfigDefaults());
-            return;
-        }
         openProcessConfig(video, card, 'voiceover');
     };
 
@@ -2116,71 +2107,12 @@ function initBoostGpuToggle() {
     });
 }
 
-function isInstantRunEnabled() {
-    const toggle = document.getElementById('sourceInstantRunToggle');
-    if (toggle) return Boolean(toggle.checked);
-    try {
-        return localStorage.getItem('reupai:instant-run') === '1';
-    } catch {
-        return false;
-    }
-}
-
 function getDefaultSourceVoice() {
-    const select = document.getElementById('sourceVoiceSelect');
-    const fromSelect = select?.value?.trim();
-    if (fromSelect) return fromSelect;
     try {
         const stored = localStorage.getItem('reupai:default-voice');
         if (stored && stored.trim()) return stored.trim();
     } catch {}
     return 'Trúc Ly';
-}
-
-function initSourceVoiceControls() {
-    const select = document.getElementById('sourceVoiceSelect');
-    const previewBtn = document.getElementById('sourceVoicePreviewBtn');
-    if (select && !select.dataset.populated) {
-        select.dataset.populated = '1';
-        let saved = 'Trúc Ly';
-        try {
-            saved = localStorage.getItem('reupai:default-voice') || 'Trúc Ly';
-        } catch {}
-        select.innerHTML = VIETNAMESE_TTS_VOICES.map((v) =>
-            `<option value="${escapeHtml(v.value)}">${escapeHtml(v.label)}</option>`
-        ).join('');
-        if ([...select.options].some((o) => o.value === saved)) {
-            select.value = saved;
-        } else {
-            select.value = 'Trúc Ly';
-        }
-        select.addEventListener('change', () => {
-            try {
-                localStorage.setItem('reupai:default-voice', select.value || 'Trúc Ly');
-            } catch {}
-        });
-    }
-    if (previewBtn && !previewBtn.dataset.bound) {
-        previewBtn.dataset.bound = '1';
-        previewBtn.addEventListener('click', () => {
-            playVoicePreview(getDefaultSourceVoice(), {
-                button: previewBtn,
-                onError: (msg) => alert(msg),
-            });
-        });
-    }
-    const instantToggle = document.getElementById('sourceInstantRunToggle');
-    if (instantToggle && !instantToggle.dataset.bound) {
-        instantToggle.dataset.bound = '1';
-        try {
-            instantToggle.checked = localStorage.getItem('reupai:instant-run') === '1';
-        } catch {}
-        instantToggle.addEventListener('change', () => {
-            try {
-                localStorage.setItem('reupai:instant-run', instantToggle.checked ? '1' : '0');
-            } catch {}
-        });
-    }
 }
 
 function processConfigDefaults() {
@@ -8180,7 +8112,6 @@ function bindV13Manager() {
     );
 
     initBoostGpuToggle();
-    initSourceVoiceControls();
 
     bind(
         'sourceInputMode',
