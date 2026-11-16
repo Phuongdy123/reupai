@@ -1,0 +1,93 @@
+/* Platform identity stays visible in both workspace themes. */
+body.theme-xports .mxh-connect-bar {
+  --social-tint: 10%;
+  --social-border: 28%;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(24 119 242 / 8%), transparent 60%),
+    var(--ds-surface);
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar {
+  --social-tint: 6%;
+  --social-border: 23%;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(24 119 242 / 6%), transparent 60%),
+    var(--ds-surface);
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-youtube {
+  --platform-color: #ff454f;
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-facebook {
+  --platform-color: #4b9bff;
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-tiktok {
+  --platform-color: #25d9d2;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-youtube {
+  --platform-color: #ce2634;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-facebook {
+  --platform-color: #1466d4;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-tiktok {
+  --platform-color: #087e83;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn {
+  background: color-mix(in srgb, var(--platform-color) var(--social-tint), var(--ds-surface));
+  border-color: color-mix(in srgb, var(--platform-color) var(--social-border), var(--ds-border));
+  color: var(--ds-text);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-connected {
+  border-color: color-mix(in srgb, var(--platform-color) 50%, var(--ds-border));
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn:is(:hover, :active, .is-selected) {
+  background: color-mix(in srgb, var(--platform-color) 16%, var(--ds-surface)) !important;
+  border-color: var(--platform-color) !important;
+  color: var(--ds-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--platform-color) 20%, transparent) !important;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .platform-logo-svg {
+  filter: none;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn:focus-visible {
+  outline: 2px solid var(--platform-color);
+  outline-offset: 3px;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-dot.is-connected {
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 10%);
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready {
+  background: rgb(52 211 153 / 10%);
+  border-color: rgb(52 211 153 / 24%);
+  color: #6ee7b7;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready .mxh-badge-pulse {
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 10%);
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready {
+  background: #ecfdf5;
+  border-color: #a7e5cc;
+  color: #146746;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-dot.is-connected {
+  background: #16865c;
+  box-shadow: 0 0 0 3px rgb(22 134 92 / 9%);
+}

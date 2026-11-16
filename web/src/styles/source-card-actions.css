@@ -1,0 +1,69 @@
+/* Keep result actions distinct from the processing controls above them. */
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row {
+  gap: 10px !important;
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid var(--ds-border-subtle) !important;
+}
+
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row .result-chip-group {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  min-width: 0;
+  max-width: 100%;
+}
+
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row :is(.result-chip, .result-youtube-btn) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  min-height: 32px !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 7px 11px !important;
+  border-radius: 9px !important;
+  font-family: inherit;
+  line-height: 1.35 !important;
+  box-sizing: border-box;
+  box-shadow: none !important;
+  transform: none !important;
+  transition: background-color 150ms ease, border-color 150ms ease !important;
+}
+
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn {
+  max-width: 100%;
+  border: 1px solid var(--ds-border-strong) !important;
+  background: var(--ds-surface-raised) !important;
+  color: var(--ds-text-secondary) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-align: left;
+}
+
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn:is(:hover, :active) {
+  border-color: var(--ds-border-hover) !important;
+  background: var(--ds-surface-hover) !important;
+  color: var(--ds-text) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+html[data-theme] body.theme-xports #videos .compact-video-card .card-result-row .result-youtube-btn:focus-visible {
+  outline: 2px solid var(--ds-focus-color);
+  outline-offset: 3px;
+}
+
+html[data-theme] body.theme-xports #videos .result-youtube-btn .three-platform-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+html[data-theme] body.theme-xports #videos .result-youtube-btn .three-platform-icons svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
