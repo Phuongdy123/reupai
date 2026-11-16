@@ -377,6 +377,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <select id="processVoice">
                         ${renderVoiceOptionsHtml()}
                     </select>
+                    <button type="button" class="btn secondary" id="processVoicePreviewBtn" style="margin-top:6px;">🔊 Nghe thử</button>
                 </label>
                 </div>
             </section>

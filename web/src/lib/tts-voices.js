@@ -39,3 +39,62 @@ export function renderVoiceOptionsHtml() {
     (v) => `<option value="${v.value}">${v.label}</option>`
   ).join("\n");
 }
+
+export const DEFAULT_PREVIEW_TEXT = "1 2 3, xin chào! Tôi là bình luận viên AI của bạn.";
+
+let _activePreviewAudio = null;
+let _activePreviewUrl = "";
+
+export function stopVoicePreview() {
+  if (_activePreviewAudio) {
+    try {
+      _activePreviewAudio.pause();
+      _activePreviewAudio.currentTime = 0;
+    } catch {}
+    _activePreviewAudio = null;
+  }
+  if (_activePreviewUrl) {
+    try { URL.revokeObjectURL(_activePreviewUrl); } catch {}
+    _activePreviewUrl = "";
+  }
+}
+
+export async function playVoicePreview(voice, { button = null, text = DEFAULT_PREVIEW_TEXT, onError = null } = {}) {
+  const client = typeof window !== "undefined" ? window.reupEngineClient : null;
+  const previousHtml = button ? button.innerHTML : "";
+  stopVoicePreview();
+  if (!client || typeof client.request !== "function") {
+    onError?.("Hãy kết nối Local Engine để nghe thử giọng AI.");
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Đang đọc…";
+  }
+  try {
+    const res = await client.request("/api/tts/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voice: voice || "Trúc Ly", text }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || (res.status === 404 ? "Hãy cập nhật Local Engine mới nhất để nghe thử giọng AI." : "Không thể tạo âm thanh nghe thử."));
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    _activePreviewUrl = url;
+    const audio = new Audio(url);
+    _activePreviewAudio = audio;
+    audio.onended = () => stopVoicePreview();
+    audio.onerror = () => stopVoicePreview();
+    await audio.play();
+  } catch (err) {
+    onError?.(err?.message || "Chưa phát được âm thanh nghe thử.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = previousHtml;
+    }
+  }
+}

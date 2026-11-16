@@ -1,6 +1,7 @@
 // Loaded only when the user opens video processing settings.
 import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
+import { playVoicePreview } from '../lib/tts-voices.js';
 
 export async function openProcessConfig(video, card, mode, dependencies) {
     const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
@@ -165,6 +166,16 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
+    const processVoicePreviewBtn = dialog.querySelector('#processVoicePreviewBtn');
+    if (processVoicePreviewBtn) {
+        processVoicePreviewBtn.onclick = () => {
+            const pickedVoice = dialog.querySelector('#processVoice')?.value || 'Trúc Ly';
+            playVoicePreview(pickedVoice, {
+                button: processVoicePreviewBtn,
+                onError: (msg) => window.alert?.(msg),
+            });
+        };
+    }
     set('processAspectRatio', defaults.aspect_ratio || '');
     set('processMusicUrl', defaults.music_url || '');
     set('processMusicVolume', defaults.music_volume ?? 0.25);

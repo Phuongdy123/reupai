@@ -8,7 +8,7 @@ import { Icon } from "./icon";
 import { ACTIVE_JOBS, JOB_LABELS, Loading, ErrorMessage, Notice, VideoCover, PreviewDialog } from "./library-ui";
 import { OutputEditor } from "./output-editor";
 import { YoutubePublishDialog } from "./youtube-publish-dialog";
-import { VIETNAMESE_TTS_VOICES } from "../lib/tts-voices";
+import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
 
 function parseDurationSeconds(video) {
   if (Number.isFinite(Number(video?.duration_sec)) && Number(video.duration_sec) > 0) return Number(video.duration_sec);
@@ -567,9 +567,12 @@ export function StudioPage({ mode = "youtube" }) {
           {processMode === "voiceover" && <>
             <label>
               Giọng đọc
-              <select value={voiceName} onChange={(e) => setVoiceName(e.target.value)}>
-                {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-              </select>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <select value={voiceName} onChange={(e) => setVoiceName(e.target.value)}>
+                  {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+                </select>
+                <button type="button" className="btn secondary" onClick={(e) => playVoicePreview(voiceName, { button: e.currentTarget, onError: (msg) => setError(msg) })}>🔊 Nghe thử</button>
+              </div>
             </label>
             <label>
               Tốc độ

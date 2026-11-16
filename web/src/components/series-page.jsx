@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "./icon";
 import { useEngine } from "./engine-provider";
-import { VIETNAMESE_TTS_VOICES } from "../lib/tts-voices";
+import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices";
 import {
   EngineGate,
   ErrorMessage,
@@ -866,13 +866,16 @@ export function SeriesPage() {
 
               <label style={{ display: "grid", gap: 4, fontSize: "0.82rem" }}>
                 <span>Giọng đọc AI</span>
-                <select
-                  value={seriesConfig.voice}
-                  disabled={seriesConfig.mode === "subtitle"}
-                  onChange={(e) => setSeriesConfig((c) => ({ ...c, voice: e.target.value }))}
-                >
-                  {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-                </select>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select
+                    value={seriesConfig.voice}
+                    disabled={seriesConfig.mode === "subtitle"}
+                    onChange={(e) => setSeriesConfig((c) => ({ ...c, voice: e.target.value }))}
+                  >
+                    {VIETNAMESE_TTS_VOICES.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+                  </select>
+                  <button type="button" className="btn secondary" disabled={seriesConfig.mode === "subtitle"} onClick={(e) => playVoicePreview(seriesConfig.voice, { button: e.currentTarget, onError: (msg) => setError(msg) })}>🔊 Nghe thử</button>
+                </div>
               </label>
 
               <label style={{ display: "grid", gap: 4, fontSize: "0.82rem" }}>

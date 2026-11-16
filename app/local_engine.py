@@ -32,7 +32,7 @@ os.environ.setdefault("REUP_LOCAL_ENGINE", "1")
 import uvicorn
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from starlette.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -968,6 +968,39 @@ def remove_saved_series(series_key: str, _: bool = Depends(require_token)):
     items = [item for item in _read_saved_series() if item.get("series_key") != series_key]
     _write_saved_series(items)
     return {"ok": True}
+
+
+_TTS_PREVIEW_LOCK = threading.Lock()
+
+
+@app.post("/api/tts/preview")
+def preview_tts_voice(payload: dict[str, Any], _: bool = Depends(require_token)):
+    from services import tts
+
+    voice = str(payload.get("voice") or "Trúc Ly").strip() or "Trúc Ly"
+    text = str(payload.get("text") or "1 2 3, xin chào! Tôi là bình luận viên AI của bạn.").strip()[:240]
+    if not text:
+        raise HTTPException(status_code=400, detail="Thiếu nội dung đọc thử.")
+
+    digest = hashlib.sha256(f"{voice}|{text}".encode("utf-8")).hexdigest()[:16]
+    preview_dir = get_config_dir() / "voice_previews"
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    out_wav = preview_dir / f"{digest}.wav"
+
+    if not out_wav.is_file() or out_wav.stat().st_size == 0:
+        with _TTS_PREVIEW_LOCK:
+            if not out_wav.is_file() or out_wav.stat().st_size == 0:
+                previous_voice = tts.VOICE
+                try:
+                    tts.set_voice(voice)
+                    tts.generate_tts(text, str(out_wav))
+                except Exception as error:
+                    out_wav.unlink(missing_ok=True)
+                    raise HTTPException(status_code=500, detail=f"Không tạo được giọng đọc thử: {error}") from error
+                finally:
+                    tts.set_voice(previous_voice)
+
+    return Response(content=out_wav.read_bytes(), media_type="audio/wav")
 
 
 @app.get("/api/library/meta")

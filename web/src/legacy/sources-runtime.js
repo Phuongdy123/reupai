@@ -2,6 +2,7 @@
 // All API and media transport is supplied by the shared LocalEngineClient.
 import { prepareSourceInput, isDirectVideoInput, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
+import { VIETNAMESE_TTS_VOICES, playVoicePreview } from "../lib/tts-voices.js";
 import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
 
 export function startSourcesRuntime(environment) {
@@ -2172,12 +2173,58 @@ function initBoostGpuToggle() {
     });
 }
 
+function getDefaultSourceVoice() {
+    const select = document.getElementById('sourceVoiceSelect');
+    const fromSelect = select?.value?.trim();
+    if (fromSelect) return fromSelect;
+    try {
+        const stored = localStorage.getItem('reupai:default-voice');
+        if (stored && stored.trim()) return stored.trim();
+    } catch {}
+    return 'Trúc Ly';
+}
+
+function initSourceVoiceControls() {
+    const select = document.getElementById('sourceVoiceSelect');
+    const previewBtn = document.getElementById('sourceVoicePreviewBtn');
+    if (select && !select.dataset.populated) {
+        select.dataset.populated = '1';
+        let saved = 'Trúc Ly';
+        try {
+            saved = localStorage.getItem('reupai:default-voice') || 'Trúc Ly';
+        } catch {}
+        select.innerHTML = VIETNAMESE_TTS_VOICES.map((v) =>
+            `<option value="${escapeHtml(v.value)}">${escapeHtml(v.label)}</option>`
+        ).join('');
+        if ([...select.options].some((o) => o.value === saved)) {
+            select.value = saved;
+        } else {
+            select.value = 'Trúc Ly';
+        }
+        select.addEventListener('change', () => {
+            try {
+                localStorage.setItem('reupai:default-voice', select.value || 'Trúc Ly');
+            } catch {}
+        });
+    }
+    if (previewBtn && !previewBtn.dataset.bound) {
+        previewBtn.dataset.bound = '1';
+        previewBtn.addEventListener('click', () => {
+            playVoicePreview(getDefaultSourceVoice(), {
+                button: previewBtn,
+                onError: (msg) => alert(msg),
+            });
+        });
+    }
+}
+
 function processConfigDefaults() {
     const boostGpu = isBoostGpuEnabled();
     // Mỗi job bắt đầu sạch theo flow mặc định, không lấy cấu hình cũ.
     return {
         // Logo chỉ được chèn khi người dùng chủ động chọn trong phần nâng cao.
         logo_mode: 'none',
+        voice: getDefaultSourceVoice(),
         transcript_source: 'audio',
         ocr_language: 'auto',
         ocr_fps: 2,
@@ -8151,6 +8198,7 @@ function bindV13Manager() {
     );
 
     initBoostGpuToggle();
+    initSourceVoiceControls();
 
     bind(
         'sourceInputMode',
