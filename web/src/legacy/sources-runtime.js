@@ -4445,6 +4445,7 @@ function injectV13Styles() {
             display: none;
             align-items: center;
             gap: 6px;
+            width: max-content;
             max-width: calc(100vw - 32px);
             padding: 7px;
             border: 1px solid #334159;

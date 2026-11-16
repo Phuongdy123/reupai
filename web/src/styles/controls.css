@@ -1116,19 +1116,34 @@ body.theme-xports #videos .compact-video-card .collection-inline-add {
   white-space: nowrap !important;
 }
 body.theme-xports #batchBar {
-  flex-wrap: wrap !important;
+  width: max-content !important;
+  flex-wrap: nowrap !important;
   max-width: calc(100vw - 24px) !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+}
+body.theme-xports #batchBar .batch-count {
+  min-width: auto !important;
+  padding: 0 6px !important;
+  white-space: nowrap !important;
 }
 body.theme-xports #batchBar .batch-collection-select {
   height: 32px !important;
   min-height: 32px !important;
-  max-width: 175px !important;
-  padding: 0 8px !important;
+  min-width: 150px !important;
+  max-width: 210px !important;
+  padding: 0 10px !important;
   border: 1px solid rgba(148, 163, 184, 0.25) !important;
   border-radius: 8px !important;
   background: #0f172a !important;
   color: #f8fafc !important;
   font-size: 12px !important;
+}
+@media (max-width: 820px) {
+  body.theme-xports #batchBar {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
 }
 
 /* ---------- 4. Guest Browse (/sources when unauthenticated) ---------- */

@@ -8068,11 +8068,28 @@ body.theme-xports :is(.sidebar, .topbar) {
   backface-visibility: hidden;
 }
 
-/* Skip offscreen card layout & paint for 60fps grid scrolling. */
-body.theme-xports .app-shell :is(.studio-card, .library-card, .tracked-channel-card, #videos .compact-video-card) {
+/* Skip offscreen card layout & paint for 60fps grid scrolling.
+   Keep #videos .compact-video-card out of paint containment so 3-dot dropdowns overflow cleanly. */
+body.theme-xports .app-shell :is(.studio-card, .library-card, .tracked-channel-card) {
   content-visibility: auto;
   contain-intrinsic-size: auto 320px;
   contain: layout style paint;
+}
+
+body.theme-xports .app-shell #videos .compact-video-card {
+  content-visibility: visible;
+  contain: none;
+  overflow: visible !important;
+}
+
+body.theme-xports .app-shell #videos .compact-video-card:has(.more-menu[open]),
+body.theme-xports .app-shell #videos .compact-video-card:focus-within {
+  position: relative;
+  z-index: 80;
+}
+
+body.theme-xports .app-shell #videos .more-menu-panel {
+  z-index: 220 !important;
 }
 
 body.theme-xports :is(.main, .sidebar-nav) {
@@ -10079,19 +10096,34 @@ body.theme-xports #videos .compact-video-card .collection-inline-add {
   white-space: nowrap !important;
 }
 body.theme-xports #batchBar {
-  flex-wrap: wrap !important;
+  width: max-content !important;
+  flex-wrap: nowrap !important;
   max-width: calc(100vw - 24px) !important;
+  gap: 8px !important;
+  padding: 8px 12px !important;
+}
+body.theme-xports #batchBar .batch-count {
+  min-width: auto !important;
+  padding: 0 6px !important;
+  white-space: nowrap !important;
 }
 body.theme-xports #batchBar .batch-collection-select {
   height: 32px !important;
   min-height: 32px !important;
-  max-width: 175px !important;
-  padding: 0 8px !important;
+  min-width: 150px !important;
+  max-width: 210px !important;
+  padding: 0 10px !important;
   border: 1px solid rgba(148, 163, 184, 0.25) !important;
   border-radius: 8px !important;
   background: #0f172a !important;
   color: #f8fafc !important;
   font-size: 12px !important;
+}
+@media (max-width: 820px) {
+  body.theme-xports #batchBar {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
 }
 
 /* ---------- 4. Guest Browse (/sources when unauthenticated) ---------- */
