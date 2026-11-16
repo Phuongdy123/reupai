@@ -125,7 +125,7 @@ export function EngineGate({ status, connect, check, title }) {
   const needsAuth = ["authorization_required", "permission_denied"].includes(status);
   const waiting = ["checking", "reconnecting", "authorizing"].includes(status);
   return <section className="panel"><div className="empty-state">
-    {waiting && <span className="spinner" />}
+    {waiting && <CatSpinner size="sm" />}
     <h2>{needsAuth ? "Cần cấp quyền Local Engine" : waiting ? "Đang kết nối Local Engine" : "Local Engine offline"}</h2>
     <p>{needsAuth ? `Kết nối ReupAI để mở ${title || "dữ liệu trên máy"}.` : waiting ? "Đang kiểm tra kết nối và quyền truy cập trên máy này." : "Khởi động ReupAI Local Engine rồi kiểm tra lại."}</p>
     <button className="btn primary" disabled={waiting} onClick={needsAuth ? connect : check}>{needsAuth ? "Kết nối ReupAI" : "Kiểm tra lại"}</button>

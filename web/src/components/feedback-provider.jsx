@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { CatSpinner } from "./cat-loader";
 
 const FeedbackContext = createContext(null);
 
@@ -47,7 +48,7 @@ export function FeedbackProvider({ children }) {
   }, [beginWaiting, endWaiting, showError]);
 
   const value = useMemo(() => ({ showError, beginWaiting, endWaiting }), [showError, beginWaiting, endWaiting]);
-  return <FeedbackContext.Provider value={value}>{children}{modal && <div className="feedback-scrim" role="presentation"><section className={`feedback-modal ${modal.type}`} role="dialog" aria-modal="true" aria-live="assertive" aria-label={modal.type === "error" ? "Đã xảy ra lỗi" : "Vui lòng chờ"}>{modal.type === "waiting" ? <span className="feedback-spinner" aria-hidden="true" /> : <span className="feedback-error-mark" aria-hidden="true">!</span>}<div><h2>{modal.type === "error" ? "Đã xảy ra lỗi" : "Vui lòng chờ"}</h2><p>{modal.message}</p></div>{modal.type === "error" && <button className="btn primary" onClick={() => setModal(null)} autoFocus>Đã hiểu</button>}</section></div>}</FeedbackContext.Provider>;
+  return <FeedbackContext.Provider value={value}>{children}{modal && <div className="feedback-scrim" role="presentation"><section className={`feedback-modal ${modal.type}`} role="dialog" aria-modal="true" aria-live="assertive" aria-label={modal.type === "error" ? "Đã xảy ra lỗi" : "Vui lòng chờ"}>{modal.type === "waiting" ? <CatSpinner size="sm" /> : <span className="feedback-error-mark" aria-hidden="true">!</span>}<div><h2>{modal.type === "error" ? "Đã xảy ra lỗi" : "Vui lòng chờ"}</h2><p>{modal.message}</p></div>{modal.type === "error" && <button className="btn primary" onClick={() => setModal(null)} autoFocus>Đã hiểu</button>}</section></div>}</FeedbackContext.Provider>;
 }
 
 export function useFeedback() {
