@@ -215,6 +215,11 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     Tự động làm mờ watermark
                     <small>Che ID hoặc chữ ở góc trên video.</small>
                 </label>
+                <label class="process-check-option">
+                    <input id="processBoostGpu" type="checkbox">
+                    Boost GPU
+                    <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
+                </label>
                 </div>
             </section>
 
