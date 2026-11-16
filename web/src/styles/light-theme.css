@@ -296,9 +296,9 @@ html[data-theme="light"] body.theme-xports :is(.reupai-support-close, .reupai-su
 }
 
 html[data-theme="light"] body.theme-xports :is(.reupai-support-tabs button.is-active, .reupai-support-msg.is-user) {
-  background: var(--ds-accent-soft);
-  border-color: var(--ds-accent-border);
-  color: var(--ds-accent-pressed);
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff;
 }
 
 html[data-theme="light"] body.theme-xports :is(.reupai-support-head strong, .reupai-ticket-list-head strong, .reupai-ticket-item strong) {
