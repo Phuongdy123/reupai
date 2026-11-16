@@ -4,7 +4,7 @@ import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import (
     APIRouter,
