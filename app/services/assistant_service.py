@@ -10,6 +10,8 @@ import base64
 import binascii
 import json
 import re
+import threading
+import time
 
 import requests
 
@@ -20,7 +22,23 @@ _MAX_IMAGE_BYTES = 4 * 1024 * 1024
 # A model can still appear in models.list after Google stops accepting new
 # users for generateContent. Keep a small set of stable, multimodal models and
 # retry only model-specific availability failures.
-_MODELS = ("gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash")
+_MODELS = ("gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-2.5-flash")
+_MODEL_COOLDOWN_LOCK = threading.Lock()
+_MODEL_COOLDOWN_UNTIL: dict[str, float] = {}
+
+
+def is_model_exhausted(model_name: str) -> bool:
+    with _MODEL_COOLDOWN_LOCK:
+        until = _MODEL_COOLDOWN_UNTIL.get(model_name, 0.0)
+        if until and time.monotonic() < until:
+            return True
+        _MODEL_COOLDOWN_UNTIL.pop(model_name, None)
+        return False
+
+
+def mark_model_exhausted(model_name: str, ttl: int = 900) -> None:
+    with _MODEL_COOLDOWN_LOCK:
+        _MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
 _ASPECT_RATIOS = {"", "shorts", "youtube", "facebook", "tiktok"}
 _VOICES = {"Trúc Ly", "Hải Đăng"}
 _BLUR_PRESETS = {"", "top", "bottom", "center"}
@@ -129,6 +147,8 @@ def ask_assistant(*, message: str, kind: str = "question", mode: str = "subtitle
                     "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"}}
     response = None
     for model in _MODELS:
+        if is_model_exhausted(model):
+            continue
         try:
             response = authorized_request(
                 "POST",
@@ -140,9 +160,13 @@ def ask_assistant(*, message: str, kind: str = "question", mode: str = "subtitle
             )
         except requests.RequestException as error:
             raise RuntimeError("Chưa kết nối được Gemini. Kiểm tra Internet rồi thử lại.") from error
-        if response.status_code not in {404, 500, 502, 503, 504} or response.ok:
+        if response.status_code in {404, 429}:
+            mark_model_exhausted(model)
+            continue
+        if response.status_code not in {500, 502, 503, 504} or response.ok:
             break
-    assert response is not None
+    if response is None:
+        raise RuntimeError("Các model Gemini tạm thời hết hạn mức. Hãy thử lại sau ít phút.")
     if response.status_code == 401:
         raise RuntimeError("Phiên Google đã hết hạn. Mở Cài đặt và kết nối lại Google.")
     if response.status_code == 403:

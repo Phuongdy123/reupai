@@ -265,12 +265,20 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
     const artworkPrompt = `Illustrate a completely new, polished 16:9 YouTube story thumbnail. The reference image is for character identity, art style and story context only. Never reuse the original frame as the background, trace its composition, or just retouch it. Stage a fresh scene with different poses and a different camera angle, a prominent lead character, expressive faces, vivid lighting and clear foreground and background layers. Compose with visual energy and strong contrast like an anime story poster, keeping the lower third visually quiet for a Vietnamese headline to be added later. Do not draw any words, subtitles, logos, borders or interface elements. Stay faithful to the video context: ${title || "the reference image"}. Art direction from the user: ${artDirection.trim() || "dramatic anime story poster"}.`;
     try {
       let newImage = null;
-      if (reference && onGenerateArtwork && !imageKey.trim()) {
+      let skipBackendNano = false;
+      try {
+        const exhaustedUntil = Number(window.sessionStorage.getItem("reupai:nano-banana-exhausted-until") || 0);
+        skipBackendNano = exhaustedUntil > Date.now();
+      } catch {}
+      if (reference && onGenerateArtwork && !imageKey.trim() && !skipBackendNano) {
         try {
           const result = await onGenerateArtwork(source, artworkPrompt, controller.signal);
           newImage = result?.image || null;
         } catch (backendErr) {
           if (controller.signal.aborted) throw backendErr;
+          try {
+            window.sessionStorage.setItem("reupai:nano-banana-exhausted-until", String(Date.now() + 15 * 60 * 1000));
+          } catch {}
           // Auto-fallback to free Flux if backend Nano Banana hits quota/billing/unavailable
           newImage = await fetchFreeFluxImage(freePrompt, controller.signal);
         }
@@ -310,6 +318,9 @@ export function ThumbnailDesigner({ source, artworkOnly, title, accountId, chann
       if (!controller.signal.aborted && newImage !== imageSource) {
         setReady(false);
         setGeneratedImage(newImage);
+        if (!text.trim() && title && !/\p{Script=Han}/u.test(title)) {
+          try { layoutCaption(title); } catch {}
+        }
       }
     } catch (requestError) {
       if (!controller.signal.aborted) setError(requestError.name === "TimeoutError" ? "Tạo ảnh quá lâu. Hãy thử lại." : requestError.message);
