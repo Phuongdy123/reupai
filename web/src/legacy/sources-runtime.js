@@ -5059,26 +5059,38 @@ function simplifySourceManager(manager) {
         heading => heading.textContent.includes('Series')
     );
 
+    libraryPopover.remove();
+
     if (!seriesSelect || !seriesRow) {
-        libraryPopover.remove();
         return;
     }
 
-    const seriesPopover = document.createElement('details');
-    seriesPopover.className = 'compact-popover';
-    seriesPopover.innerHTML = `
-        <summary class="toolbar-button">Series</summary>
-        <div class="compact-popover-panel series-panel"></div>
+    const drawer = document.createElement('div');
+    drawer.id = 'sourceSeriesDrawer';
+    drawer.className = 'source-series-drawer';
+    drawer.hidden = true;
+    drawer.innerHTML = `
+        <div class="source-series-drawer-head">
+            <div>
+                <strong>Series tự nhận diện</strong>
+                <span>Gom theo tên và số tập trong tiêu đề</span>
+            </div>
+            <div class="source-series-drawer-links">
+                <a href="/series" class="toolbar-button source-series-page-link">Mở trang Series →</a>
+                <button type="button" class="toolbar-icon-button" id="closeSeriesDrawerBtn" aria-label="Đóng khung Series">${uiIcon('close', 15)}</button>
+            </div>
+        </div>
     `;
+    const rowControls = document.createElement('div');
+    rowControls.className = 'source-series-drawer-controls';
+    rowControls.appendChild(seriesRow);
+    drawer.appendChild(rowControls);
+    manager.appendChild(drawer);
 
-    const panel = seriesPopover.querySelector('.series-panel');
-
-    if (seriesHeading) {
-        panel.appendChild(seriesHeading);
-    }
-
-    panel.appendChild(seriesRow);
-    libraryPopover.replaceWith(seriesPopover);
+    drawer.querySelector('#closeSeriesDrawerBtn')?.addEventListener('click', () => {
+        drawer.hidden = true;
+        document.getElementById('seriesQuickBtn')?.classList.remove('active');
+    });
 }
 
 
@@ -7079,6 +7091,68 @@ function mergeCurrentVideoSeries() {
         (a, b) => Number(b.count || 0) - Number(a.count || 0)
     );
 
+    try {
+        const prevCache = JSON.parse(localStorage.getItem('reupai:detected-series-cache-v1') || '{}');
+        const nextGroupsMap = new Map(
+            Array.isArray(prevCache?.groups)
+                ? prevCache.groups.filter((g) => g?.series_key).map((g) => [g.series_key, g])
+                : []
+        );
+        const nextVideosByKey = { ...(prevCache?.videosByKey || {}) };
+        const fallbackSourceName = String(
+            savedSource?.name
+            || currentVideos[0]?.source_name
+            || currentVideos[0]?.channel_name
+            || (currentSourceUrl ? currentSourceUrl() : '')
+            || 'Nguồn video'
+        ).trim();
+        const fallbackPlatform = String(
+            savedSource?.platform || currentVideos[0]?.platform || 'bilibili'
+        ).trim();
+        const sourceIdVal = savedSource?.id ?? currentSourceId ?? null;
+        const sourceEntryKey = `${sourceIdVal ?? ''}:${fallbackSourceName.toLowerCase()}`;
+
+        for (const item of seriesGroups) {
+            if (!item?.series_key) continue;
+            const vids = seriesCandidates
+                .filter((v) => v && v.video_id && v.series_key === item.series_key)
+                .slice(0, 200)
+                .map((v) => ({
+                    ...videoLibraryPayload(v),
+                    source_id: v.source_id ?? sourceIdVal,
+                    source_name: v.source_name || fallbackSourceName,
+                    channel_name: v.channel_name || fallbackSourceName,
+                    platform: v.platform || fallbackPlatform,
+                    series_key: item.series_key,
+                    series_name: item.name,
+                    episode_number: v.episode_number ?? null,
+                }));
+            const sourcesList = Array.isArray(item.sources) && item.sources.length
+                ? item.sources
+                : [{ key: sourceEntryKey, name: fallbackSourceName, source_id: sourceIdVal, platform: fallbackPlatform }];
+            nextGroupsMap.set(item.series_key, {
+                series_key: item.series_key,
+                name: item.name,
+                count: Math.max(Number(item.count || 0), vids.length),
+                episodes: Array.isArray(item.episodes) ? item.episodes : [],
+                sources: sourcesList,
+                source_label: item.source_label || fallbackSourceName,
+            });
+            if (vids.length) nextVideosByKey[item.series_key] = vids;
+        }
+        const trimmedGroups = Array.from(nextGroupsMap.values()).slice(-60);
+        const keepKeys = new Set(trimmedGroups.map((g) => g.series_key));
+        const trimmedVideosByKey = {};
+        for (const k of Object.keys(nextVideosByKey)) {
+            if (keepKeys.has(k)) trimmedVideosByKey[k] = nextVideosByKey[k];
+        }
+        localStorage.setItem('reupai:detected-series-cache-v1', JSON.stringify({
+            updatedAt: Date.now(),
+            groups: trimmedGroups,
+            videosByKey: trimmedVideosByKey,
+        }));
+    } catch {}
+
     const select = document.getElementById('seriesSelect');
 
     if (!select) {
@@ -7235,28 +7309,23 @@ async function toggleSaveCurrentSeries() {
     }
 }
 
-function focusSeriesPicker() {
-
-    const select = (
-        document.getElementById(
-            'seriesSelect'
-        )
-    );
-
-    if (!select) {
+function focusSeriesPicker(toggle = true) {
+    const drawer = document.getElementById('sourceSeriesDrawer');
+    const select = document.getElementById('seriesSelect');
+    const quickBtn = document.getElementById('seriesQuickBtn');
+    if (drawer) {
+        const nextHidden = toggle ? !drawer.hidden : false;
+        drawer.hidden = nextHidden;
+        quickBtn?.classList.toggle('active', !nextHidden);
+        if (!nextHidden) {
+            refreshSavedSeriesKeys();
+            select?.focus();
+        }
         return;
     }
-
-    const details = (
-        select.closest(
-            'details'
-        )
-    );
-
-    if (details) {
-        details.open = true;
-    }
-
+    if (!select) return;
+    const details = select.closest('details');
+    if (details) details.open = true;
     refreshSavedSeriesKeys();
     select.focus();
 }

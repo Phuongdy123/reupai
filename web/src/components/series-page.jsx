@@ -99,6 +99,43 @@ function _writeLocalSavedSeries(list) {
   } catch {}
 }
 
+function _readDetectedSeriesCache() {
+  try {
+    const raw = window.localStorage.getItem("reupai:detected-series-cache-v1");
+    const parsed = JSON.parse(raw || "null");
+    if (!parsed || typeof parsed !== "object") return { groups: [], videosByKey: {} };
+    return {
+      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
+      videosByKey: parsed.videosByKey && typeof parsed.videosByKey === "object" ? parsed.videosByKey : {},
+    };
+  } catch {
+    return { groups: [], videosByKey: {} };
+  }
+}
+
+function _mergeDetectedSeries(serverList = [], cache = null) {
+  const cached = cache || _readDetectedSeriesCache();
+  const byKey = new Map();
+  for (const item of serverList) {
+    if (item?.series_key) byKey.set(item.series_key, item);
+  }
+  for (const item of cached.groups || []) {
+    if (!item?.series_key) continue;
+    const existing = byKey.get(item.series_key);
+    if (!existing) {
+      byKey.set(item.series_key, { ...item, fromLocalCache: true });
+    } else if (Number(item.count || 0) > Number(existing.count || 0)) {
+      byKey.set(item.series_key, {
+        ...existing,
+        count: item.count,
+        episodes: item.episodes?.length ? item.episodes : existing.episodes,
+        fromLocalCache: true,
+      });
+    }
+  }
+  return Array.from(byKey.values()).sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
+}
+
 function _mergeSavedSeries(serverList = []) {
   const byKey = new Map();
   for (const item of serverList) {
@@ -173,7 +210,7 @@ export function SeriesPage() {
         client.json("/api/library/outputs"),
         client.json("/api/library/collections"),
       ]);
-      setSeries(result.series || []);
+      setSeries(_mergeDetectedSeries(result.series || []));
       setSavedSeries(_mergeSavedSeries(savedRes.series || []));
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
@@ -205,7 +242,16 @@ export function SeriesPage() {
       setDownloads(files.videos || []);
       setOutputs(rendered.outputs || []);
       setSavedSeries(_mergeSavedSeries(savedRes.series || []));
-      setVideos((data.videos || []).filter((video) => fromSource(video, currentSource)));
+      const serverVideos = (data.videos || []).filter((video) => fromSource(video, currentSource));
+      const cachedVideos = (_readDetectedSeriesCache().videosByKey?.[selected.series_key] || []).filter((video) => fromSource(video, currentSource));
+      const mergedVideosMap = new Map();
+      for (const v of cachedVideos) {
+        if (v?.video_id) mergedVideosMap.set(String(v.video_id), v);
+      }
+      for (const v of serverVideos) {
+        if (v?.video_id) mergedVideosMap.set(String(v.video_id), v);
+      }
+      setVideos(Array.from(mergedVideosMap.values()));
     } catch (requestError) {
       setError(requestError.message || "Không thể tải danh sách tập.");
     } finally {

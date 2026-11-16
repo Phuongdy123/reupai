@@ -1690,6 +1690,53 @@ def collection_ids_for_video(
 # VIDEO LIST / META
 # =========================================================
 
+def _cluster_unmatched_series(items):
+    """Group unmatched library videos that share a clear multi-video title prefix."""
+    unmatched = [
+        item for item in items
+        if not str(item.get("series_key") or "").strip() and str(item.get("title") or "").strip()
+    ]
+    if len(unmatched) < 2:
+        return
+    entries = []
+    for item in unmatched:
+        cleaned = clean_series_base(re.sub(r"\s*\d{1,4}\s*$", "", str(item.get("title") or "")))
+        if len(cleaned) >= 4:
+            entries.append((cleaned, item))
+    entries.sort(key=lambda pair: pair[0])
+    if len(entries) < 2:
+        return
+
+    candidates = {}
+    for i in range(len(entries) - 1):
+        a, b = entries[i][0], entries[i + 1][0]
+        limit = min(len(a), len(b))
+        idx = 0
+        while idx < limit and a[idx].lower() == b[idx].lower():
+            idx += 1
+        pref = clean_series_base(a[:idx])
+        cjk = sum(1 for ch in pref if "\u4e00" <= ch <= "\u9fff")
+        if len(pref) >= 6 or cjk >= 4:
+            key = _series_key_from_base(pref)
+            if len(key) >= 3:
+                candidates[key] = (pref, key)
+
+    if not candidates:
+        return
+    lowered = [(cleaned.lower(), item) for cleaned, item in entries]
+    for cleaned_low, item in lowered:
+        best = None
+        for pref, key in candidates.values():
+            if cleaned_low.startswith(pref.lower()):
+                if best is None or len(pref) > len(best[0]):
+                    best = (pref, key)
+        if best:
+            pref_low = best[0].lower()
+            if sum(1 for cl, _ in lowered if cl.startswith(pref_low)) >= 2:
+                item["series_name"] = best[0]
+                item["series_key"] = best[1]
+
+
 def list_library_videos(
     user_id,
     *,
@@ -1813,40 +1860,6 @@ def list_library_videos(
             )
         )
 
-        if (
-            series_key
-            and series.get(
-                "series_key"
-            )
-            != series_key
-        ):
-            continue
-
-        if query_text:
-
-            haystack = (
-                str(
-                    item.get(
-                        "title"
-                    )
-                    or ""
-                )
-                + " "
-                + str(
-                    video_id
-                )
-                + " "
-                + str(
-                    item.get(
-                        "source_name"
-                    )
-                    or ""
-                )
-            ).casefold()
-
-            if query_text not in haystack:
-                continue
-
         item[
             "video_id"
         ] = video_id
@@ -1862,6 +1875,26 @@ def list_library_videos(
         result.append(
             item
         )
+
+    _cluster_unmatched_series(result)
+
+    if series_key or query_text:
+        filtered = []
+        for item in result:
+            if series_key and item.get("series_key") != series_key:
+                continue
+            if query_text:
+                haystack = (
+                    str(item.get("title") or "")
+                    + " "
+                    + str(item.get("video_id") or "")
+                    + " "
+                    + str(item.get("source_name") or "")
+                ).casefold()
+                if query_text not in haystack:
+                    continue
+            filtered.append(item)
+        result = filtered
 
     if include_local_state:
         states = local_video_states(
