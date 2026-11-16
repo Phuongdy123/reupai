@@ -2312,6 +2312,9 @@ function ensureProcessDetailsPopup() {
                     <button class="process-details-cancel secondary" type="button">
                         Đóng
                     </button>
+                    <button class="process-details-resume primary" type="button" hidden>
+                        ${uiIcon('play', 15)} Tiếp tục
+                    </button>
                     <button class="process-details-stop" type="button">
                         ${uiIcon('stop', 15)} Dừng xử lý
                     </button>
@@ -2332,6 +2335,16 @@ function ensureProcessDetailsPopup() {
         processingDetailsPopupCard
             ?.querySelector('.stop-process-btn')
             ?.click();
+    };
+    popup.querySelector('.process-details-resume').onclick = () => {
+        const targetCard = processingDetailsPopupCard;
+        if (!targetCard) return;
+        const retry = targetCard._lastProcessRetry;
+        if (retry) {
+            processVideo(retry.video, targetCard, retry.mode, retry.config);
+            return;
+        }
+        targetCard.querySelector('.sub-btn, .voice-btn')?.click();
     };
 
     popup.addEventListener('keydown', event => {
@@ -2444,6 +2457,11 @@ function syncProcessDetailsPopup(
         || stopButton.style.display === 'none'
     );
     popupStop.disabled = Boolean(stopButton?.disabled);
+
+    const popupResume = popup.querySelector('.process-details-resume');
+    if (popupResume) {
+        popupResume.hidden = !(isError || stopped);
+    }
 }
 
 
@@ -2496,6 +2514,7 @@ function processVideo(video, card, mode, config = {}) {
     // Downloading from the dialog can rebuild the cards underneath it.
     const currentCard = document.querySelector(`[data-video-id="${CSS.escape(video.video_id)}"]`) || card;
     if (signal?.aborted || !currentCard.isConnected) return Promise.resolve();
+    currentCard._lastProcessRetry = { video, mode, config };
     return runAction(`process:${video.video_id}`, () => performProcessVideo(video, currentCard, mode, config));
 }
 
