@@ -740,13 +740,13 @@ export function SeriesPage() {
               Chưa có Series nào được lưu. Mở <Link href="/sources">Nguồn video</Link> bấm nút <strong>Series</strong> → nhập tên và bấm <strong>Lưu vào Series đã lưu</strong>, hoặc mở một Series bên dưới để lưu.
             </div>
           ) : (
-          <div className="library-grid">
+          <div className="library-grid series-saved-grid">
             {savedSeries.map((item) => {
               const total = item.total_count || 0;
               const done = item.processed_count || 0;
               const pct = total > 0 ? Math.round((done / total) * 100) : 0;
               return (
-                <article className="library-card" key={item.series_key}>
+                <article className="library-card series-saved-card" key={item.series_key}>
                   <div className="library-body">
                     <div className="card-header-row">
                       <h3 style={{ height: "auto", marginBottom: 6 }}>
@@ -786,7 +786,7 @@ export function SeriesPage() {
                       )}
                       <span>Cấu hình: {summarizeConfig(item.config)}</span>
                     </div>
-                    <div className="library-actions" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                    <div className="library-actions">
                       <button
                         className="btn primary"
                         disabled={batchRunning || item.pending_count === 0}

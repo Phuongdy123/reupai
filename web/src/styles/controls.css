@@ -2457,6 +2457,59 @@ body.theme-xports #sourceSeriesDrawer [hidden] {
   display: none !important;
 }
 
+body.theme-xports .library-grid.series-saved-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)) !important;
+  gap: 16px !important;
+}
+body.theme-xports .series-saved-card {
+  width: 100% !important;
+  max-width: none !important;
+}
+body.theme-xports .series-saved-card .library-body {
+  padding: 18px 20px !important;
+}
+body.theme-xports .series-saved-card .card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+body.theme-xports .series-saved-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px !important;
+  margin: 0 !important;
+}
+body.theme-xports .series-saved-card .library-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+body.theme-xports .series-saved-card .library-meta span {
+  padding: 4px 10px !important;
+  border-radius: 7px !important;
+  border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.1));
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--ds-text-muted, #a1a1aa) !important;
+  font-size: 12px;
+}
+body.theme-xports .series-saved-card .library-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-top: 14px !important;
+}
+@media (max-width: 600px) {
+  body.theme-xports .series-saved-card .library-actions {
+    flex-wrap: wrap;
+  }
+}
+
 
 
 

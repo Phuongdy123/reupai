@@ -11437,6 +11437,59 @@ body.theme-xports #sourceSeriesDrawer [hidden] {
   display: none !important;
 }
 
+body.theme-xports .library-grid.series-saved-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr)) !important;
+  gap: 16px !important;
+}
+body.theme-xports .series-saved-card {
+  width: 100% !important;
+  max-width: none !important;
+}
+body.theme-xports .series-saved-card .library-body {
+  padding: 18px 20px !important;
+}
+body.theme-xports .series-saved-card .card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+body.theme-xports .series-saved-card h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px !important;
+  margin: 0 !important;
+}
+body.theme-xports .series-saved-card .library-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+body.theme-xports .series-saved-card .library-meta span {
+  padding: 4px 10px !important;
+  border-radius: 7px !important;
+  border: 1px solid var(--ds-border, rgba(255, 255, 255, 0.1));
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--ds-text-muted, #a1a1aa) !important;
+  font-size: 12px;
+}
+body.theme-xports .series-saved-card .library-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-top: 14px !important;
+}
+@media (max-width: 600px) {
+  body.theme-xports .series-saved-card .library-actions {
+    flex-wrap: wrap;
+  }
+}
+
 
 
 
@@ -12584,4 +12637,205 @@ html[data-theme="light"] body.theme-xports .tracked-channel-delete {
   background: #f8fafc !important;
   color: #1e293b !important;
   border-color: rgba(15, 23, 42, 0.14) !important;
+}
+
+
+/* === social-connection-colors.css === */
+/* Platform identity stays visible in both workspace themes. */
+body.theme-xports .mxh-connect-bar {
+  --social-tint: 10%;
+  --social-border: 28%;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(24 119 242 / 8%), transparent 60%),
+    var(--ds-surface);
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar {
+  --social-tint: 6%;
+  --social-border: 23%;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(24 119 242 / 6%), transparent 60%),
+    var(--ds-surface);
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-youtube {
+  --platform-color: #ff454f;
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-facebook {
+  --platform-color: #4b9bff;
+}
+
+body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-tiktok {
+  --platform-color: #25d9d2;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-youtube {
+  --platform-color: #ce2634;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-facebook {
+  --platform-color: #1466d4;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-tiktok {
+  --platform-color: #087e83;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn {
+  background: color-mix(in srgb, var(--platform-color) var(--social-tint), var(--ds-surface));
+  border-color: color-mix(in srgb, var(--platform-color) var(--social-border), var(--ds-border));
+  color: var(--ds-text);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn.is-connected {
+  border-color: color-mix(in srgb, var(--platform-color) 50%, var(--ds-border));
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn:is(:hover, :active, .is-selected) {
+  background: color-mix(in srgb, var(--platform-color) 16%, var(--ds-surface)) !important;
+  border-color: var(--platform-color) !important;
+  color: var(--ds-text) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--platform-color) 20%, transparent) !important;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .platform-logo-svg {
+  filter: none;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-btn:focus-visible {
+  outline: 2px solid var(--platform-color);
+  outline-offset: 3px;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-logo-dot.is-connected {
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 10%);
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready {
+  background: rgb(52 211 153 / 10%);
+  border-color: rgb(52 211 153 / 24%);
+  color: #6ee7b7;
+}
+
+html[data-theme] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready .mxh-badge-pulse {
+  box-shadow: 0 0 0 3px rgb(52 211 153 / 10%);
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-count-badge.is-ready {
+  background: #ecfdf5;
+  border-color: #a7e5cc;
+  color: #146746;
+}
+
+html[data-theme="light"] body.theme-xports .mxh-connect-bar .mxh-logo-dot.is-connected {
+  background: #16865c;
+  box-shadow: 0 0 0 3px rgb(22 134 92 / 9%);
+}
+
+
+/* === neutral-focus-series.css === */
+html[data-theme="dark"] {
+  --ds-accent: #c5c8d0;
+  --ds-accent-hover: #e4e6eb;
+  --ds-accent-pressed: #a6abb6;
+  --ds-accent-soft: rgb(197 200 208 / 12%);
+  --ds-accent-border: #626670;
+  --ds-on-accent: #18191c;
+  --ds-focus-color: #b7bcc6;
+}
+
+html[data-theme="light"] {
+  --ds-accent: #4b5563;
+  --ds-accent-hover: #303a48;
+  --ds-accent-pressed: #303a48;
+  --ds-accent-soft: #edf0f3;
+  --ds-accent-border: #a7afb9;
+  --ds-focus-color: #596575;
+}
+
+/* Legacy controls include hard-coded purple shadows and local accent aliases. */
+html[data-theme] body.theme-xports :is(input, select, textarea):is(:focus, :focus-visible),
+html[data-theme] body.theme-xports :is(.search-field, .files-search-field, .auth-input-wrap):focus-within {
+  border-color: var(--ds-focus-color) !important;
+  outline: 2px solid var(--ds-focus-color) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+html[data-theme] body.theme-xports :is(button, a, summary, [role="button"]):focus-visible {
+  outline: 2px solid var(--ds-focus-color) !important;
+  outline-offset: 3px;
+}
+
+html[data-theme] body.theme-xports :is(input, select, textarea):hover:not(:disabled) {
+  border-color: var(--ds-border-hover) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer {
+  margin-top: 6px;
+  padding: 9px 11px;
+  gap: 7px;
+  border-radius: 10px;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head {
+  gap: 8px;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head strong {
+  font-size: 12px;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer-head span {
+  font-size: 10px;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 9px !important;
+  font-size: 11px !important;
+  border-radius: 7px !important;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(.toolbar-icon-button, .danger-icon-button) {
+  width: 30px !important;
+  min-width: 30px !important;
+  padding: 0 !important;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-name-row {
+  gap: 6px;
+  margin-top: 5px;
+}
+
+html[data-theme] body.theme-xports .v13-manager .source-series-drawer-status {
+  margin-top: 5px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+
+html[data-theme] body.theme-xports .series-list {
+  gap: 8px;
+}
+
+html[data-theme] body.theme-xports .series-card {
+  padding: 12px 14px;
+  gap: 10px;
+}
+
+html[data-theme] body.theme-xports .series-card h3 {
+  margin: 3px 0;
+  font-size: 14px;
+}
+
+@media (pointer: coarse) {
+  html[data-theme] body.theme-xports .v13-manager .source-series-drawer :is(select, input, button, .source-series-page-link) {
+    height: 40px !important;
+    min-height: 40px !important;
+  }
 }

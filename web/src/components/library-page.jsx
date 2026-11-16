@@ -307,13 +307,13 @@ export function LibraryPage({ kind }) {
             Chưa có Series nào được lưu. Vào <Link href="/series">Series</Link> chọn tập &amp; cấu hình rồi bấm <strong>Lưu Series</strong> hoặc <strong>Xử lý hàng loạt</strong> để theo dõi tiến độ tại đây.
           </div>
         ) : (
-          <div className="library-grid">
+          <div className="library-grid series-saved-grid">
             {savedSeries.map((item) => {
               const total = item.total_count || 0;
               const done = item.processed_count || 0;
               const pct = total > 0 ? Math.round((done / total) * 100) : 0;
               return (
-                <article className="library-card" key={item.series_key}>
+                <article className="library-card series-saved-card" key={item.series_key}>
                   <div className="library-body">
                     <div className="card-header-row">
                       <h3 style={{ height: "auto", marginBottom: 6 }}><Icon name="folder" size={18} /> {item.name}</h3>
@@ -327,7 +327,7 @@ export function LibraryPage({ kind }) {
                       <span>{item.sort_mode === "oldest_first" ? "Ngày đăng cũ → mới" : "Từ tập 1 → cuối"}</span>
                       {item.processing_count > 0 && <span>Đang chạy: {item.processing_count}</span>}
                     </div>
-                    <div className="library-actions" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                    <div className="library-actions">
                       <button className="btn primary" disabled={seriesBusy || item.pending_count === 0} onClick={() => resumeSavedSeries(item)}>
                         <Icon name="play" size={15} />
                         {item.pending_count === 0 ? "Đã xong hết" : `Xử lý tiếp (${item.pending_count} tập)`}
