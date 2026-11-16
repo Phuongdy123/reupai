@@ -395,33 +395,26 @@ html[data-theme="light"] body.theme-xports .source-youtube-banner.is-gemini smal
   color: var(--ds-accent);
 }
 
-html[data-theme="light"] body.theme-xports .app-shell #videos .compact-video-card:is(:hover, :focus-within),
-html[data-theme="light"] body.theme-xports #videos .compact-video-card.is-processing {
+html[data-theme="light"] body.theme-xports .app-shell #videos .compact-video-card:is(:hover, :focus-within) {
   border-color: var(--ds-border-hover) !important;
 }
+html[data-theme="light"] body.theme-xports #videos .compact-video-card.is-processing {
+  border: 1.5px solid #ef4444 !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), #ffffff) !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.28), 0 10px 28px rgba(239, 68, 68, 0.16) !important;
+}
 
-html[data-theme="light"] body.theme-xports #videos .compact-video-card .sub-btn {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-  border-color: #dc2626 !important;
-  color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.24) !important;
-}
-html[data-theme="light"] body.theme-xports #videos .compact-video-card .sub-btn:is(:hover, :focus-visible):not(:disabled) {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-  border-color: #b91c1c !important;
-  color: #ffffff !important;
-  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.34) !important;
-}
-html[data-theme="light"] body.theme-xports #videos .compact-video-card .voice-btn {
+html[data-theme="light"] body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn, .process-details-btn) {
+  border-radius: 9999px !important;
   background: #ffffff !important;
-  border-color: rgba(239, 68, 68, 0.42) !important;
-  color: #dc2626 !important;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
 }
-html[data-theme="light"] body.theme-xports #videos .compact-video-card .voice-btn:is(:hover, :focus-visible):not(:disabled) {
-  background: #fef2f2 !important;
-  border-color: #ef4444 !important;
-  color: #b91c1c !important;
+html[data-theme="light"] body.theme-xports #videos .compact-video-card :is(.sub-btn, .voice-btn, .process-details-btn):is(:hover, :focus-visible):not(:disabled) {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
 }
 html[data-theme="light"] body.theme-xports #batchBar > button:not(:disabled) {
   background: var(--ds-surface-hover) !important;
