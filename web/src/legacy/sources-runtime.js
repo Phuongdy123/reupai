@@ -5462,6 +5462,17 @@ function ensureManagerPanel() {
                         <button
                             type="button"
                             class="toolbar-icon-button"
+                            id="saveOrDeleteSeriesBtn"
+                            title="Chọn series để lưu"
+                            aria-label="Lưu hoặc xóa series"
+                            disabled
+                        >
+                            ${uiIcon('plus', 17)}
+                        </button>
+
+                        <button
+                            type="button"
+                            class="toolbar-icon-button"
                             id="openSeries"
                             title="Mở series"
                             aria-label="Mở series"
@@ -6896,6 +6907,7 @@ async function loadSeries() {
             select.value =
                 previous;
         }
+        syncSaveSeriesButton();
 
     } catch (
         error
@@ -7193,6 +7205,75 @@ function mergeCurrentVideoSeries() {
 }
 
 
+let savedSeriesKeys = new Set();
+
+function syncSaveSeriesButton() {
+    const btn = document.getElementById('saveOrDeleteSeriesBtn');
+    const select = document.getElementById('seriesSelect');
+    if (!btn) return;
+    const key = select?.value || '';
+    if (!key) {
+        btn.disabled = true;
+        btn.classList.remove('is-saved-delete');
+        btn.innerHTML = uiIcon('plus', 17);
+        btn.title = 'Chọn series để lưu';
+        btn.setAttribute('aria-label', 'Chọn series để lưu');
+        return;
+    }
+    const saved = savedSeriesKeys.has(key);
+    btn.disabled = false;
+    btn.classList.toggle('is-saved-delete', saved);
+    btn.innerHTML = saved ? uiIcon('trash', 17) : uiIcon('plus', 17);
+    btn.title = saved ? 'Xóa Series đã lưu' : 'Lưu Series này';
+    btn.setAttribute('aria-label', btn.title);
+}
+
+async function refreshSavedSeriesKeys() {
+    try {
+        const data = await api('/api/library/series/saved');
+        savedSeriesKeys = new Set((data?.series || []).map((s) => s.series_key).filter(Boolean));
+    } catch {
+        // ignore network errors when checking saved status
+    }
+    syncSaveSeriesButton();
+}
+
+async function toggleSaveCurrentSeries() {
+    const select = document.getElementById('seriesSelect');
+    const key = select?.value || '';
+    if (!key) return;
+    const btn = document.getElementById('saveOrDeleteSeriesBtn');
+    if (btn) btn.disabled = true;
+    try {
+        if (savedSeriesKeys.has(key)) {
+            await api(`/api/library/series/saved/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            savedSeriesKeys.delete(key);
+            updateSourceInfo('Đã xóa Series khỏi danh sách đã lưu.');
+        } else {
+            const item = seriesGroups.find((value) => value.series_key === key);
+            const videoIds = currentVideos.filter((v) => v.series_key === key).map((v) => v.video_id);
+            await api('/api/library/series/saved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    series_key: key,
+                    name: item?.name || key,
+                    source_key: activeSourceKey || '',
+                    source_label: item?.source_label || '',
+                    sort_mode: 'episode_asc',
+                    video_ids: videoIds,
+                }),
+            });
+            savedSeriesKeys.add(key);
+            updateSourceInfo(`Đã lưu Series "${item?.name || key}".`);
+        }
+    } catch (err) {
+        alert(err?.message || 'Không thể cập nhật Series.');
+    } finally {
+        syncSaveSeriesButton();
+    }
+}
+
 function focusSeriesPicker() {
 
     const select = (
@@ -7215,6 +7296,7 @@ function focusSeriesPicker() {
         details.open = true;
     }
 
+    refreshSavedSeriesKeys();
     select.focus();
 }
 
@@ -8152,6 +8234,14 @@ function bindV13Manager() {
     );
 
     bind(
+        'saveOrDeleteSeriesBtn',
+        'click',
+        () => {
+            toggleSaveCurrentSeries();
+        }
+    );
+
+    bind(
         'collectionSelect',
         'change',
         () => {
@@ -8170,6 +8260,7 @@ function bindV13Manager() {
                 currentView = 'source';
             }
 
+            syncSaveSeriesButton();
             renderVideos();
             saveUiState();
         }
