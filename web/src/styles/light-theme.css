@@ -878,16 +878,32 @@ html[data-theme="light"] body.theme-xports .v13-manager .source-series-drawer {
   border-color: rgba(15, 23, 42, 0.14);
 }
 html[data-theme="light"] body.theme-xports .v13-manager .source-series-page-link {
-  background: #eef2ff;
-  border-color: rgba(99, 102, 241, 0.35);
-  color: #4338ca;
+  background: #f4f4f5;
+  border-color: rgba(15, 23, 42, 0.18);
+  color: #18181b;
+}
+html[data-theme="light"] body.theme-xports .v13-manager :is(.toolbar-icon-button, .danger-icon-button) {
+  background: #f4f4f5 !important;
+  border-color: rgba(15, 23, 42, 0.16) !important;
+  color: #18181b !important;
+}
+html[data-theme="light"] body.theme-xports .v13-manager .source-series-save-btn {
+  background: #18181b !important;
+  border-color: #18181b !important;
+  color: #ffffff !important;
+}
+html[data-theme="light"] body.theme-xports #seriesQuickBtn.active {
+  background: #18181b !important;
+  border-color: #18181b !important;
+  color: #ffffff !important;
 }
 html[data-theme="light"] body.theme-xports #batchBar .batch-collection-select {
   background: #ffffff !important;
   color: #0f172a !important;
   border-color: rgba(15, 23, 42, 0.2) !important;
 }
-html[data-theme="light"] body.theme-xports .v13-manager .source-series-name-input {
+html[data-theme="light"] body.theme-xports .v13-manager .source-series-name-input,
+html[data-theme="light"] body.theme-xports .v13-manager .source-series-drawer-controls select {
   background: #ffffff !important;
   color: #0f172a !important;
   border-color: rgba(15, 23, 42, 0.2) !important;
