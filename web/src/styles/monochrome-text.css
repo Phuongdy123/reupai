@@ -122,4 +122,4 @@
 .theme-xports .engine-update-notice small,
 .theme-xports .dashboard-engine-guide a,
 .theme-xports.theme-xports .dashboard-welcome .workspace-eyebrow,
-.theme-xports.theme-xports .dashboard-welcome h2 span { color: #e9e9ef; }
+.theme-xports.theme-xports .dashboard-welcome h2 span { color: var(--monochrome-text, #e9e9ef); }

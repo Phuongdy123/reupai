@@ -1,9 +1,9 @@
 /* Keep interaction feedback crisp and neutral across mouse and touch. */
 body.theme-xports :is(button, summary, [role="button"], .nav-item):hover:not(:disabled):not(.active):not([aria-pressed="true"]),
 body.theme-xports :is(button, summary, [role="button"], .nav-item):active:not(:disabled):not(.active):not([aria-pressed="true"]) {
-  border-color: #505055 !important;
-  background: #222225 !important;
-  color: #f2f2f3 !important;
+  border-color: var(--neutral-hover-border, #505055) !important;
+  background: var(--neutral-hover-bg, #222225) !important;
+  color: var(--neutral-hover-text, #f2f2f3) !important;
   box-shadow: none !important;
   filter: none !important;
   transform: none !important;
@@ -12,9 +12,9 @@ body.theme-xports :is(button, summary, [role="button"], .nav-item):active:not(:d
 
 body.theme-xports :is(a.btn, a.button-primary, a.button-secondary, a.action-primary, a.action-secondary, a.dashboard-billing-card, a.tracked-channel-open):hover,
 body.theme-xports :is(a.btn, a.button-primary, a.button-secondary, a.action-primary, a.action-secondary, a.dashboard-billing-card, a.tracked-channel-open):active {
-  border-color: #505055 !important;
-  background: #222225 !important;
-  color: #f2f2f3 !important;
+  border-color: var(--neutral-hover-border, #505055) !important;
+  background: var(--neutral-hover-bg, #222225) !important;
+  color: var(--neutral-hover-text, #f2f2f3) !important;
   box-shadow: none !important;
   filter: none !important;
   transform: none !important;
@@ -22,20 +22,20 @@ body.theme-xports :is(a.btn, a.button-primary, a.button-secondary, a.action-prim
 }
 
 body.theme-xports a[href]:hover:not(.btn):not(.button-primary):not(.button-secondary):not(.action-primary):not(.action-secondary) {
-  color: #e2e2e5 !important;
+  color: var(--neutral-hover-text, #e2e2e5) !important;
   text-decoration-color: #77777d;
   box-shadow: none !important;
   filter: none !important;
 }
 
 body.theme-xports :is(input, select, textarea):hover:not(:disabled) {
-  border-color: #55555a;
+  border-color: var(--neutral-hover-border, #55555a);
   box-shadow: none;
 }
 
 body.theme-xports .app-shell :is(.dashboard-image-card, .dashboard-shortcut-card, .dashboard-recent-card, .tracked-channel-card, .library-card, .source-card):hover {
-  border-color: #48484d !important;
-  background-color: #171719 !important;
+  border-color: var(--neutral-hover-border, #48484d) !important;
+  background-color: var(--neutral-card-hover, #171719) !important;
   box-shadow: none !important;
   filter: none !important;
   transform: none !important;
