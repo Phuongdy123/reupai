@@ -96,8 +96,9 @@ export class LocalEngineClient {
     let response;
     try {
       response = await fetchWithTimeout(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
-      if (response.status === 401 && this.grant && !String(path).startsWith("/api/authorize/")) {
-        if (await this.refreshSession()) {
+      if (response.status === 401 && !String(path).startsWith("/api/authorize/")) {
+        const recovered = (this.grant && await this.refreshSession()) || await this.requestDirectAuthorization().catch(() => false);
+        if (recovered && this.sessionToken) {
           headers.set("Authorization", `Bearer ${this.sessionToken}`);
           response = await fetchWithTimeout(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
         }
