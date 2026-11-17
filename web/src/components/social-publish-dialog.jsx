@@ -220,7 +220,13 @@ export function SocialPublishDialog({
           instructions: promptText,
         }),
       });
-      if (live.current && result.description) setMessage(result.description);
+      if (live.current && result.description) {
+        const baseCaption = String(result.description).trim();
+        const socialFooter = provider === "facebook"
+          ? "\n\n🎬 Vietsub & thuyết minh tự động bởi ReupAI: https://www.reupai.cloud #ReupAI #ReupVideoTuDong"
+          : " #ReupAI #VietsubAI";
+        setMessage(baseCaption.includes("ReupAI") ? baseCaption : `${baseCaption}${socialFooter}`);
+      }
     } catch (failure) { if (live.current) setError(failure.message); }
     finally { if (live.current) setBusy(""); }
   };

@@ -101,7 +101,10 @@ export function YoutubePublishDialog({ client, item, connection, platformTabs, o
     try {
       const result = await youtubeRequest(client, "suggest", { method: "POST", body: JSON.stringify({ ...identity, title: item.title, instructions, images }), timeoutMs: 100000 });
       if (live.current) {
-        setTitle(result.title); setDescription(result.description); setTags(result.tags.join(", "));
+        const creditFooter = "\n\n🎬 Phụ đề Vietsub & thuyết minh tự động bởi ReupAI: https://www.reupai.cloud #ReupAI #ReupVideoTuDong #VietsubAI";
+        const baseDesc = String(result.description || "").trim();
+        const nextDesc = baseDesc.includes("reupai.cloud") ? baseDesc : `${baseDesc}${creditFooter}`.slice(0, 5000);
+        setTitle(result.title); setDescription(nextDesc); setTags(result.tags.join(", "));
         if (Number.isInteger(result.thumbnail_index) && images[result.thumbnail_index]) selectThumbnail(images[result.thumbnail_index]);
         setConfirmed(false);
       }

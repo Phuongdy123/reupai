@@ -10,6 +10,21 @@ const steps = [
   { number: "03", icon: "play", title: "Render nhanh & Đăng kênh", description: "Cố định cỡ chữ phụ đề, xuất file SRT hoặc video 16:9 / 9:16 ngay trên máy và đăng lên YouTube, Facebook, TikTok." },
 ];
 
+const comparisonRows = [
+  ["Tải nguồn Douyin & Bilibili", "Copy từng link qua web trung gian, dễ lỗi và mất chất lượng", "Đồng bộ cả kênh & Series, tải hàng loạt trực tiếp về ổ cứng"],
+  ["Tách lời thoại & Phụ đề cứng", "Nghe chép tay hoặc gõ lại từng câu chữ Trung tốn hàng giờ", "Tự động tách thoại Whisper + quét chữ cứng bằng PaddleOCR"],
+  ["Xóa / Che chữ Trung Quốc gốc", "Kẻ khung làm mờ thủ công từng đoạn trên phần mềm dựng", "Tự động nhận diện dải hardsub, làm mờ sạch và đè Vietsub mới"],
+  ["Dịch thuật & Căn cỡ chữ SRT", "Copy qua công cụ dịch rời, câu dài bị tràn khung hoặc co chữ nhỏ", "Dịch chuẩn ngữ cảnh AI, cố định cỡ chữ và tự chia trang câu dài"],
+  ["Thuyết minh & Lồng tiếng", "Tự thu âm hoặc mua gói TTS tính phí theo từng ký tự", "Tích hợp sẵn 31 giọng đọc AI Bắc/Trung/Nam (25 giọng VieNeu offline miễn phí)"],
+  ["Xuất bản & Tạo Thumbnail", "Xuất file rồi mở từng tab YouTube, Facebook, TikTok để đăng", "Vẽ ảnh bìa Thumbnail AI 1280×720, gợi ý tiêu đề SEO & đăng đa kênh"],
+];
+
+const voiceShowcase = [
+  { region: "Miền Bắc", names: "Trúc Ly, Hải Đăng, Ngọc Huyền, Minh Quân…", style: "Tin tức, Review phim, Giải thích kiến thức chuẩn giọng" },
+  { region: "Miền Nam", names: "Phương Thảo, Quốc Bảo, Bảo Ngọc, Gia Huy…", style: "Kể chuyện đời sống, Phim ngắn, Vlog, Giải trí gần gũi" },
+  { region: "Miền Trung & Shorts", names: "Thanh Hà, Đình Phong + 6 giọng Edge-TTS", style: "Nhịp nhanh 1.10x – 1.25x cho TikTok, Facebook Reels & YouTube Shorts" },
+];
+
 export function LandingPage() {
   return <main className="account-shell landing-shell">
     <PublicStarfield />
@@ -41,6 +56,66 @@ export function LandingPage() {
     <section className="landing-feature-section" id="tinh-nang" aria-labelledby="feature-title">
       <div className="landing-section-heading"><p className="eyebrow">QUY TRÌNH XỬ LÝ VIDEO AI</p><h2 id="feature-title">Từ tạo phụ đề SRT đến lồng tiếng và xuất thành phẩm.</h2><p>Chạy trực tiếp qua Windows Local Engine giúp giữ file video tại thiết bị, hỗ trợ GPU/đa luồng CPU và checkpoint video dài hàng giờ.</p></div>
       <div className="landing-feature-grid">{steps.map((step) => <article key={step.number}><span className="landing-feature-number">{step.number}</span><span className="landing-feature-icon"><Icon name={step.icon} size={25} /></span><h3>{step.title}</h3><p>{step.description}</p></article>)}</div>
+    </section>
+
+    <section className="landing-guides" id="truoc-sau" aria-labelledby="before-after-title">
+      <div className="landing-guides-heading">
+        <div>
+          <p className="eyebrow">MINH HỌA TRƯỚC &amp; SAU KHI XỬ LÝ</p>
+          <h2 id="before-after-title">Biến video ngoại ngữ dính chữ cứng thành bản tiếng Việt hoàn chỉnh.</h2>
+          <p>So sánh trực quan giữa video gốc tải từ Douyin/Bilibili và thành phẩm sau khi qua ReupAI Local Engine.</p>
+        </div>
+        <Link href="/giai-phap/xoa-chu-trung-quoc-che-hardsub-video">Xem cách xóa chữ Trung &amp; che hardsub →</Link>
+      </div>
+      <div className="landing-faq-grid">
+        <article>
+          <h3>1. Trước khi xử lý (Video nguồn gốc)</h3>
+          <p>• Lời thoại tiếng Trung, Anh, Nhật, Hàn không có sẵn file phụ đề .SRT rời.<br />• Dính dòng chữ phụ đề cứng (hardsub) tiếng nước ngoài đốt thẳng vào khung hình.<br />• Tỷ lệ khung hình và âm lượng chưa đồng bộ với kênh YouTube Shorts, Reels, TikTok của bạn.</p>
+        </article>
+        <article>
+          <h3>2. Sau khi qua ReupAI (Thành phẩm 1-Click)</h3>
+          <p>• Tự động nhận diện tọa độ hardsub cũ, phủ lớp làm mờ mềm mại và đặt phụ đề Vietsub cỡ chữ cố định.<br />• Lồng tiếng bằng 1 trong 31 giọng đọc AI tự nhiên, tự động hạ âm gốc (10–20%) và trộn nhạc nền.<br />• Sẵn sàng xuất MP4 16:9 hoặc 9:16 kèm ảnh bìa Thumbnail AI để đăng thẳng lên kênh.</p>
+        </article>
+      </div>
+      <div className="landing-faq-grid" style={{ marginTop: "16px" }}>
+        {voiceShowcase.map((v) => (
+          <article key={v.region}>
+            <h3>🎙️ Hệ giọng đọc {v.region}</h3>
+            <p><strong>{v.names}</strong> — {v.style}. Nghe thử trực tiếp trong ứng dụng trước khi bấm render.</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <section className="landing-guides" id="so-sanh" aria-labelledby="comparison-title">
+      <div className="landing-guides-heading">
+        <div>
+          <p className="eyebrow">SO SÁNH HIỆU SUẤT SẢN XUẤT</p>
+          <h2 id="comparison-title">Làm video Reup thủ công vs Phần mềm Reup video tự động ReupAI</h2>
+          <p>Rút ngắn 90% thời gian biên tập lặp đi lặp lại mỗi ngày khi xây dựng hệ thống kênh nội dung.</p>
+        </div>
+        <Link href="/giai-phap/reup-video-tu-dong-bang-ai">Xem quy trình Reup tự động →</Link>
+      </div>
+      <div style={{ overflowX: "auto", borderRadius: "16px", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(15,19,30,0.65)" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.95rem" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)" }}>
+              <th style={{ padding: "14px 18px" }}>Công đoạn xử lý</th>
+              <th style={{ padding: "14px 18px" }}>Cách làm thủ công truyền thống</th>
+              <th style={{ padding: "14px 18px" }}>Tự động hóa với ReupAI Local Engine</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparisonRows.map(([stepName, manualWay, autoWay]) => (
+              <tr key={stepName} style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <td style={{ padding: "13px 18px", fontWeight: 600 }}>{stepName}</td>
+                <td style={{ padding: "13px 18px", opacity: 0.78 }}>{manualWay}</td>
+                <td style={{ padding: "13px 18px" }}><strong>✓ {autoWay}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section className="landing-guides" aria-labelledby="landing-guides-title">
