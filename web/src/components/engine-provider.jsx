@@ -32,14 +32,14 @@ export function EngineProvider({ children }) {
       if (document.visibilityState === "visible" && localEngineClient.status !== "authorizing") await manager.check();
       if (active) {
         const visible = document.visibilityState === "visible";
-        timer = window.setTimeout(poll, visible ? (localEngineClient.status === "connected" ? 10000 : 5000) : 60000);
+        timer = window.setTimeout(poll, visible ? (localEngineClient.status === "connected" ? 10000 : 3000) : 15000);
       }
     };
     const reconnect = () => {
-      if (document.visibilityState !== "visible" || localEngineClient.status === "authorizing") return;
+      if (localEngineClient.status === "authorizing") return;
       window.clearTimeout(timer);
       manager.check();
-      timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 5000);
+      timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 3000);
     };
     if (localEngineClient.status === "connected") {
       timer = window.setTimeout(poll, 10000);
@@ -47,8 +47,9 @@ export function EngineProvider({ children }) {
       poll();
     }
     window.addEventListener("online", reconnect);
+    window.addEventListener("focus", reconnect);
     document.addEventListener("visibilitychange", reconnect);
-    return () => { active = false; unsubscribe(); window.clearTimeout(timer); window.removeEventListener("online", reconnect); document.removeEventListener("visibilitychange", reconnect); manager.destroy(); };
+    return () => { active = false; unsubscribe(); window.clearTimeout(timer); window.removeEventListener("online", reconnect); window.removeEventListener("focus", reconnect); document.removeEventListener("visibilitychange", reconnect); manager.destroy(); };
   }, [manager]);
 
   const value = useMemo(() => ({

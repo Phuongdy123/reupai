@@ -175,18 +175,39 @@ export class LocalEngineClient {
     finally { this.checkingConnection = null; }
   }
 
+  async probeHealth() {
+    const candidates = Array.from(new Set([
+      this.baseUrl,
+      "http://127.0.0.1:17888",
+      "http://localhost:17888",
+    ]));
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        const res = await fetchWithTimeout(`${candidate}/api/health`, { cache: "no-store", timeoutMs: 4000 });
+        if (res.ok) {
+          this.baseUrl = candidate;
+          return res;
+        }
+        lastError = await responseError(res, "Không thể kiểm tra Local Engine");
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new TypeError("Failed to fetch");
+  }
+
   async checkConnection() {
     if (this.status !== "connected") this.emit("checking");
     try {
-      const healthResponse = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: 8000 });
-      if (!healthResponse.ok) throw await responseError(healthResponse, "Không thể kiểm tra Local Engine");
+      const healthResponse = await this.probeHealth();
       const health = await healthResponse.json().catch(() => ({}));
       this.health = health;
       if (!health?.capabilities?.direct_authorization) {
         throw Object.assign(new Error("Local Engine đang là bản cũ. Hãy cập nhật để kết nối một chạm."), { code: "engine_update_required" });
       }
       let status = await this.request("/api/status", { cache: "no-store" });
-      if (status.status === 401 && !this.grant && await this.requestDirectAuthorization()) {
+      if (status.status === 401 && await this.requestDirectAuthorization().catch(() => false)) {
         status = await this.request("/api/status", { cache: "no-store" });
       }
       if (status.status === 401) {
