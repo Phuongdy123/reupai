@@ -6,6 +6,7 @@ const columns = [
   {
     title: "Giải pháp AI",
     links: [
+      ["Reup video tự động AI", "/giai-phap/reup-video-tu-dong-bang-ai"],
       ["Vietsub video AI", "/giai-phap/vietsub-video-ai"],
       ["Dịch video Trung–Việt", "/giai-phap/dich-video-trung-viet"],
       ["Thuyết minh Trung Quốc AI", "/giai-phap/thuyet-minh-video-trung-quoc-ai"],

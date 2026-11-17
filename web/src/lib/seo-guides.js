@@ -3,10 +3,16 @@ export const SITE_URL = "https://www.reupai.cloud";
 export const CORE_SEO_KEYWORDS = [
   "Reup AI",
   "ReupAI",
+  "reup video tự động",
+  "phần mềm reup video tự động",
+  "tool reup video AI",
+  "công cụ reup video",
+  "phần mềm reup video AI",
+  "reup video Trung Quốc sang tiếng Việt",
+  "reup video TikTok YouTube Shorts",
   "Reup AI Vietsub",
   "ReupAI Local Engine",
   "tải ReupAI",
-  "phần mềm reup video AI",
   "Vietsub AI",
   "làm Vietsub tự động",
   "dịch video bằng AI",
@@ -45,11 +51,11 @@ export const CORE_SEO_KEYWORDS = [
 
 export const HOME_FAQS = [
   [
-    "ReupAI dùng để làm gì?",
-    "ReupAI là công cụ Vietsub AI, dịch video tiếng Trung/Anh/Nhật/Hàn sang tiếng Việt, thuyết minh lồng tiếng bằng 31 giọng đọc AI, tách phụ đề cứng bằng OCR và che phụ đề gốc ngay trên máy tính Windows.",
+    "Phần mềm Reup video tự động ReupAI dùng để làm gì?",
+    "ReupAI là phần mềm reup video tự động bằng AI giúp tải nguồn Bilibili/Douyin, nhận diện lời nói hoặc tách phụ đề cứng OCR, dịch video Trung–Việt/Anh/Nhật/Hàn, che chữ gốc, lồng tiếng 31 giọng đọc AI và đăng lên YouTube, Facebook Reels, TikTok.",
   ],
   [
-    "Video chưa có file phụ đề SRT có tạo Vietsub được không?",
+    "Video chưa có file phụ đề SRT có reup và làm Vietsub tự động được không?",
     "Có. ReupAI dùng Whisper tách lời thoại trực tiếp từ âm thanh hoặc dùng OCR quét chữ phụ đề cứng trên khung hình để tạo bản SRT rồi tự động dịch sang tiếng Việt.",
   ],
   [
@@ -65,6 +71,36 @@ export const HOME_FAQS = [
 export const guideBase = "/giai-phap";
 
 export const guides = [
+  {
+    slug: "reup-video-tu-dong-bang-ai",
+    title: "Phần mềm Reup video tự động bằng AI (Vietsub, Voice & Đăng kênh)",
+    description: "Quy trình reup video tự động từ Bilibili, Douyin sang tiếng Việt bằng AI: tải nguồn theo kênh/Series, che phụ đề gốc, dịch Vietsub, lồng tiếng 31 giọng đọc và đăng YouTube/Facebook/TikTok.",
+    keywords: [
+      "reup video tự động",
+      "phần mềm reup video tự động",
+      "tool reup video AI",
+      "công cụ reup video Trung Quốc",
+      "reup video TikTok YouTube Shorts",
+    ],
+    category: "REUP VIDEO TỰ ĐỘNG",
+    intro: "Thay vì làm thủ công từng bước từ tải clip, tách chữ, dịch phụ đề, thu âm thuyết minh đến cắt khung và đăng bài, ReupAI tự động hóa toàn bộ quy trình biến tập lại video (biên tập phụ đề, che chữ gốc, lồng tiếng AI và gắn thương hiệu) ngay trên máy tính của bạn.",
+    useCases: [
+      "Đồng bộ kênh nguồn Bilibili hoặc Douyin và xếp hàng xử lý hàng loạt tập mới",
+      "Tự động che phụ đề Trung gốc, chèn Vietsub chuẩn cỡ chữ và lồng tiếng 31 giọng AI",
+      "Xuất bản video ngang 16:9 hoặc dọc 9:16 lên YouTube, Facebook Fanpage và TikTok",
+    ],
+    steps: [
+      ["Đồng bộ kênh hoặc dán link video", "Thêm link kênh/video vào Nguồn video hoặc lưu thành Bộ Series để theo dõi tập mới tự động."],
+      ["Chọn cấu hình Reup 1-Click", "Chọn chế độ Vietsub hoặc Vietsub + Voice, bật tự làm mờ watermark/phụ đề gốc và chọn giọng đọc AI."],
+      ["Render trên máy & Đăng đa nền tảng", "Local Engine tự chạy toàn bộ pipeline trên máy Windows; sau khi xong bạn có thể sửa lại phụ đề hoặc bấm đăng trực tiếp lên kênh."],
+    ],
+    note: "Khi xây dựng kênh lâu dài, hãy luôn kết hợp dịch thuật, thuyết minh giọng đọc mới, nhận xét/biên tập lại nội dung và chỉ sử dụng nguồn video bạn có quyền khai thác hợp lệ.",
+    faq: [
+      ["Reup video tự động trên ReupAI có chạy hàng loạt được không?", "Có. Bạn có thể chọn nhiều video cùng lúc trên thanh tác vụ nhanh hoặc lưu vào Series để hệ thống tự động chạy lần lượt từng tập."],
+      ["Có thể chỉnh sửa lại câu dịch hoặc giọng đọc sau khi chạy tự động không?", "Có. Trong mục Thành phẩm, bạn có thể mở trình chỉnh sửa để sửa từng dòng SRT, đổi giọng đọc hoặc vị trí vùng mờ rồi render lại nhanh."],
+    ],
+    related: ["vietsub-video-ai", "dich-video-trung-viet", "long-tieng-video-ai", "lam-video-youtube-shorts-reup-ai"],
+  },
   {
     slug: "vietsub-video-ai",
     title: "Vietsub video bằng AI",

@@ -4,27 +4,27 @@ import { REUPAI_MICROSOFT_STORE_URL } from "../src/lib/store-links";
 import { LandingPage } from "../src/components/landing-page";
 
 const description =
-  "ReupAI (Reup AI) là công cụ Vietsub AI giúp dịch video tiếng Trung, Anh, Nhật, Hàn sang tiếng Việt, tách phụ đề OCR, che chữ gốc và lồng tiếng 31 giọng AI ngay trên máy bằng Local Engine.";
+  "ReupAI (Reup AI) là phần mềm Reup video tự động và công cụ Vietsub AI giúp dịch video tiếng Trung, Anh, Nhật, Hàn sang tiếng Việt, tách phụ đề OCR, che chữ gốc và lồng tiếng 31 giọng AI ngay trên máy.";
 const engineVersion = engineRelease?.release?.version || "0.2.55";
 
 export const metadata = {
-  title: { absolute: "Reup AI (ReupAI) – Công cụ Vietsub AI, dịch video & lồng tiếng tự động" },
+  title: { absolute: "Reup AI (ReupAI) – Phần mềm Reup video tự động, Vietsub AI & lồng tiếng" },
   description,
   keywords: CORE_SEO_KEYWORDS,
   alternates: { canonical: "/" },
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Reup AI (ReupAI) – Công cụ Vietsub AI, dịch video & lồng tiếng tự động",
+    title: "Reup AI (ReupAI) – Phần mềm Reup video tự động, Vietsub AI & lồng tiếng",
     description,
     url: SITE_URL,
     type: "website",
     locale: "vi_VN",
     siteName: "ReupAI",
-    images: [{ url: "/images/reupai-og.png", width: 1200, height: 630, alt: "ReupAI - Vietsub và lồng tiếng video bằng AI" }],
+    images: [{ url: "/images/reupai-og.png", width: 1200, height: 630, alt: "ReupAI - Phần mềm Reup video tự động, Vietsub và lồng tiếng AI" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Reup AI (ReupAI) – Vietsub AI, dịch video & lồng tiếng tự động",
+    title: "Reup AI (ReupAI) – Phần mềm Reup video tự động, Vietsub AI & lồng tiếng",
     description,
     images: ["/images/reupai-og.png"],
   },
@@ -32,17 +32,17 @@ export const metadata = {
 
 const structuredData = [
   { "@context": "https://schema.org", "@type": "Organization", name: "ReupAI", url: SITE_URL, logo: `${SITE_URL}/images/reupai-logo.png`, sameAs: [REUPAI_MICROSOFT_STORE_URL] },
-  { "@context": "https://schema.org", "@type": "WebSite", name: "ReupAI", alternateName: ["Reup AI", "ReupAI Local Engine"], url: SITE_URL, inLanguage: "vi-VN", description },
+  { "@context": "https://schema.org", "@type": "WebSite", name: "ReupAI", alternateName: ["Reup AI", "Phần mềm Reup video tự động ReupAI", "ReupAI Local Engine"], url: SITE_URL, inLanguage: "vi-VN", description },
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "ReupAI Local Engine",
+    name: "ReupAI – Phần mềm Reup video tự động & Vietsub AI",
     applicationCategory: "MultimediaApplication",
     operatingSystem: "Windows 10, Windows 11",
     softwareVersion: engineVersion,
     url: `${SITE_URL}/local-engine`,
     downloadUrl: REUPAI_MICROSOFT_STORE_URL,
-    featureList: "Vietsub AI, Dịch video Trung Việt, Whisper tách lời nói thành SRT, PaddleOCR tách phụ đề cứng, Che phụ đề gốc, Lồng tiếng 31 giọng đọc tiếng Việt, Tải nguồn Bilibili/Douyin, Đăng YouTube/Facebook/TikTok",
+    featureList: "Reup video tự động, Vietsub AI, Dịch video Trung Việt, Whisper tách lời nói thành SRT, PaddleOCR tách phụ đề cứng, Che phụ đề gốc, Lồng tiếng 31 giọng đọc tiếng Việt, Tải nguồn Bilibili/Douyin, Đăng YouTube/Facebook/TikTok",
     offers: { "@type": "Offer", price: "0", priceCurrency: "VND" },
   },
   {

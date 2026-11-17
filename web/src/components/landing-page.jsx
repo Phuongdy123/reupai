@@ -21,9 +21,9 @@ export function LandingPage() {
 
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-copy">
-        <p className="landing-eyebrow"><span className="landing-kicker-orb" aria-hidden="true" />REUPAI WORKSPACE & LOCAL ENGINE</p>
-        <h1 id="landing-title">Vietsub AI, dịch video &amp; lồng tiếng tự động ngay trên máy.</h1>
-        <p className="landing-lede">Công cụ làm Vietsub Trung–Việt, dịch phụ đề Anh/Nhật/Hàn, tách phụ đề cứng OCR, che chữ gốc và thuyết minh 31 giọng đọc tiếng Việt cho video Bilibili, Douyin và YouTube Shorts.</p>
+        <p className="landing-eyebrow"><span className="landing-kicker-orb" aria-hidden="true" />PHẦN MỀM REUP VIDEO TỰ ĐỘNG &amp; VIETSUB AI</p>
+        <h1 id="landing-title">Reup video tự động, Vietsub AI &amp; lồng tiếng ngay trên máy.</h1>
+        <p className="landing-lede">Phần mềm reup video tự động bằng AI: tải nguồn Bilibili &amp; Douyin, dịch phụ đề Trung–Việt/Anh/Nhật/Hàn, tách phụ đề cứng OCR, che chữ gốc và thuyết minh 31 giọng đọc tiếng Việt cho YouTube Shorts, Reels, TikTok.</p>
         <ul className="landing-highlights" aria-label="Tính năng chính">
           <li><Icon name="download" size={16} /><span>Tải Bilibili &amp; Douyin</span></li>
           <li><Icon name="spark" size={16} /><span>Vietsub AI &amp; OCR</span></li>

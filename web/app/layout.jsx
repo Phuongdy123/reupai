@@ -4,8 +4,8 @@ import { CORE_SEO_KEYWORDS, SITE_URL } from "../src/lib/seo-guides";
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: "Reup AI (ReupAI) – Vietsub AI, dịch video & lồng tiếng tự động", template: "%s | ReupAI" },
-  description: "ReupAI hỗ trợ Vietsub AI, dịch video tiếng Trung/Anh/Nhật/Hàn sang tiếng Việt, tách phụ đề OCR, che chữ gốc, lồng tiếng 31 giọng đọc AI và tải video Bilibili, Douyin ngay trên máy.",
+  title: { default: "Reup AI (ReupAI) – Phần mềm Reup video tự động, Vietsub AI & lồng tiếng", template: "%s | ReupAI" },
+  description: "ReupAI là phần mềm reup video tự động bằng AI: dịch video Trung–Việt/Anh/Nhật/Hàn, làm Vietsub tự động, tách phụ đề OCR, che chữ gốc, lồng tiếng 31 giọng AI và tải video Bilibili, Douyin ngay trên máy.",
   keywords: CORE_SEO_KEYWORDS,
   applicationName: "ReupAI",
   category: "MultimediaApplication",
@@ -19,11 +19,11 @@ export const metadata = {
     locale: "vi_VN",
     url: SITE_URL,
     siteName: "ReupAI",
-    title: "Reup AI (ReupAI) – Vietsub AI, dịch video & lồng tiếng tự động",
-    description: "Dịch video bằng AI, tách phụ đề cứng OCR, tạo Vietsub Trung Việt và thuyết minh 31 giọng đọc tiếng Việt với ReupAI Local Engine.",
-    images: [{ url: "/images/reupai-og.png", width: 1200, height: 630, alt: "ReupAI - Công cụ Vietsub và lồng tiếng video bằng AI" }],
+    title: "Reup AI (ReupAI) – Phần mềm Reup video tự động, Vietsub AI & lồng tiếng",
+    description: "Phần mềm reup video tự động, dịch video bằng AI, tách phụ đề cứng OCR, tạo Vietsub Trung Việt và thuyết minh 31 giọng đọc tiếng Việt với ReupAI Local Engine.",
+    images: [{ url: "/images/reupai-og.png", width: 1200, height: 630, alt: "ReupAI - Phần mềm Reup video tự động, Vietsub và lồng tiếng AI" }],
   },
-  twitter: { card: "summary_large_image", title: "Reup AI (ReupAI) – Vietsub AI & lồng tiếng video", description: "Dịch video, tách phụ đề OCR, tạo Vietsub tiếng Việt và lồng tiếng 31 giọng AI ngay trên máy với ReupAI.", images: ["/images/reupai-og.png"] },
+  twitter: { card: "summary_large_image", title: "Reup AI (ReupAI) – Phần mềm Reup video tự động & Vietsub AI", description: "Reup video tự động, dịch video, tách phụ đề OCR, tạo Vietsub tiếng Việt và lồng tiếng 31 giọng AI ngay trên máy với ReupAI.", images: ["/images/reupai-og.png"] },
   // App routes are private; each public page opts into indexing below.
   robots: { index: false, follow: false },
 };
