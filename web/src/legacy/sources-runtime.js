@@ -2141,6 +2141,15 @@ function renderCardResultRow(card, video) {
     if (hasVoice) addChip('voiceover', 'VOICE', 'Xem bản Voice');
 
     if (hasSub || hasVoice) {
+        const defaultMode = hasVoice ? 'voiceover' : 'subtitle';
+        const downloadLink = document.createElement('a');
+        downloadLink.className = 'result-chip result-download-btn';
+        downloadLink.href = `/api/result/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(channel)}&mode=${encodeURIComponent(defaultMode)}`;
+        downloadLink.download = `${String(video.title || video.video_id || 'reupai-video').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80)}-${defaultMode}.mp4`;
+        downloadLink.title = hasVoice ? 'Tải xuống video Vietsub + Voice' : 'Tải xuống video Vietsub';
+        downloadLink.innerHTML = `${uiIcon('download', 13)}<span>Tải xuống</span>`;
+        group.appendChild(downloadLink);
+
         const publishBtn = document.createElement('button');
         publishBtn.type = 'button';
         publishBtn.className = 'result-youtube-btn';
@@ -3384,10 +3393,16 @@ async function openPlayer(
         layout.appendChild(stage);
         actions = document.createElement('aside');
         actions.className = 'result-preview-actions';
-        actions.innerHTML = `<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, chỉnh nội dung hoặc đưa video lên kênh đã liên kết.</p><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg></span>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg>Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong class="result-card-title"><span class="result-card-icon"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(14)}</span></span>Đăng lên nền tảng liên kết</strong><p>Đăng lên YouTube, Facebook Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn primary player-publish-output"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(13)}</span>Đăng lên nền tảng liên kết</button></div>`;
+        actions.innerHTML = `<small>THÀNH PHẨM CỦA BẠN</small><h3>Hoàn thiện &amp; đăng video</h3><p>Xem lại kết quả, tải về máy, chỉnh nội dung hoặc đưa video lên kênh đã liên kết.</p><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon">${uiIcon('download', 15)}</span>Tải video thành phẩm</strong><p>Lưu file video đã xử lý về thư mục Tải xuống trên máy.</p><a class="btn primary player-download-output" href="#">${uiIcon('download', 15)}Tải xuống</a></div><div class="result-action-card"><strong class="result-card-title"><span class="result-card-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg></span>Chỉnh sửa thành phẩm</strong><p>Sửa lời thoại tiếng Việt, giọng đọc, vùng mờ và logo.</p><button type="button" class="btn secondary player-edit-output"><svg class="ui-icon" aria-hidden="true"><use href="#ui-edit"></use></svg>Chỉnh sửa</button></div><div class="result-action-card youtube-action-card"><strong class="result-card-title"><span class="result-card-icon"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(14)}</span></span>Đăng lên nền tảng liên kết</strong><p>Đăng lên YouTube, Facebook Page hoặc gửi bản nháp TikTok.</p><button type="button" class="btn primary player-publish-output"><span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(13)}</span>Đăng lên nền tảng liên kết</button></div>`;
         layout.appendChild(actions);
     }
     const output = { ...video, channel: channel || video.channel || 'default', mode };
+    const playerDownloadBtn = actions.querySelector('.player-download-output');
+    if (playerDownloadBtn) {
+        const resultPath = `/api/result/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(channel || 'default')}&mode=${encodeURIComponent(mode)}`;
+        playerDownloadBtn.setAttribute('href', resultPath);
+        playerDownloadBtn.setAttribute('download', `${String(video.title || video.video_id || 'reupai-video').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80)}-${mode}.mp4`);
+    }
     actions.querySelector('.player-edit-output').onclick = () => {
         closePlayer();
         window.dispatchEvent(new CustomEvent('reupai:edit-output', { detail: output }));

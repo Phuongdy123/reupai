@@ -84,12 +84,31 @@ export async function mountProductRuntime(host, client, startRuntime) {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+  const PERSISTENT_PREFIXES = ["reupai:"];
+  const isPersistentKey = (key) => PERSISTENT_PREFIXES.some((prefix) => String(key || "").startsWith(prefix));
   const localStorage = {
-    getItem: (key) => storage.get(key) || null,
-    setItem(key, value) {
-      storage.set(key, String(value));
+    getItem(key) {
+      if (isPersistentKey(key)) {
+        try {
+          const val = nativeWindow.localStorage.getItem(key);
+          if (val !== null) return val;
+        } catch {}
+      }
+      return storage.get(key) || null;
     },
-    removeItem: (key) => storage.delete(key),
+    setItem(key, value) {
+      const str = String(value);
+      storage.set(key, str);
+      if (isPersistentKey(key)) {
+        try { nativeWindow.localStorage.setItem(key, str); } catch {}
+      }
+    },
+    removeItem(key) {
+      storage.delete(key);
+      if (isPersistentKey(key)) {
+        try { nativeWindow.localStorage.removeItem(key); } catch {}
+      }
+    },
   };
 
   const mediaJobs = new WeakMap();

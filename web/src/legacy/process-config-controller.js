@@ -336,6 +336,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!guide) return;
         const TOUR_KEY = 'reupai:process-tour-done';
         let spotlightTimer = null;
+        const readTourDone = () => {
+            try {
+                if (typeof window !== 'undefined' && window.localStorage?.getItem(TOUR_KEY) === '1') return true;
+            } catch {}
+            try {
+                return localStorage.getItem(TOUR_KEY) === '1';
+            } catch {}
+            return false;
+        };
+        const markTourDone = () => {
+            try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
+            try {
+                if (typeof window !== 'undefined') window.localStorage?.setItem(TOUR_KEY, '1');
+            } catch {}
+        };
 
         const clearSpotlight = () => {
             if (spotlightTimer) {
@@ -355,20 +370,22 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
             }
             if (!open) clearSpotlight();
-            if (persistDone) {
-                try { localStorage.setItem(TOUR_KEY, '1'); } catch {}
-            }
+            if (persistDone) markTourDone();
         };
 
         if (toggleBtn) {
             toggleBtn.onclick = () => {
                 const nextOpen = guide.hidden;
-                setTourOpen(nextOpen, !nextOpen);
+                setTourOpen(nextOpen, true);
             };
         }
         if (doneBtn) {
             doneBtn.onclick = () => setTourOpen(false, true);
         }
+        if (form) {
+            form.addEventListener('submit', markTourDone, { once: true });
+        }
+        dialog.addEventListener('close', markTourDone, { once: true });
         if (autoBtn) {
             autoBtn.onclick = () => {
                 const autoBrand = dialog.querySelector('#processAutoBrandBlur');
@@ -429,9 +446,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             };
         });
 
-        let isDone = false;
-        try { isDone = localStorage.getItem(TOUR_KEY) === '1'; } catch {}
-        setTourOpen(!isDone, false);
+        const isDone = readTourDone();
+        // Auto-open only on the user's very first visit, and mark it seen right away
+        // so closing via Esc/Cancel or submitting never causes it to keep popping up.
+        setTourOpen(!isDone, !isDone);
     };
     bindProcessOnboardingTour();
     if (wizardPrev) {
