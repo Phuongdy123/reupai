@@ -1,7 +1,3 @@
-"use client";
-
-import { useEffect, useRef } from "react";
-
 // Fixed coordinates keep the server and first browser render identical.
 const farStars = [
   [4, 11, 1, .32], [12, 39, 1, .24], [19, 17, 1.5, .35], [27, 57, 1, .22],
@@ -25,50 +21,7 @@ function StarLayer({ stars, near = false }) {
 }
 
 export function PublicStarfield({ className = "" }) {
-  const fieldRef = useRef(null);
-
-  useEffect(() => {
-    const field = fieldRef.current;
-    if (!field) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    let frame = 0;
-
-    function paint() {
-      frame = 0;
-      const scroll = Math.max(0, window.scrollY);
-      field.style.setProperty("--star-far-offset", `${-Math.min(scroll * .07, 260).toFixed(1)}px`);
-      field.style.setProperty("--star-near-offset", `${-Math.min(scroll * .18, 520).toFixed(1)}px`);
-      field.style.setProperty("--star-streak-offset", `${-Math.min(scroll * .1, 260).toFixed(1)}px`);
-    }
-
-    function onScroll() {
-      if (!frame) frame = window.requestAnimationFrame(paint);
-    }
-
-    function syncMotionPreference() {
-      window.removeEventListener("scroll", onScroll);
-      window.cancelAnimationFrame(frame);
-      frame = 0;
-      if (reducedMotion.matches) {
-        field.style.setProperty("--star-far-offset", "0px");
-        field.style.setProperty("--star-near-offset", "0px");
-        field.style.setProperty("--star-streak-offset", "0px");
-      } else {
-        paint();
-        window.addEventListener("scroll", onScroll, { passive: true });
-      }
-    }
-
-    syncMotionPreference();
-    reducedMotion.addEventListener("change", syncMotionPreference);
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      reducedMotion.removeEventListener("change", syncMotionPreference);
-      window.cancelAnimationFrame(frame);
-    };
-  }, []);
-
-  return <div className={`public-starfield ${className}`.trim()} ref={fieldRef} aria-hidden="true">
+  return <div className={`public-starfield ${className}`.trim()} aria-hidden="true">
     <StarLayer stars={farStars} />
     <StarLayer stars={nearStars} near />
     <div className="public-starfield-layer is-streaks">

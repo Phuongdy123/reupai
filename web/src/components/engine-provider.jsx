@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ConnectionManager } from "../lib/connection-manager";
 import { localEngineClient } from "../lib/local-engine-client";
 
@@ -25,26 +25,33 @@ export function EngineProvider({ children }) {
   useEffect(() => {
     let active = true;
     let timer;
+    let lastWakeAt = 0;
     const unsubscribe = localEngineClient.onChange(setConnection);
     window.reupEngineClient = localEngineClient;
-    const poll = async () => {
+    const scheduleNext = () => {
+      window.clearTimeout(timer);
+      if (!active || document.visibilityState !== "visible") return;
+      timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 15000 : 6000);
+    };
+    const poll = async ({ silent = true } = {}) => {
       if (!active) return;
-      if (document.visibilityState === "visible" && localEngineClient.status !== "authorizing") await manager.check();
-      if (active) {
-        const visible = document.visibilityState === "visible";
-        timer = window.setTimeout(poll, visible ? (localEngineClient.status === "connected" ? 10000 : 3000) : 15000);
+      if (document.visibilityState === "visible" && localEngineClient.status !== "authorizing") {
+        await localEngineClient.check({ silent });
       }
+      scheduleNext();
     };
     const reconnect = () => {
-      if (localEngineClient.status === "authorizing") return;
+      if (document.visibilityState !== "visible" || localEngineClient.status === "authorizing") return;
+      const now = Date.now();
+      if (now - lastWakeAt < 2500) return;
+      lastWakeAt = now;
       window.clearTimeout(timer);
-      manager.check();
-      timer = window.setTimeout(poll, localEngineClient.status === "connected" ? 10000 : 3000);
+      void poll({ silent: true });
     };
     if (localEngineClient.status === "connected") {
-      timer = window.setTimeout(poll, 10000);
+      scheduleNext();
     } else {
-      poll();
+      void poll({ silent: false });
     }
     window.addEventListener("online", reconnect);
     window.addEventListener("focus", reconnect);
@@ -52,13 +59,17 @@ export function EngineProvider({ children }) {
     return () => { active = false; unsubscribe(); window.clearTimeout(timer); window.removeEventListener("online", reconnect); window.removeEventListener("focus", reconnect); document.removeEventListener("visibilitychange", reconnect); manager.destroy(); };
   }, [manager]);
 
+  const check = useCallback(() => manager.check(), [manager]);
+  const connect = useCallback(() => manager.authorize(), [manager]);
+  const revoke = useCallback(() => manager.revoke(), [manager]);
+
   const value = useMemo(() => ({
     ...connection,
     client: localEngineClient,
-    check: () => manager.check(),
-    connect: () => manager.authorize(),
-    revoke: () => manager.revoke(),
-  }), [connection, manager]);
+    check,
+    connect,
+    revoke,
+  }), [connection, check, connect, revoke]);
 
   return <EngineContext.Provider value={value}>{children}</EngineContext.Provider>;
 }

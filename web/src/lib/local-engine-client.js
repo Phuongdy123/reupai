@@ -79,7 +79,24 @@ export class LocalEngineClient {
   }
 
   emit(status, error = null) {
-    this.connection = { status, error, version: this.health?.version || null, capabilities: this.health?.capabilities || {}, distribution: this.health?.distribution || null };
+    const version = this.health?.version || null;
+    const capabilities = this.health?.capabilities || {};
+    const distribution = this.health?.distribution || null;
+    const errorMessage = error?.message || null;
+    const prev = this.connection;
+    const capsKey = JSON.stringify(capabilities);
+    if (
+      prev &&
+      prev.status === status &&
+      (prev.error?.message || null) === errorMessage &&
+      (prev.version || null) === version &&
+      (prev.distribution?.channel || null) === (distribution?.channel || null) &&
+      this._lastCapsKey === capsKey
+    ) {
+      return;
+    }
+    this._lastCapsKey = capsKey;
+    this.connection = { status, error, version, capabilities, distribution };
     this.listeners.forEach((listener) => listener(this.connection));
     if (isBrowser()) window.dispatchEvent(new CustomEvent("reupai:connection", { detail: this.connection }));
   }
@@ -168,37 +185,33 @@ export class LocalEngineClient {
     return false;
   }
 
-  async check() {
+  async check(options = {}) {
     if (this.checkingConnection) return this.checkingConnection;
-    this.checkingConnection = this.checkConnection();
+    this.checkingConnection = this.checkConnection(options);
     try { return await this.checkingConnection; }
     finally { this.checkingConnection = null; }
   }
 
   async probeHealth() {
-    const candidates = Array.from(new Set([
-      this.baseUrl,
-      "http://127.0.0.1:17888",
-      "http://localhost:17888",
-    ]));
-    let lastError = null;
-    for (const candidate of candidates) {
-      try {
-        const res = await fetchWithTimeout(`${candidate}/api/health`, { cache: "no-store", timeoutMs: 4000 });
-        if (res.ok) {
-          this.baseUrl = candidate;
-          return res;
-        }
-        lastError = await responseError(res, "Không thể kiểm tra Local Engine");
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError || new TypeError("Failed to fetch");
+    try {
+      const primary = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: 1800 });
+      if (primary.ok) return primary;
+    } catch (_) { /* Fallback in parallel below. */ }
+
+    const fallbacks = ["http://127.0.0.1:17888", "http://localhost:17888"].filter((u) => u !== this.baseUrl);
+    if (fallbacks.length === 0) throw new TypeError("Failed to fetch");
+    return Promise.any(
+      fallbacks.map(async (candidate) => {
+        const res = await fetchWithTimeout(`${candidate}/api/health`, { cache: "no-store", timeoutMs: 1800 });
+        if (!res.ok) throw await responseError(res, "Không thể kiểm tra Local Engine");
+        this.baseUrl = candidate;
+        return res;
+      }),
+    );
   }
 
-  async checkConnection() {
-    if (this.status !== "connected") this.emit("checking");
+  async checkConnection({ silent = false } = {}) {
+    if (!silent && this.status !== "connected") this.emit("checking");
     try {
       const healthResponse = await this.probeHealth();
       const health = await healthResponse.json().catch(() => ({}));
@@ -218,9 +231,10 @@ export class LocalEngineClient {
       this.emit("connected");
       return true;
     } catch (error) {
-      if (["AbortError", "TimeoutError", "TypeError"].includes(error.name) || /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
-      else if (error.code === "engine_update_required") this.emit("update_required", error);
-      else this.emit(error.status === 403 ? "permission_denied" : "error", error);
+      const normalized = error?.name === "AggregateError" ? (error.errors?.[0] || new TypeError("Failed to fetch")) : error;
+      if (["AbortError", "TimeoutError", "TypeError"].includes(normalized?.name) || /fetch|network|All promises were rejected/i.test(normalized?.message || "")) this.emit("disconnected", normalized);
+      else if (normalized?.code === "engine_update_required") this.emit("update_required", normalized);
+      else this.emit(normalized?.status === 403 ? "permission_denied" : "error", normalized);
       return false;
     }
   }
