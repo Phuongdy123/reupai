@@ -3,14 +3,14 @@ import { CORE_SEO_KEYWORDS, SITE_URL, guideBase, guides } from "../../src/lib/se
 import { PublicFooter } from "../../src/components/public-footer";
 
 export const metadata = {
-  title: "Giải pháp Vietsub AI, dịch video, OCR & lồng tiếng tự động",
-  description: "Khám phá trọn bộ hướng dẫn Vietsub AI, dịch video Trung–Việt/Anh/Nhật/Hàn, tách phụ đề cứng OCR, che chữ gốc, thuyết minh 31 giọng đọc, Bilibili, Douyin và YouTube Shorts.",
+  title: "Giải pháp Reup video tự động, Vietsub AI, dịch video & lồng tiếng",
+  description: "Trọn bộ 24 hướng dẫn Reup video tự động, Vietsub AI, dịch video Trung–Việt/Anh/Nhật/Hàn, tách phụ đề cứng OCR, xóa chữ Trung, thuyết minh 31 giọng AI, Bilibili, Douyin và TikTok/Shorts.",
   keywords: CORE_SEO_KEYWORDS,
   alternates: { canonical: guideBase },
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Giải pháp Vietsub AI, dịch video & lồng tiếng | ReupAI",
-    description: "Hướng dẫn từng bước cho mọi nhu cầu dịch video, làm phụ đề SRT và thuyết minh AI với ReupAI Local Engine.",
+    title: "Giải pháp Reup video tự động, Vietsub AI & lồng tiếng | ReupAI",
+    description: "Hướng dẫn từng bước cho mọi nhu cầu reup video tự động, dịch phụ đề SRT, xóa hardsub và thuyết minh AI với ReupAI Local Engine.",
     url: `${SITE_URL}${guideBase}`,
     type: "website",
     locale: "vi_VN",
@@ -19,8 +19,8 @@ export const metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Giải pháp Vietsub AI & lồng tiếng video | ReupAI",
-    description: "Trọn bộ hướng dẫn dịch video, tách phụ đề OCR, Bilibili, Douyin và YouTube Shorts với ReupAI.",
+    title: "Giải pháp Reup video tự động, Vietsub AI & lồng tiếng | ReupAI",
+    description: "Trọn bộ hướng dẫn reup video tự động, dịch video, tách phụ đề OCR, Bilibili, Douyin và YouTube Shorts với ReupAI.",
     images: ["/images/reupai-og.png"],
   },
 };

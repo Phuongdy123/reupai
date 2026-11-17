@@ -27,7 +27,7 @@ export default function GuidePage({ params }) {
   if (!guide) notFound();
   const url = `${SITE_URL}${guideBase}/${guide.slug}`;
   const structuredData = [
-    { "@context": "https://schema.org", "@type": "WebPage", name: guide.title, description: guide.description, url, inLanguage: "vi-VN", isPartOf: { "@type": "WebSite", name: "ReupAI", url: SITE_URL } },
+    { "@context": "https://schema.org", "@type": "WebPage", name: guide.title, description: guide.description, keywords: guide.keywords?.join(", "), url, inLanguage: "vi-VN", isPartOf: { "@type": "WebSite", name: "ReupAI", url: SITE_URL } },
     { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
       { "@type": "ListItem", position: 1, name: "Trang chủ", item: SITE_URL },
       { "@type": "ListItem", position: 2, name: "Giải pháp", item: `${SITE_URL}${guideBase}` },
@@ -69,6 +69,7 @@ export default function GuidePage({ params }) {
         <section><h2>Cách thực hiện trong ReupAI</h2><ol className="seo-steps">{guide.steps.map(([title, detail]) => <li key={title}><strong>{title}</strong><p>{detail}</p></li>)}</ol></section>
         <section className="seo-note"><h2>Điều cần kiểm tra</h2><p>{guide.note}</p></section>
         <section><h2>Câu hỏi thường gặp</h2><div className="seo-faq">{guide.faq.map(([question, answer]) => <div key={question}><h3>{question}</h3><p>{answer}</p></div>)}</div></section>
+        {guide.keywords?.length ? <section><h2>Chủ đề &amp; từ khóa liên quan</h2><p>{guide.keywords.join(" • ")}</p></section> : null}
       </article><aside className="seo-sidebar"><h2>Bắt đầu xử lý</h2><p>Đăng nhập, chọn video và xem trước cài đặt trước khi tạo job.</p><Link href="/sign-up" className="seo-primary-link">Dùng thử ReupAI →</Link><Link href="/local-engine">Tải Local Engine Windows</Link><Link href="/plans">Xem gói Free và Pro</Link><p className="seo-sidebar-note">Cần cài Local Engine trên Windows để xử lý video.</p></aside></div>
       <section className="seo-related"><h2>Hướng dẫn liên quan</h2><div>{guide.related.map((slug) => { const related = getGuide(slug); return related ? <Link href={`${guideBase}/${slug}`} key={slug}>{related.title}<span aria-hidden="true">→</span></Link> : null; })}</div></section>
     </div>
