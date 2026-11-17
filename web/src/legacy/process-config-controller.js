@@ -382,8 +382,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (doneBtn) {
             doneBtn.onclick = () => setTourOpen(false, true);
         }
-        if (form) {
-            form.addEventListener('submit', markTourDone, { once: true });
+        const tourForm = dialog.querySelector('form');
+        if (tourForm) {
+            tourForm.addEventListener('submit', markTourDone, { once: true });
         }
         dialog.addEventListener('close', markTourDone, { once: true });
         if (autoBtn) {
