@@ -1,4 +1,6 @@
 import re
+import threading
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -19,16 +21,19 @@ DYNAMIC_SPACE_API = (
     "x/polymer/web-dynamic/v1/feed/space"
 )
 
+FINGER_SPI_API = "https://api.bilibili.com/x/frontend/finger/spi"
+
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 TIMEOUT = 12
+_COOKIE_TTL_SECONDS = 1800
 
 USER_AGENT = (
     "Mozilla/5.0 "
     "(Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 "
     "(KHTML, like Gecko) "
-    "Chrome/154.0.0.0 Safari/537.36"
+    "Chrome/131.0.0.0 Safari/537.36"
 )
 
 session = requests.Session()
@@ -40,6 +45,39 @@ session.headers.update({
 
 _BILIBILI_CARD_API = "https://api.bilibili.com/x/web-interface/card"
 _CHANNEL_NAME_CACHE = {}
+_COOKIE_LOCK = threading.Lock()
+_COOKIES_WARMED_AT = 0.0
+
+
+def _ensure_bilibili_cookies(*, force: bool = False) -> None:
+    """Warm Bilibili buvid3/buvid4 anti-bot cookies so archive APIs avoid HTTP 412."""
+    global _COOKIES_WARMED_AT
+    now = time.monotonic()
+    if not force and _COOKIES_WARMED_AT and now - _COOKIES_WARMED_AT < _COOKIE_TTL_SECONDS and session.cookies.get("buvid3"):
+        return
+    with _COOKIE_LOCK:
+        now = time.monotonic()
+        if not force and _COOKIES_WARMED_AT and now - _COOKIES_WARMED_AT < _COOKIE_TTL_SECONDS and session.cookies.get("buvid3"):
+            return
+        try:
+            session.get("https://www.bilibili.com/", timeout=8)
+        except Exception:
+            pass
+        try:
+            spi = session.get(
+                FINGER_SPI_API,
+                headers={"Referer": "https://www.bilibili.com/"},
+                timeout=8,
+            )
+            if spi.ok:
+                data = (spi.json() or {}).get("data") or {}
+                if data.get("b_3"):
+                    session.cookies.set("buvid3", str(data["b_3"]), domain=".bilibili.com")
+                if data.get("b_4"):
+                    session.cookies.set("buvid4", str(data["b_4"]), domain=".bilibili.com")
+        except Exception:
+            pass
+        _COOKIES_WARMED_AT = time.monotonic()
 
 
 def fetch_bilibili_channel_name(mid):
@@ -389,44 +427,54 @@ def request_archive_page(
                 "https://space.bilibili.com/"
                 f"{mid}/video"
             ),
+        "Origin": "https://space.bilibili.com",
     }
 
-    response = session.get(
-        ARCHIVE_API,
-        params=params,
-        headers=headers,
-        timeout=TIMEOUT,
-    )
+    _ensure_bilibili_cookies()
 
-    if response.status_code == 412:
-        raise BilibiliRateLimited(
-            "BILIBILI_HTTP_412"
+    for attempt in range(2):
+        response = session.get(
+            ARCHIVE_API,
+            params=params,
+            headers=headers,
+            timeout=TIMEOUT,
         )
 
-    response.raise_for_status()
+        if response.status_code == 412:
+            if attempt == 0:
+                _ensure_bilibili_cookies(force=True)
+                continue
+            raise BilibiliRateLimited(
+                "BILIBILI_HTTP_412"
+            )
 
-    payload = response.json()
+        response.raise_for_status()
 
-    code = payload.get(
-        "code"
-    )
+        payload = response.json()
 
-    if code in (
-        -352,
-        -412,
-    ):
-        raise BilibiliRateLimited(
-            f"BILIBILI_API_{code}"
+        code = payload.get(
+            "code"
         )
 
-    if code != 0:
-        raise RuntimeError(
-            "Bilibili archive API error: "
-            f"code={code}, "
-            f"message={payload.get('message')}"
-        )
+        if code in (
+            -352,
+            -412,
+        ):
+            if attempt == 0:
+                _ensure_bilibili_cookies(force=True)
+                continue
+            raise BilibiliRateLimited(
+                f"BILIBILI_API_{code}"
+            )
 
-    return payload
+        if code != 0:
+            raise RuntimeError(
+                "Bilibili archive API error: "
+                f"code={code}, "
+                f"message={payload.get('message')}"
+            )
+
+        return payload
 
 
 def fetch_page(
@@ -691,42 +739,53 @@ def fetch_latest_from_dynamic(
                 "https://space.bilibili.com/"
                 f"{mid}/dynamic"
             ),
+        "Origin": "https://space.bilibili.com",
     }
 
-    response = session.get(
-        DYNAMIC_SPACE_API,
-        params=params,
-        headers=headers,
-        timeout=TIMEOUT,
-    )
+    _ensure_bilibili_cookies()
 
-    if response.status_code == 412:
-        raise BilibiliRateLimited(
-            "BILIBILI_DYNAMIC_HTTP_412"
+    for attempt in range(2):
+        response = session.get(
+            DYNAMIC_SPACE_API,
+            params=params,
+            headers=headers,
+            timeout=TIMEOUT,
         )
 
-    response.raise_for_status()
+        if response.status_code == 412:
+            if attempt == 0:
+                _ensure_bilibili_cookies(force=True)
+                continue
+            raise BilibiliRateLimited(
+                "BILIBILI_DYNAMIC_HTTP_412"
+            )
 
-    payload = response.json()
+        response.raise_for_status()
 
-    code = payload.get(
-        "code"
-    )
+        payload = response.json()
 
-    if code in (
-        -352,
-        -412,
-    ):
-        raise BilibiliRateLimited(
-            f"BILIBILI_DYNAMIC_API_{code}"
+        code = payload.get(
+            "code"
         )
 
-    if code != 0:
-        raise RuntimeError(
-            "Bilibili dynamic API error: "
-            f"code={code}, "
-            f"message={payload.get('message')}"
-        )
+        if code in (
+            -352,
+            -412,
+        ):
+            if attempt == 0:
+                _ensure_bilibili_cookies(force=True)
+                continue
+            raise BilibiliRateLimited(
+                f"BILIBILI_DYNAMIC_API_{code}"
+            )
+
+        if code != 0:
+            raise RuntimeError(
+                "Bilibili dynamic API error: "
+                f"code={code}, "
+                f"message={payload.get('message')}"
+            )
+        break
 
     data = (
         payload.get("data")
