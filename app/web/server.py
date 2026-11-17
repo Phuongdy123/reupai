@@ -663,6 +663,27 @@ def normalize_profile_url(
         value
     )
 
+    host = parsed.netloc.lower()
+    if host in {"b23.tv", "www.b23.tv", "v.douyin.com"}:
+        try:
+            from services.video_urls import resolve_short_url
+            value = resolve_short_url(value)
+            parsed = urllib.parse.urlsplit(value)
+            host = parsed.netloc.lower()
+        except Exception:
+            pass
+
+    bili_space = re.match(
+        r"^/(?:[a-z]{2}(?:-[a-z]{2})?/)?(\d+)(?:/.*)?$",
+        parsed.path or "",
+        re.IGNORECASE,
+    )
+    if host == "space.bilibili.com" and bili_space:
+        return f"https://space.bilibili.com/{bili_space.group(1)}"
+    m_space = re.match(r"^/space/(\d+)(?:/.*)?$", parsed.path or "", re.IGNORECASE)
+    if host == "m.bilibili.com" and m_space:
+        return f"https://space.bilibili.com/{m_space.group(1)}"
+
     path = (
         parsed.path.rstrip("/")
         or "/"
@@ -671,7 +692,7 @@ def normalize_profile_url(
     return urllib.parse.urlunsplit(
         (
             parsed.scheme.lower(),
-            parsed.netloc.lower(),
+            host,
             path,
             "",
             "",

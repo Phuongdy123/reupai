@@ -1371,24 +1371,30 @@ async function loadVideos(refresh = false) {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(
-                    data.detail || 'Không lấy được video.'
-                );
+                const detail = String(data.detail || '');
+                const isShortLink = /(?:^|\/\/)(?:[a-z0-9-]+\.)?(?:b23\.tv|v\.douyin\.com)\//i.test(sourceUrl);
+                if (isShortLink && response.status === 400 && /kênh|playlist|mã video|một video/i.test(detail)) {
+                    const modeEl = document.getElementById('sourceInputMode');
+                    if (modeEl) modeEl.value = 'channel';
+                    // Fall through to channel loader below for short links pointing to a creator profile.
+                } else {
+                    throw new Error(detail || 'Không lấy được video.');
+                }
+            } else {
+                currentView = 'direct';
+                currentVideos = [data.video];
+                lastLoadedSourceUrl = sourceUrl;
+                lastLoadedInputMode = inputMode;
+                sourceTotal = 1;
+                totalPages = 1;
+                remoteHasMore = false;
+                renderVideos();
+                updateSourceInfo('Đã nhận diện 1 video');
+                updateViewLabel('Video lẻ');
+                updateFollowSourceButton();
+                saveUiState();
+                return;
             }
-
-            currentView = 'direct';
-            currentVideos = [data.video];
-            lastLoadedSourceUrl = sourceUrl;
-            lastLoadedInputMode = inputMode;
-            sourceTotal = 1;
-            totalPages = 1;
-            remoteHasMore = false;
-            renderVideos();
-            updateSourceInfo('Đã nhận diện 1 video');
-            updateViewLabel('Video lẻ');
-            updateFollowSourceButton();
-            saveUiState();
-            return;
         }
 
         currentView = 'source';
@@ -3653,14 +3659,17 @@ function detectPlatformClient(
 
 function isChannelSourceUrl(url, platform) {
 
-    const value = String(url || '').toLowerCase();
+    const value = prepareSourceInput(url).toLowerCase();
 
     if (platform === 'bilibili') {
-        return /space\.bilibili\.com\/\d+/.test(value);
+        return /space\.bilibili\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?\d+/.test(value)
+            || /m\.bilibili\.com\/space\/\d+/.test(value)
+            || /(?:^|\/\/)(?:[a-z0-9-]+\.)?b23\.tv\/[0-9a-z]+/.test(value);
     }
 
     if (platform === 'douyin') {
-        return /douyin\.com\/user\//.test(value);
+        return /douyin\.com\/user\//.test(value)
+            || /(?:^|\/\/)v\.douyin\.com\/[0-9a-z]+/.test(value);
     }
 
     return false;

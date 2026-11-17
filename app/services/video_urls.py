@@ -93,6 +93,15 @@ def _resolve(url):
     raise ValueError('Link rút gọn chuyển hướng quá nhiều lần. Hãy dán link video đầy đủ.')
 
 
+def resolve_short_url(value):
+    """Resolve official Bilibili/Douyin short URLs to their canonical target URL."""
+    url = _plain(value)
+    parsed = _checked(url)
+    if parsed.hostname.lower() in {'b23.tv', 'www.b23.tv', 'v.douyin.com'}:
+        return _resolve(url)
+    return url
+
+
 def normalize_source_url(value, *, resolve_short=False, allow_generic=False):
     url = _plain(value)
     parsed = _checked(url)

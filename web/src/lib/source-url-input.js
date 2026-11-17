@@ -12,7 +12,9 @@ export function prepareSourceInput(value) {
       catch { return false; }
     });
   if (links.length === 1) text = links[0];
-  if (/^(?:(?:www|m|v)\.)?(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com)\//i.test(text)) text = `https://${text}`;
+  if (/^(?:(?:www|m|v|space)\.)?(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com)\//i.test(text)) text = `https://${text}`;
+  const biliSpace = text.match(/^https?:\/\/(?:space\.bilibili\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?|m\.bilibili\.com\/space\/)(\d+)(?:\/.*)?(?:\?.*)?$/i);
+  if (biliSpace) return `https://space.bilibili.com/${biliSpace[1]}`;
   return text;
 }
 

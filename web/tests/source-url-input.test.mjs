@@ -9,7 +9,10 @@ test('share text, Markdown, bare BV and locale video links select direct mode', 
     assert.equal(isDirectVideoInput(text), true, text);
   }
   assert.equal(prepareSourceInput('BV1S7446fEFw'), 'https://www.bilibili.com/video/BV1S7446fEFw/');
+  assert.equal(prepareSourceInput('https://space.bilibili.com/vi/74443210'), 'https://space.bilibili.com/74443210');
+  assert.equal(prepareSourceInput('https://m.bilibili.com/space/74443210'), 'https://space.bilibili.com/74443210');
   assert.equal(isDirectVideoInput('https://space.bilibili.com/1234'), false);
+  assert.equal(isDirectVideoInput('https://space.bilibili.com/vi/74443210'), false);
   assert.equal(isDirectVideoInput('https://bilibili.com.evil.test/video/BV1S7446fEFw/'), false);
 });
 

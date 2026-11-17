@@ -199,8 +199,16 @@ def extract_mid(profile_url):
         profile_url
     ).strip()
 
+    try:
+        parsed_host = (urlparse(value).hostname or "").lower()
+    except ValueError:
+        parsed_host = ""
+    if parsed_host in {"b23.tv", "www.b23.tv"}:
+        from services.video_urls import resolve_short_url
+        value = resolve_short_url(value)
+
     match = re.search(
-        r"space\.bilibili\.com/(\d+)",
+        r"(?:space\.bilibili\.com/(?:[a-z]{2}(?:-[a-z]{2})?/)?|m\.bilibili\.com/space/)(\d+)",
         value,
         flags=re.IGNORECASE,
     )

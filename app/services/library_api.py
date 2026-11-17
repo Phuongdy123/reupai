@@ -188,6 +188,13 @@ def normalize_profile_url(
 
     if platform == "bilibili":
 
+        try:
+            from services.sources.bilibili import extract_mid
+            mid = extract_mid(value)
+            return f"https://space.bilibili.com/{mid}"
+        except Exception:
+            pass
+
         parsed = (
             urllib.parse
             .urlsplit(
