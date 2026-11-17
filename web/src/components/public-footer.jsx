@@ -3,8 +3,36 @@
 import Link from "next/link";
 
 const columns = [
-  { title: "Khám phá", links: [["Vietsub video AI", "/giai-phap/vietsub-video-ai"], ["Dịch Trung–Việt", "/giai-phap/dich-video-trung-viet"], ["Lồng tiếng AI", "/giai-phap/long-tieng-video-ai"], ["Tất cả hướng dẫn", "/giai-phap"]] },
-  { title: "ReupAI", links: [["Gói Free & Pro", "/plans"], ["Local Engine", "/giai-phap/xu-ly-video-tren-may"], ["Tạo tài khoản", "/sign-up"], ["Đăng nhập", "/sign-in"]] },
+  {
+    title: "Giải pháp AI",
+    links: [
+      ["Vietsub video AI", "/giai-phap/vietsub-video-ai"],
+      ["Dịch video Trung–Việt", "/giai-phap/dich-video-trung-viet"],
+      ["Thuyết minh Trung Quốc AI", "/giai-phap/thuyet-minh-video-trung-quoc-ai"],
+      ["Tách phụ đề OCR ra SRT", "/giai-phap/tach-phu-de-cung-ocr-video"],
+      ["31 giọng TTS tiếng Việt", "/giai-phap/chuyen-van-ban-thanh-giong-noi-tieng-viet"],
+    ],
+  },
+  {
+    title: "Nền tảng & Xuất bản",
+    links: [
+      ["Vietsub video Bilibili", "/giai-phap/vietsub-video-bilibili"],
+      ["Vietsub video Douyin", "/giai-phap/vietsub-video-douyin"],
+      ["Làm YouTube Shorts & Reels", "/giai-phap/lam-video-youtube-shorts-reup-ai"],
+      ["Vietsub hàng loạt Series", "/giai-phap/vietsub-hang-loat-theo-series"],
+      ["Xuất & chỉnh phụ đề SRT", "/giai-phap/xuat-va-chinh-sua-phu-de-srt"],
+    ],
+  },
+  {
+    title: "ReupAI",
+    links: [
+      ["Tải Local Engine Windows", "/local-engine"],
+      ["Tất cả hướng dẫn", "/giai-phap"],
+      ["Bảng giá Free & Pro", "/plans"],
+      ["Tạo tài khoản", "/sign-up"],
+      ["Đăng nhập", "/sign-in"],
+    ],
+  },
 ];
 
 export function PublicFooter({ variant = "default" }) {
