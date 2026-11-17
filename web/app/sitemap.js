@@ -16,6 +16,7 @@ export default function sitemap() {
       priority: 0.85,
     })),
     { url: `${SITE_URL}/plans`, lastModified, changeFrequency: "monthly", priority: 0.8 },
+    { url: `${SITE_URL}/help`, lastModified, changeFrequency: "monthly", priority: 0.7 },
     { url: `${SITE_URL}/privacy`, lastModified, changeFrequency: "yearly", priority: 0.3 },
     { url: `${SITE_URL}/terms`, lastModified, changeFrequency: "yearly", priority: 0.3 },
   ];
