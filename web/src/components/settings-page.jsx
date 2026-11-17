@@ -67,6 +67,7 @@ export function SettingsPage() {
   const [error, setError] = useState("");
   const [webAccountEmail, setWebAccountEmail] = useState("");
   const [geminiRepairing, setGeminiRepairing] = useState(false);
+  const [userClickedConnectGoogle, setUserClickedConnectGoogle] = useState(false);
   const requestSequence = useRef(0);
   const geminiCheckSequence = useRef(0);
   const geminiAutoEnableAttempted = useRef(false);
@@ -213,32 +214,31 @@ export function SettingsPage() {
   const connectGoogle = async () => {
     if (!connected || oauthStarting) return;
     setOauthStarting(true); setError(""); geminiAutoEnableAttempted.current = false;
+    setUserClickedConnectGoogle(true);
     try {
       await client.json("/api/gemini/oauth/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser: "web", return_to: `${window.location.origin}/settings#diagnostics` }) });
       await load();
     } catch (requestError) {
+      setUserClickedConnectGoogle(false);
       setError(requestError.message || "Không thể bắt đầu đăng nhập Google.");
     } finally { setOauthStarting(false); }
   };
 
-  // The processing-error link carries an explicit reconnect intent. Opening
-  // Settings through that link starts the Google consent flow in one step.
+  // Never auto-redirect to Google login on page load; clean up query params
+  // and scroll to the Gemini section so the user can click "Kết nối Google" themselves.
   useEffect(() => {
-    if (!connected || !diagnostics || reconnectIntentHandled.current || googleOAuth?.connecting) return;
+    if (reconnectIntentHandled.current) return;
     const url = new URL(window.location.href);
     const onboarding = url.searchParams.get("onboarding") === "1";
-    if (url.searchParams.get("reconnect") !== "1" && !onboarding) return;
-    if (onboarding && !webAccountEmail) return;
+    const reconnect = url.searchParams.get("reconnect") === "1";
+    if (!reconnect && !onboarding) return;
     reconnectIntentHandled.current = true;
     url.searchParams.delete("reconnect");
     url.searchParams.delete("onboarding");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-    if (onboarding) {
-      window.localStorage.removeItem(GEMINI_ONBOARDING_KEY);
-      if (hasMatchingGoogleGrant(webAccountEmail, googleOAuth)) return;
-    }
-    void connectGoogle();
-  }, [connected, diagnostics, googleOAuth?.connecting, googleOAuth?.connected, googleOAuth?.needs_reauthorization, webAccountEmail]);
+    try { window.localStorage.removeItem(GEMINI_ONBOARDING_KEY); } catch {}
+    document.getElementById("diagnostics")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const disconnectGoogle = async () => {
     if (!connected || oauthDisconnecting) return;
@@ -352,7 +352,7 @@ export function SettingsPage() {
         <div className="setting-row"><span>Giọng đọc tiếng Việt</span><strong>{diagnostics ? (diagnostics.components?.vietnamese_tts ? "Sẵn sàng" : "Cần cài lại Engine") : "—"}</strong></div>
         <div className="setting-row"><span>Gemini / Google</span><strong>{diagnostics ? (apiKeyConfigured ? "Đã cấu hình API key" : googleOAuth?.connecting ? googleConsentLabel(googleOAuth) : geminiReady ? "Sẵn sàng" : googleNeedsReconnect ? "Cần kết nối lại Google" : googleTemporaryError ? "Tạm gián đoạn" : !googleOAuth?.connected ? "Chưa kết nối" : !googleOAuth?.project_id ? "Cần chọn project" : GEMINI_SETUP_LABELS[geminiAccess?.state] || "Đang kiểm tra Gemini API") : "—"}</strong></div>
         {googleOAuth?.google_email && <div className="setting-row"><span>Tài khoản Google đang cấp Gemini</span><strong>{googleOAuth.google_email}</strong></div>}
-        <GoogleConsentPrompt oauth={googleOAuth} />
+        <GoogleConsentPrompt oauth={googleOAuth} autoNavigate={userClickedConnectGoogle} />
         {!apiKeyConfigured && <GeminiProjectPicker client={client} supported={connected && Boolean(capabilities?.gemini_project_discovery)} canCreate={connected && Boolean(capabilities?.gemini_project_creation)} canReplace={newerVersion(engineInfo?.version, "0.2.38")} oauth={googleOAuth} access={geminiAccess} onSelected={applyProjectSelection} onBusyChange={setProjectDetecting} onReconnect={connectGoogle} />}
         {!apiKeyConfigured && diagnostics && <form className="settings-form" onSubmit={saveProject}>
           <label htmlFor="gemini-project-id"><span>Project ID (tự điền hoặc nhập thủ công)</span><input id="gemini-project-id" value={projectId} onChange={(event) => { projectIdDirty.current = true; setProjectId(event.target.value); setProjectSaved(false); }} placeholder="vi-du: du-an-video-123" autoComplete="off" spellCheck={false} disabled={!connected || projectSaving || projectDetecting || googleOAuth?.connecting} /></label>
@@ -370,9 +370,9 @@ export function SettingsPage() {
               : <button className="btn primary" onClick={repairGemini} disabled={!connected || geminiRepairing || oauthStarting}>{geminiRepairing ? "Đang thiết lập…" : geminiAccess.action === "enable_api" ? "Thiết lập Gemini tự động" : geminiAccess.action_label || "Sửa nhanh Gemini"}</button>)}
           {googleOAuth?.connecting && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang dừng…" : "Dừng chờ"}</button>}
           {googleOAuth?.connected && <button className="btn" onClick={disconnectGoogle} disabled={!connected || oauthDisconnecting}>{oauthDisconnecting ? "Đang đăng xuất…" : "Đăng xuất Google"}</button>}
-          {!googleOAuth?.connected && !googleNeedsReconnect && <div className="google-notice-box" style={{ marginTop: "12px", padding: "12px", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-            <p style={{ margin: "0 0 6px 0" }}><strong>Chúng tôi cần quyền Google của bạn để tiếp tục.</strong> ReupAI dùng quota cá nhân của bạn để gọi AI Gemini miễn phí, token được mã hóa an toàn trên máy này. <Link href="/privacy">Xem chính sách riêng tư</Link>.</p>
-            <small className="muted" style={{ display: "block" }}>💡 <em>Nếu Google hiện cảnh báo &quot;Ứng dụng chưa được xác minh&quot;, bạn bấm <strong>Nâng cao (Advanced)</strong> &rarr; chọn <strong>Đi tới ReupAI (Vẫn an toàn)</strong> để tiếp tục.</em></small>
+          {!googleOAuth?.connected && !googleNeedsReconnect && <div className="google-notice-box">
+            <p><strong>Chúng tôi cần quyền Google của bạn để tiếp tục.</strong> ReupAI dùng quota cá nhân của bạn để gọi AI Gemini miễn phí, token được mã hóa an toàn trên máy này. <Link href="/privacy">Xem chính sách riêng tư</Link>.</p>
+            <small className="muted">💡 <em>Nếu Google hiện cảnh báo &quot;Ứng dụng chưa được xác minh&quot;, bạn bấm <strong>Nâng cao (Advanced)</strong> &rarr; chọn <strong>Đi tới ReupAI (Vẫn an toàn)</strong> để tiếp tục.</em></small>
           </div>}
           {googleNeedsReconnect && <p className="muted">Phiên Google đã hết hạn hoặc cần cấp quyền mới. Bấm Kết nối lại Google; video và dự án trên máy vẫn được giữ nguyên.</p>}
           {googleOAuth?.temporary_error && <p className="muted">Tạm thời không thể làm mới phiên Google. Kiểm tra Internet rồi bấm Kiểm tra lại; chưa cần đăng nhập lại.</p>}

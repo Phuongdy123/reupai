@@ -130,12 +130,12 @@ export function Dashboard() {
         <section className="dashboard-overview-alert dashboard-gemini-onboarding" aria-label="Kích hoạt AI Gemini">
           <Icon name="spark" size={20} />
           <div className="dashboard-engine-guide">
-            <strong>{geminiNeedsProject ? "Đã kết nối Google · Cần chọn Project Gemini" : "Chưa kết nối AI Gemini · Cần quyền Google để bắt đầu"}</strong>
-            <p>{geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy chọn hoặc nhập Project ID để hoàn tất kích hoạt quota Gemini." : "Kết nối Google để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân của bạn. Dữ liệu mã hóa an toàn trên máy này."}</p>
+            <strong>{geminiNeedsProject ? "Đã kết nối Google · Cần chọn Project Gemini" : "Chưa kết nối AI Gemini · Vào Cài đặt để cấp quyền"}</strong>
+            <p>{geminiNeedsProject ? "Bạn đã đăng nhập Google thành công. Hãy mở trang Cài đặt → mục Chẩn đoán xử lý để chọn hoặc nhập Project ID." : "Để tự động dịch phụ đề, Vietsub và lồng tiếng AI theo quota cá nhân, hãy mở trang Cài đặt → mục Gemini / Google và tự bấm nút “Kết nối Google”."}</p>
           </div>
           <div className="dashboard-engine-actions">
-            <Link href={geminiNeedsProject ? "/settings#diagnostics" : "/settings?reconnect=1#diagnostics"} className="btn primary">
-              <Icon name="spark" size={16} /> {geminiNeedsProject ? "Chọn Project Gemini" : "Kết nối Google cho Gemini"}
+            <Link href="/settings#diagnostics" className="btn primary">
+              <Icon name="settings" size={16} /> {geminiNeedsProject ? "Mở Cài đặt chọn Project" : "Mở Cài đặt để tự kết nối"}
             </Link>
           </div>
         </section>

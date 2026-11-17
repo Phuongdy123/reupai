@@ -4,16 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { googleConsentLabel, googleConsentUrl, navigateGoogleConsent } from '../lib/google-consent';
 
-export function GoogleConsentPrompt({ oauth }) {
+export function GoogleConsentPrompt({ oauth, autoNavigate = false }) {
   const seen = useRef(null);
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(Date.now());
   const url = googleConsentUrl(oauth?.authorization_url);
   const expired = Boolean(oauth?.expires_at && oauth.expires_at * 1000 <= now);
   useEffect(() => {
+    if (!autoNavigate) return;
     try { navigateGoogleConsent(oauth, value => window.location.assign(value), seen); }
     catch { setNotice('Trình duyệt chưa chuyển trang. Bấm Mở Google để tiếp tục.'); }
-  }, [oauth?.connecting, oauth?.authorization_url, oauth?.expires_at]);
+  }, [autoNavigate, oauth?.connecting, oauth?.authorization_url, oauth?.expires_at]);
   useEffect(() => {
     if (!oauth?.connecting || !oauth?.expires_at) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -28,7 +29,7 @@ export function GoogleConsentPrompt({ oauth }) {
     <strong>{googleConsentLabel(oauth)}</strong>
     {url && !expired ? <>
         <p><strong>Chúng tôi cần quyền Google của bạn để tiếp tục.</strong> ReupAI đang chuyển sang Google. Hãy chọn tài khoản của bạn và cho phép truy cập để bắt đầu dùng Gemini.</p>
-        <p style={{ margin: "6px 0", fontSize: "0.85rem", opacity: 0.85 }}>💡 <em>Nếu thấy màn hình &quot;Google chưa xác minh ứng dụng này&quot;, bạn bấm <strong>Nâng cao (Advanced)</strong> &rarr; <strong>Đi tới ReupAI (Vẫn an toàn)</strong>.</em></p>
+        <small className="google-consent-tip">💡 <em>Nếu thấy màn hình &quot;Google chưa xác minh ứng dụng này&quot;, bạn bấm <strong>Nâng cao (Advanced)</strong> &rarr; <strong>Đi tới ReupAI (Vẫn an toàn)</strong>.</em></small>
         <div className="settings-actions"><a className="btn primary" href={url} rel="noreferrer">Mở Google để cấp quyền</a><button className="btn" type="button" onClick={copy}>Sao chép liên kết</button></div>
         <small>Liên kết còn hiệu lực khoảng {Math.max(0, Math.ceil((oauth.expires_at * 1000 - now) / 1000))} giây. Chỉ mở trên máy đang chạy ReupAI.</small>
       </>
