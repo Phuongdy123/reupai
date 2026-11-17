@@ -8,9 +8,14 @@ export function planName(account) {
 export function quotaText(account) {
   if (!account?.configured) return "Chưa đọc được thông tin lượt xử lý";
   if (account.plan === "admin") return "Tài khoản quản trị · Không giới hạn";
-  if (account.plan === "pro") return account.proUntil
-    ? `Có hiệu lực đến ${new Date(account.proUntil).toLocaleDateString("vi-VN")}`
-    : "Không giới hạn lượt Free";
+  if (account.plan === "pro") {
+    if (!account.proUntil) return "Không giới hạn lượt Free";
+    const parsed = new Date(account.proUntil);
+    if (Number.isFinite(parsed.getTime()) && parsed.getUTCFullYear() >= 2090) {
+      return "Gói Pro vĩnh viễn · Không giới hạn";
+    }
+    return `Có hiệu lực đến ${parsed.toLocaleDateString("vi-VN")}`;
+  }
   if (account.unlimited) return `Đã hoàn tất ${account.completed || 0} video · Không giới hạn`;
   const limit = Math.max(1, Number(account.limit || account.freeLimit || 3));
   const remaining = Math.max(0, Number(account.remaining || 0));

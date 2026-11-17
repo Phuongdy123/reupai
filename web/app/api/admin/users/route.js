@@ -66,6 +66,16 @@ export async function PATCH(request) {
       if (!["pending", "approved", "disabled"].includes(body.status)) return NextResponse.json({ error: "Trạng thái không hợp lệ." }, { status: 400 });
       const { error } = await guard.admin.from("profiles").update({ status: body.status }).eq("id", id);
       if (error) throw error;
+    } else if (body.grantProLifetime === true) {
+      const nowIso = new Date().toISOString();
+      const [{ error: profileErr }, { error: billingErr }] = await Promise.all([
+        guard.admin.from("profiles").update({ status: "approved", updated_at: nowIso }).eq("id", id),
+        guard.admin.from("billing_accounts").upsert({ user_id: id, free_limit: FREE_COMPLETED_LIMIT, quota_unlimited: true, pro_until: "2099-12-31T23:59:59.000Z", updated_at: nowIso }, { onConflict: "user_id" }),
+      ]);
+      if (profileErr || billingErr) throw profileErr || billingErr;
+    } else if (body.revokePro === true) {
+      const { error } = await guard.admin.from("billing_accounts").upsert({ user_id: id, quota_unlimited: false, pro_until: null, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      if (error) throw error;
     } else if (body.resetUsage === true) {
       const { error } = await guard.admin.from("billing_accounts").upsert({ user_id: id, trial_completed: 0, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
       if (error) throw error;

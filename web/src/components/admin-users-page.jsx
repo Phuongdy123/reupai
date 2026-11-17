@@ -16,6 +16,7 @@ export function AdminUsersPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [query, setQuery] = useState("");
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
@@ -46,22 +47,32 @@ export function AdminUsersPage() {
 
   const setDraft = (id, value) => setDrafts((items) => ({ ...items, [id]: { ...(items[id] || { limit: "3", unlimited: false }), ...value } }));
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleUsers = normalizedQuery
+    ? users.filter((u) => [u.username, u.email, u.display_name].some((v) => String(v || "").toLowerCase().includes(normalizedQuery)))
+    : users;
+
   return <div className="admin-users-page">
-    <div className="native-toolbar"><div><h2>Quản trị tài khoản</h2><p>Duyệt tài khoản, đặt quota từ 1 lượt đến không giới hạn và đặt lại lượt đã dùng.</p></div><button className="local-engine-action" onClick={load} disabled={loading}>Làm mới</button></div>
+    <div className="native-toolbar"><div><h2>Quản trị tài khoản</h2><p>Duyệt tài khoản, cấp Pro vĩnh viễn, đặt quota và đặt lại lượt đã dùng.</p></div><div style={{ display: "flex", gap: "8px", alignItems: "center" }}><input type="search" placeholder="Tìm username hoặc email…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Tìm tài khoản" /><button className="local-engine-action" onClick={load} disabled={loading}>Làm mới</button></div></div>
     {error && <div className="native-error" role="alert">{error}</div>}
     {notice && <div className="native-success" role="status">{notice}</div>}
-    {loading ? <div className="native-loading">Đang tải tài khoản…</div> : users.length === 0 ? <div className="native-empty"><h3>Chưa có tài khoản</h3><p>Người dùng đăng ký sẽ xuất hiện tại đây sau khi xác minh email.</p></div> : <div className="admin-user-list">
-      {users.map((user) => {
+    {loading ? <div className="native-loading">Đang tải tài khoản…</div> : visibleUsers.length === 0 ? <div className="native-empty"><h3>{users.length === 0 ? "Chưa có tài khoản" : "Không tìm thấy tài khoản khớp"}</h3><p>{users.length === 0 ? "Người dùng đăng ký sẽ xuất hiện tại đây sau khi xác minh email." : "Thử tìm bằng tên đăng nhập hoặc email khác."}</p></div> : <div className="admin-user-list">
+      {visibleUsers.map((user) => {
         const draft = drafts[user.id] || draftFor(user);
         const quota = user.quota || { completed: 0, limit: 3, remaining: 3, unlimited: false };
         const busy = busyId === user.id;
+        const proTime = user.pro_until ? Date.parse(user.pro_until) : 0;
+        const isPro = Number.isFinite(proTime) && proTime > Date.now();
+        const isLifetimePro = isPro && new Date(proTime).getUTCFullYear() >= 2090;
         return <article className="admin-user" key={user.id}>
-          <div className="admin-user-identity"><strong>{user.display_name || "Chưa đặt tên"}</strong><p>@{user.username || "chưa đặt username"} · {user.email}</p><small>Đăng ký {new Date(user.created_at).toLocaleString("vi-VN")}</small></div>
+          <div className="admin-user-identity"><strong>{user.display_name || "Chưa đặt tên"}{isPro ? ` · ${isLifetimePro ? "✦ PRO VĨNH VIỄN" : `✦ PRO đến ${new Date(proTime).toLocaleDateString("vi-VN")}`}` : ""}</strong><p>@{user.username || "chưa đặt username"} · {user.email}</p><small>Đăng ký {new Date(user.created_at).toLocaleString("vi-VN")}</small></div>
           {user.role !== "admin" && <div className="admin-quota-panel">
-            <div className="admin-quota-summary"><strong>{quota.unlimited ? "Không giới hạn" : `${quota.remaining} lượt còn lại`}</strong><span>Đã hoàn tất {quota.completed}{quota.unlimited ? " video" : ` / ${quota.limit} video`}</span></div>
+            <div className="admin-quota-summary"><strong>{isLifetimePro ? "Pro vĩnh viễn" : quota.unlimited ? "Không giới hạn" : `${quota.remaining} lượt còn lại`}</strong><span>Đã hoàn tất {quota.completed}{quota.unlimited || isPro ? " video" : ` / ${quota.limit} video`}</span></div>
             <label className="admin-quota-unlimited"><input type="checkbox" checked={draft.unlimited} disabled={busy} onChange={(event) => setDraft(user.id, { unlimited: event.target.checked })} /> Không giới hạn</label>
             <label className="admin-quota-limit">Giới hạn<input type="number" min="1" max="1000000" step="1" value={draft.limit} disabled={busy || draft.unlimited} onChange={(event) => setDraft(user.id, { limit: event.target.value })} /></label>
             <button className="local-engine-action" disabled={busy} onClick={() => patchUser(user.id, draft.unlimited ? { quotaUnlimited: true } : { freeLimit: Number(draft.limit) }, "Đã lưu giới hạn tài khoản.")}>Lưu giới hạn</button>
+            <button className="local-engine-action" disabled={busy || isLifetimePro} onClick={() => patchUser(user.id, { grantProLifetime: true }, `Đã nâng cấp @${user.username || user.email} lên Pro vĩnh viễn.`)}>Cấp Pro vĩnh viễn</button>
+            {isPro && <button className="local-engine-action danger" disabled={busy} onClick={() => patchUser(user.id, { revokePro: true }, "Đã thu hồi gói Pro.")}>Thu hồi Pro</button>}
             <button className="local-engine-action" disabled={busy || quota.completed === 0} onClick={() => patchUser(user.id, { resetUsage: true }, "Đã đặt lượt đã dùng về 0.")}>Đặt lại lượt dùng</button>
           </div>}
           <div className="admin-user-actions"><span className={`account-status ${user.status}`}>{labels[user.status] || user.status}</span>{user.role === "admin" ? <span className="account-role">Admin · Không giới hạn</span> : <><button className="local-engine-action" disabled={busy || user.status === "approved"} onClick={() => patchUser(user.id, { status: "approved" }, "Đã duyệt tài khoản.")}>Duyệt</button><button className="local-engine-action danger" disabled={busy || user.status === "disabled"} onClick={() => patchUser(user.id, { status: "disabled" }, "Đã khóa tài khoản.")}>Khóa</button></>}</div>
