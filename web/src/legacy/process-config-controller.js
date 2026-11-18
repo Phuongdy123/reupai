@@ -2338,6 +2338,31 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.querySelector('#saveSubSelection').onclick = () => saveSection('sub', 'vùng mờ sub');
     dialog.querySelector('#saveCustomSelection').onclick = () => saveSection('custom', 'vùng mờ tùy chỉnh');
     dialog.querySelector('#saveLogoSelection').onclick = () => saveSection('logo', 'logo');
+    const rasterizeSvgToPngDataUrl = (svgDataUrl, targetSize = 512) => {
+        if (!svgDataUrl || !/^data:image\/svg\+xml/i.test(svgDataUrl) || typeof window.Image !== 'function') {
+            return Promise.resolve(svgDataUrl);
+        }
+        return new Promise((resolve) => {
+            const img = new window.Image();
+            img.onload = () => {
+                try {
+                    const w = img.naturalWidth > 0 ? img.naturalWidth : targetSize;
+                    const h = img.naturalHeight > 0 ? img.naturalHeight : targetSize;
+                    const scale = Math.max(1, Math.min(8, targetSize / Math.max(w, h)));
+                    const c = document.createElement('canvas');
+                    c.width = Math.max(64, Math.round(w * scale));
+                    c.height = Math.max(64, Math.round(h * scale));
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    resolve(c.toDataURL('image/png'));
+                } catch {
+                    resolve(svgDataUrl);
+                }
+            };
+            img.onerror = () => resolve(svgDataUrl);
+            img.src = svgDataUrl;
+        });
+    };
+
     dialog.querySelector('#processLogoFile').onchange = async event => {
         const file = event.target.files?.[0];
         if (!file) {
@@ -2349,15 +2374,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             dialog._scheduleSaveLastConfig?.();
             return;
         }
-        const logoData = await new Promise(resolve => {
+        let logoData = await new Promise(resolve => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result || ''));
             reader.onerror = () => resolve(null);
             reader.readAsDataURL(file);
         });
         if (!isCurrent()) return;
+        let logoFilename = file.name;
+        if (logoData && /^data:image\/svg\+xml/i.test(logoData)) {
+            logoData = await rasterizeSvgToPngDataUrl(logoData);
+            if (!isCurrent()) return;
+            logoFilename = logoFilename.replace(/\.svg$/i, '.png');
+        }
         dialog._logoData = logoData;
-        dialog._logoFilename = file.name;
+        dialog._logoFilename = logoFilename;
         if (logoMode.value !== 'custom') logoMode.value = 'custom';
         if (logoShape && logoShape.value !== 'rect') logoShape.value = 'rect';
         updateLogoFields();
@@ -3040,6 +3071,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (!isCurrent()) return;
             dialog._logoData = logoData;
             dialog._logoFilename = logoFile.name;
+        }
+        let logoFilename = logoFile?.name || dialog._logoFilename || null;
+        if (logoData && /^data:image\/svg\+xml/i.test(logoData)) {
+            logoData = await rasterizeSvgToPngDataUrl(logoData);
+            if (!isCurrent()) return;
+            dialog._logoData = logoData;
+            if (logoFilename) logoFilename = logoFilename.replace(/\.svg$/i, '.png');
+            dialog._logoFilename = logoFilename;
         }
         const musicUrl = value('processMusicUrl').trim();
         if (musicUrl && !/^https?:\/\/\S+$/i.test(musicUrl)) {
