@@ -284,6 +284,26 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <label>Rộng <input id="processSecondarySubWidth" type="number" min="0" placeholder="Trống"></label>
                     <label>Cao <input id="processSecondarySubHeight" type="number" min="0" placeholder="Trống"></label>
                 </div>
+                <div class="process-blur-grid" style="margin-top:8px;grid-template-columns:repeat(2,minmax(0,1fr));">
+                    <label>Kiểu chữ phụ
+                        <select id="processSecondarySubStyle">
+                            <option value="box">Simple Box (Nền hộp tối)</option>
+                            <option value="minimal">Minimal Clean</option>
+                            <option value="bold">Creator Bold</option>
+                            <option value="cinema">Cinema</option>
+                            <option value="neon">Neon Pop</option>
+                        </select>
+                    </label>
+                    <label>Cỡ chữ phụ
+                        <select id="processSecondarySubFontSize">
+                            <option value="">Tự động</option>
+                            <option value="20">20 px</option>
+                            <option value="24">24 px</option>
+                            <option value="28">28 px</option>
+                            <option value="32">32 px</option>
+                        </select>
+                    </label>
+                </div>
                 <label class="process-check-option" style="margin-top:8px;">
                     <input id="processSecondarySubBlur" type="checkbox" checked>
                     Làm mờ chữ gốc trong vùng trước khi chèn chữ dịch

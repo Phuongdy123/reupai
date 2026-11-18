@@ -315,6 +315,8 @@ LOGO_PATH_OVERRIDE = None
 BLUR_INTERVALS = []
 SECONDARY_SUB_REGION = None
 SECONDARY_SUB_BLUR = True
+SECONDARY_SUB_STYLE = "box"
+SECONDARY_SUB_FONT_SIZE = None
 SECONDARY_SUBTITLES = []
 MUSIC_PATH = None
 MUSIC_VOLUME = 0.25
@@ -5541,14 +5543,19 @@ def create_ass(region):
 
 
 
-    style_profile = {
+    style_profiles = {
         "minimal": ("&H00FFFFFF", "&H00101010", "&H80000000", 1, outline, 0, bold),
         "bold": ("&H00FFFFFF", "&H000A0A0A", "&H80000000", 1, max(3, outline + 1), 0, -1),
         "cinema": ("&H00E9F3FF", "&H00181818", "&H80000000", 1, max(2, outline - 1), 2, 0),
         "neon": ("&H007346FF", "&H0020102A", "&H80000000", 1, outline, 2, -1),
         "box": ("&H00FFFFFF", "&H00101010", "&H99101010", 3, 1, 0, -1),
-    }.get(SUBTITLE_STYLE, ("&H00FFFFFF", "&H00101010", "&H80000000", 1, outline, 0, bold))
+    }
+    style_profile = style_profiles.get(SUBTITLE_STYLE, style_profiles["minimal"])
     primary_color, outline_color, back_color, border_style, style_outline, shadow, style_bold = style_profile
+
+    sec_style_profile = style_profiles.get(SECONDARY_SUB_STYLE, style_profiles["box"])
+    sec_primary, sec_outline_col, sec_back, sec_border_style, sec_outline, sec_shadow, sec_bold = sec_style_profile
+    sec_font_size = int(SECONDARY_SUB_FONT_SIZE) if SECONDARY_SUB_FONT_SIZE else max(16, int(font_size * 0.85))
 
     header = f"""[Script Info]
 
@@ -5602,7 +5609,7 @@ Style: Brand,{FONT_NAME},{brand_font_size},&H00FFFFFF,&H000000FF,&H00202020,&H00
 
 
 
-Style: SecondarySub,{FONT_NAME},{max(16, int(font_size * 0.85))},&H00FFFFFF,&H000000FF,&H00121214,&HB8000000,-1,0,0,0,100,100,0,0,3,6,0,5,16,16,10,1
+Style: SecondarySub,{FONT_NAME},{sec_font_size},{sec_primary},&H000000FF,{sec_outline_col},{sec_back},{sec_bold},0,0,0,100,100,0,0,{sec_border_style},{sec_outline},{sec_shadow},5,16,16,10,1
 
 
 

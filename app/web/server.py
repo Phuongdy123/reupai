@@ -542,6 +542,8 @@ class ProcessRequest(BaseModel):
     custom_blur_region: Optional[dict[str, float]] = None
     secondary_sub_region: Optional[dict[str, float]] = None
     secondary_sub_blur: bool = True
+    secondary_sub_style: Literal["minimal", "bold", "cinema", "neon", "box"] = "box"
+    secondary_sub_font_size: Optional[int] = None
     secondary_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     auto_brand_blur: bool = False
     logo_mode: str = "none"

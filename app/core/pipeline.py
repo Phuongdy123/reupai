@@ -2638,6 +2638,8 @@ def render_voiceover(
     auto_brand_blur=False,
     secondary_sub_region=None,
     secondary_sub_blur=True,
+    secondary_sub_style="box",
+    secondary_sub_font_size=None,
     secondary_subtitles=None,
     on_render_progress=None,
 
@@ -2702,6 +2704,8 @@ def render_voiceover(
     renderer.BLUR_INTERVALS = blur_intervals or []
     renderer.SECONDARY_SUB_REGION = secondary_sub_region
     renderer.SECONDARY_SUB_BLUR = bool(secondary_sub_blur)
+    renderer.SECONDARY_SUB_STYLE = secondary_sub_style or "box"
+    renderer.SECONDARY_SUB_FONT_SIZE = secondary_sub_font_size
     renderer.SECONDARY_SUBTITLES = secondary_subtitles or []
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
@@ -2795,6 +2799,8 @@ def render_subtitle_only(
     auto_brand_blur=False,
     secondary_sub_region=None,
     secondary_sub_blur=True,
+    secondary_sub_style="box",
+    secondary_sub_font_size=None,
     secondary_subtitles=None,
     on_render_progress=None,
 
@@ -2851,6 +2857,8 @@ def render_subtitle_only(
     renderer.BLUR_INTERVALS = blur_intervals or []
     renderer.SECONDARY_SUB_REGION = secondary_sub_region
     renderer.SECONDARY_SUB_BLUR = bool(secondary_sub_blur)
+    renderer.SECONDARY_SUB_STYLE = secondary_sub_style or "box"
+    renderer.SECONDARY_SUB_FONT_SIZE = secondary_sub_font_size
     renderer.SECONDARY_SUBTITLES = secondary_subtitles or []
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
@@ -4320,6 +4328,8 @@ def pipeline(
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
                 secondary_sub_region=config.get("secondary_sub_region"),
                 secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
+                secondary_sub_style=config.get("secondary_sub_style", "box"),
+                secondary_sub_font_size=config.get("secondary_sub_font_size"),
                 secondary_subtitles=config.get("secondary_subtitles") or [],
                 on_render_progress=on_render_progress,
 
@@ -4372,6 +4382,8 @@ def pipeline(
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
                 secondary_sub_region=config.get("secondary_sub_region"),
                 secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
+                secondary_sub_style=config.get("secondary_sub_style", "box"),
+                secondary_sub_font_size=config.get("secondary_sub_font_size"),
                 secondary_subtitles=config.get("secondary_subtitles") or [],
                 on_render_progress=on_render_progress,
 

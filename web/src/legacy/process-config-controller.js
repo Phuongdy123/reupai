@@ -22,6 +22,8 @@ import {
     writePresets,
 } from '../lib/process-config-store.js';
 
+let logoSessionEnabled = false;
+
 export async function openProcessConfig(video, card, mode, dependencies) {
     const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
     const dialog = await ensureProcessConfigDialog();
@@ -896,7 +898,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     if (logoShape) logoShape.value = defaults.logo_shape || 'rect';
     set('processLogoPath', defaults.logo_path || '');
     set('processLogoText', defaults.logo_text || '');
-    logoMode.onchange = updateLogoFields;
+    logoMode.onchange = () => {
+        if (logoMode.value && logoMode.value !== 'none') {
+            logoSessionEnabled = true;
+        }
+        updateLogoFields();
+    };
     if (logoShape) {
         logoShape.onchange = () => {
             dialog._syncLogoOverlay?.();
@@ -1354,6 +1361,42 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         drawSelection();
     };
 
+    const drawLabeledRegion = (context, regionRect, strokeColor, fillColor, labelText) => {
+        if (!regionRect || regionRect.width <= 0 || regionRect.height <= 0) return;
+        const lineW = Math.max(2.5, canvas.width / 420);
+        context.save();
+        context.fillStyle = fillColor;
+        context.strokeStyle = strokeColor;
+        context.lineWidth = lineW;
+        context.fillRect(regionRect.x, regionRect.y, regionRect.width, regionRect.height);
+        context.strokeRect(regionRect.x, regionRect.y, regionRect.width, regionRect.height);
+
+        if (labelText) {
+            const fontPx = Math.max(13, Math.round(canvas.width / 54));
+            context.font = `600 ${fontPx}px system-ui, -apple-system, sans-serif`;
+            const padX = Math.round(fontPx * 0.55);
+            const boxH = Math.round(fontPx * 1.48);
+            const textW = Math.ceil(context.measureText(labelText).width);
+            const boxW = textW + padX * 2;
+            const lx = Math.max(0, Math.min(canvas.width - boxW, regionRect.x));
+            const ly = regionRect.y >= boxH + 4 ? regionRect.y - boxH - 4 : Math.min(canvas.height - boxH, regionRect.y + 4);
+            context.fillStyle = strokeColor;
+            context.fillRect(lx, ly, boxW, boxH);
+            context.fillStyle = '#ffffff';
+            context.textBaseline = 'middle';
+            context.fillText(labelText, lx + padX, ly + boxH / 2);
+        }
+        context.restore();
+    };
+
+    const readBoxFromPrefix = (prefix) => {
+        const vals = ['X', 'Y', 'Width', 'Height'].map(s => Number(dialog.querySelector(`#${prefix}${s}`)?.value || ''));
+        if (vals.every(Number.isFinite) && vals[2] > 0 && vals[3] > 0) {
+            return { x: Math.max(0, vals[0]), y: Math.max(0, vals[1]), width: vals[2], height: vals[3] };
+        }
+        return null;
+    };
+
     const drawSelection = () => {
         if (!canvas || !preview.videoWidth || !preview.videoHeight) return;
         const rect = preview.getBoundingClientRect();
@@ -1373,24 +1416,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         context.clearRect(0, 0, canvas.width, canvas.height);
         if (!blurOverlay.hidden) positionBlurOverlay();
         syncLogoOverlay();
-        if (!selectedRect) return;
-        context.fillStyle = pickMode === 'logo'
-            ? 'rgba(124,108,255,.22)'
-            : pickMode === 'custom'
-                ? 'rgba(251,191,36,.22)'
-                : pickMode === 'sub_novoice'
-                    ? 'rgba(56,189,248,.22)'
-                    : 'rgba(45,212,191,.22)';
-        context.strokeStyle = pickMode === 'logo'
-            ? '#9b91ff'
-            : pickMode === 'custom'
-                ? '#fbbf24'
-                : pickMode === 'sub_novoice'
-                    ? '#38bdf8'
-                    : '#2dd4bf';
-        context.lineWidth = Math.max(3, canvas.width / 420);
-        context.fillRect(selectedRect.x, selectedRect.y, selectedRect.width, selectedRect.height);
-        context.strokeRect(selectedRect.x, selectedRect.y, selectedRect.width, selectedRect.height);
+
+        const mainSubBox = pickMode === 'sub' && selectedRect ? selectedRect : readBoxFromPrefix('processBlur');
+        const secSubBox = pickMode === 'sub_novoice' && selectedRect ? selectedRect : readBoxFromPrefix('processSecondarySub');
+        const customBox = pickMode === 'custom' && selectedRect ? selectedRect : readBoxFromPrefix('processCustomBlur');
+
+        drawLabeledRegion(context, mainSubBox, '#ef4444', 'rgba(239,68,68,.18)', 'Chữ chính (Phụ đề)');
+        drawLabeledRegion(context, secSubBox, '#38bdf8', 'rgba(56,189,248,.20)', 'Chữ phụ (Không Voice)');
+        drawLabeledRegion(context, customBox, '#fbbf24', 'rgba(251,191,36,.18)', 'Vùng mờ');
+
+        if (selectedRect && (pickMode === 'logo' || pickMode === 'ocr')) {
+            const label = pickMode === 'logo' ? 'Logo' : 'Vùng OCR';
+            const color = pickMode === 'logo' ? '#9b91ff' : '#2dd4bf';
+            const fill = pickMode === 'logo' ? 'rgba(124,108,255,.20)' : 'rgba(45,212,191,.20)';
+            drawLabeledRegion(context, selectedRect, color, fill, label);
+        }
     };
 
     // CSS layout changes do not fire the video's intrinsic-size resize event.
@@ -2062,11 +2102,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth',
             'processCustomBlurHeight', 'processBlurX', 'processBlurY',
             'processBlurWidth', 'processBlurHeight',
+            'processSecondarySubX', 'processSecondarySubY', 'processSecondarySubWidth', 'processSecondarySubHeight',
+            'processSecondarySubStyle', 'processSecondarySubFontSize',
         ];
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
             boost_gpu: !!dialog.querySelector('#processBoostGpu')?.checked,
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            secondary_sub_blur: dialog.querySelector('#processSecondarySubBlur')?.checked !== false,
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
             source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
@@ -2096,14 +2139,24 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }, 400);
     };
 
-    const applyPresetConfig = (preset, name = '', { statusText = '', markClean = true } = {}) => {
+    const applyPresetConfig = (preset, name = '', { statusText = '', markClean = true, restoreLogo = false } = {}) => {
         if (!preset || typeof preset !== 'object') return;
+        const allowLogoRestore = Boolean(restoreLogo || logoSessionEnabled);
+        if (restoreLogo && (preset.processLogoMode && preset.processLogoMode !== 'none')) {
+            logoSessionEnabled = true;
+        }
         dialog.dataset.presetApplying = '1';
         try {
             Object.entries(preset).forEach(([id, value]) => {
+                if (!allowLogoRestore && (id.startsWith('processLogo') || id === 'logo_data' || id === 'logo_filename')) {
+                    return;
+                }
                 if (id === 'auto_brand_blur') {
                     const el = dialog.querySelector('#processAutoBrandBlur');
                     if (el) el.checked = !!value;
+                } else if (id === 'secondary_sub_blur') {
+                    const el = dialog.querySelector('#processSecondarySubBlur');
+                    if (el) el.checked = value !== false;
                 } else if (id === 'boost_gpu') {
                     const el = dialog.querySelector('#processBoostGpu');
                     if (el) el.checked = !!value;
@@ -2263,7 +2316,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             void persistLastConfigNow(true);
             return;
         }
-        applyPresetConfig(presets[name], name);
+        applyPresetConfig(presets[name], name, { restoreLogo: true });
         void persistLastConfigNow(true);
     };
 
@@ -2389,6 +2442,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
         dialog._logoData = logoData;
         dialog._logoFilename = logoFilename;
+        logoSessionEnabled = true;
         if (logoMode.value !== 'custom') logoMode.value = 'custom';
         if (logoShape && logoShape.value !== 'rect') logoShape.value = 'rect';
         updateLogoFields();
@@ -2777,14 +2831,24 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             }
             autoSecondarySubBtn.disabled = true;
             autoSecondarySubBtn.textContent = 'AI đang dò chữ phụ…';
-            if (secondarySubStatus) secondarySubStatus.textContent = 'Đang nhờ Gemini Vision tìm vị trí chữ phụ / chữ bay trên khung hình…';
+            if (secondarySubStatus) secondarySubStatus.textContent = 'Đang nhờ Gemini Vision loại trừ vùng chữ chính và tìm vùng chữ phụ / chữ bay…';
             try {
+                const mainBox = readBoxFromPrefix('processBlur');
+                const mainZonePct = mainBox
+                    ? {
+                        x: Math.round((mainBox.x / preview.videoWidth) * 100),
+                        y: Math.round((mainBox.y / preview.videoHeight) * 100),
+                        w: Math.round((mainBox.width / preview.videoWidth) * 100),
+                        h: Math.round((mainBox.height / preview.videoHeight) * 100),
+                    }
+                    : { x: 5, y: 70, w: 90, h: 26 };
+
                 const res = await requestJson('/api/assistant', {
                     method: 'POST',
                     timeoutMs: 45000,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        message: 'Tìm vùng chữ phụ / chú thích / thoại bay trên khung hình (KHÔNG phải phụ đề chính ở đáy màn hình). Trả về đúng 4 số phần trăm theo thứ tự: x%, y%, width%, height% (ví dụ: 10, 8, 80, 14). Nếu không thấy chữ phụ nào khác phụ đề đáy, trả lời "khong_co".',
+                        message: `Vùng CHỮ CHÍNH (phụ đề chính) ĐÃ ĐƯỢC XÁC ĐỊNH ở vùng: x=${mainZonePct.x}%, y=${mainZonePct.y}%, width=${mainZonePct.w}%, height=${mainZonePct.h}%.\nHÃY BỎ QUA HOÀN TOÀN chữ nằm trong vùng chữ chính đó!\nChỉ tìm DÒNG CHỮ PHỤ / CHÚ THÍCH / THOẠI BAY CÒN LẠI nằm NGOÀI vùng chữ chính (ví dụ: ở góc trên, giữa màn hình, bên trái/phải, bảng hiệu, chú thích nhân vật). Trả về đúng 4 số phần trăm: x%, y%, width%, height% (ví dụ: 12, 10, 45, 12). Nếu ngoài vùng chữ chính ra không còn chữ nào khác, trả lời đúng chữ "khong_co".`,
                         kind: 'question',
                         mode: 'subtitle',
                         image_data: frameData,
@@ -2799,6 +2863,13 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 const nums = answer.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
                 if (nums.length >= 4 && !/khong_co|không có/i.test(answer)) {
                     const [xp, yp, wp, hp] = nums;
+                    const overlapX = Math.max(0, Math.min(xp + wp, mainZonePct.x + mainZonePct.w) - Math.max(xp, mainZonePct.x));
+                    const overlapY = Math.max(0, Math.min(yp + hp, mainZonePct.y + mainZonePct.h) - Math.max(yp, mainZonePct.y));
+                    const overlapRatio = (overlapX * overlapY) / Math.max(1, wp * hp);
+                    if (overlapRatio > 0.55) {
+                        if (secondarySubStatus) secondarySubStatus.textContent = 'AI chỉ thấy chữ nằm trong vùng chữ chính phía dưới, chưa thấy chữ phụ ở vị trí khác. Hãy tua tới đoạn có chữ bay rồi thử lại hoặc tự kéo vùng.';
+                        return;
+                    }
                     const rx = Math.round((Math.max(0, Math.min(95, xp)) / 100) * preview.videoWidth);
                     const ry = Math.round((Math.max(0, Math.min(95, yp)) / 100) * preview.videoHeight);
                     const rw = Math.round((Math.max(5, Math.min(100 - xp, wp)) / 100) * preview.videoWidth);
@@ -2810,9 +2881,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     pickMode = 'sub_novoice';
                     syncPickButtons();
                     syncSelectionFromFields();
-                    if (secondarySubStatus) secondarySubStatus.textContent = `AI đã chọn vùng chữ phụ (${rx}, ${ry}, ${rw}×${rh}). Bấm "Quét & dịch thử" hoặc chỉnh lại khung xanh dương.`;
+                    if (secondarySubStatus) secondarySubStatus.textContent = `AI đã chọn vùng chữ phụ ngoài vùng chính (${rx}, ${ry}, ${rw}×${rh}). Bấm "Quét & dịch thử" hoặc kéo chỉnh lại khung xanh dương.`;
                 } else {
-                    if (secondarySubStatus) secondarySubStatus.textContent = 'AI chưa thấy chữ phụ ở khung hình hiện tại. Bạn có thể tua tới đoạn có chữ bay rồi thử lại hoặc tự kéo vùng.';
+                    if (secondarySubStatus) secondarySubStatus.textContent = 'Ngoài vùng chữ chính ra AI chưa thấy chữ phụ ở khung hình này. Tua tới đoạn có chữ bay rồi thử lại hoặc tự kéo vùng.';
                 }
             } catch (err) {
                 if (secondarySubStatus) secondarySubStatus.textContent = err?.message || 'Chưa kết nối Gemini để AI tự dò vùng.';
@@ -3157,6 +3228,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 : null,
             secondary_sub_region: secSubRegion,
             secondary_sub_blur: !!dialog.querySelector('#processSecondarySubBlur')?.checked,
+            secondary_sub_style: value('processSecondarySubStyle') || 'box',
+            secondary_sub_font_size: value('processSecondarySubFontSize') ? Number(value('processSecondarySubFontSize')) : null,
             secondary_subtitles: finalSecondarySubtitles.length ? finalSecondarySubtitles : null,
             blur_intervals,
             logo_mode: value('processLogoMode') || 'none',
