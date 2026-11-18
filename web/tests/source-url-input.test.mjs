@@ -25,6 +25,7 @@ test('missing library rows recover the selected Bilibili episode and legacy AV I
 
 test('all public platforms normalize and route between video and channel mode safely', () => {
   assert.equal(prepareSourceInput('Xem video https://youtu.be/dQw4w9WgXcQ nhé'), 'https://youtu.be/dQw4w9WgXcQ');
+  assert.equal(prepareSourceInput('49 笔记 😆 http://xhslink.com/a/xyz123，复制本条信息打开【小红书】'), 'http://xhslink.com/a/xyz123');
   assert.equal(prepareSourceInput('youtube.com/watch?v=dQw4w9WgXcQ'), 'https://youtube.com/watch?v=dQw4w9WgXcQ');
   for (const url of [
     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -35,11 +36,14 @@ test('all public platforms normalize and route between video and channel mode sa
     'https://www.instagram.com/reel/C123456/',
     'https://x.com/user/status/1800000000',
     'https://xhslink.com/a/12345',
+    'https://www.xiaohongshu.com/explore/66abcdef123456',
+    'https://www.xiaohongshu.com/discovery/item/66abcdef123456',
   ]) {
     assert.equal(isDirectVideoInput(url), true, url);
   }
   assert.equal(isDirectVideoInput('https://www.youtube.com/@handle'), false);
   assert.equal(isDirectVideoInput('https://www.youtube.com/playlist?list=PL123'), false);
   assert.equal(isDirectVideoInput('https://www.tiktok.com/@creator'), false);
+  assert.equal(isDirectVideoInput('https://www.xiaohongshu.com/user/profile/5f123456'), false);
   assert.equal(isDirectVideoInput('http://127.0.0.1:8080/video.mp4'), false);
 });

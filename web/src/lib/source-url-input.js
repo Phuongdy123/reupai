@@ -15,7 +15,7 @@ export function prepareSourceInput(value) {
   if (/^https?%3a%2f%2f/i.test(text)) {
     try { text = decodeURIComponent(text); } catch { return text; }
   }
-  const allLinks = [...new Set((text.match(/https?:\/\/[^\s<>"“”]+/gi) || [])
+  const allLinks = [...new Set((text.match(/https?:\/\/[^\s<>"“”\u3000-\u303f\uff00-\uffef\u4e00-\u9fff]+/gi) || [])
     .map(link => link.replace(/[.,，。!！;；)\]}》」』]+$/, '')))].filter(link => {
       try {
         const u = new URL(link);
@@ -67,7 +67,7 @@ export function isDirectVideoInput(value) {
       return host === 't.co' || /\/status\/\d+/i.test(path);
     }
     if (/(^|\.)(?:xiaohongshu\.com|xhslink\.com)$/.test(host)) {
-      return host === 'xhslink.com' || /^\/(?:explore|discovery\/item)\/[^/]+/i.test(path);
+      return /(^|\.)xhslink\.com$/.test(host) || /^\/(?:explore|discovery\/item|note)\/[^/]+/i.test(path);
     }
     if (/(^|\.)vimeo\.com$/.test(host)) return /^\/\d+/.test(path);
     if (/(^|\.)twitch\.tv$/.test(host)) return /^\/videos\/\d+|^\/[^/]+\/clip\//i.test(path) || host.startsWith('clips.');

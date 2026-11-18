@@ -95,6 +95,7 @@ class VideoUrlTests(unittest.TestCase):
         assert is_safe_public_url('https://localhost/admin') is False
         assert is_safe_public_url('http://192.168.1.10/video.mp4') is False
         assert normalize_source_url('Xem https://youtu.be/dQw4w9WgXcQ nha', allow_generic=True) == 'https://youtu.be/dQw4w9WgXcQ'
+        assert normalize_source_url('49 笔记 😆 http://xhslink.com/a/xyz123，复制本条信息', allow_generic=True) == 'http://xhslink.com/a/xyz123'
         assert video_identity('https://youtu.be/dQw4w9WgXcQ', allow_generic=True) == 'yt_dQw4w9WgXcQ'
         assert video_identity('https://www.tiktok.com/@user/video/732109876543210', allow_generic=True) == 'tt_732109876543210'
         assert normalize_source_url('vimeo.com/123456', allow_generic=True) == 'https://vimeo.com/123456'

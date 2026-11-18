@@ -118,7 +118,7 @@ def _plain(value, *, allow_generic=False):
     markdown = re.fullmatch(r'\[[^\]]*\]\((https?://[^\s]+)\)', text, re.I)
     if markdown:
         return markdown.group(1)
-    candidates = re.findall(r'https?://[^\s<>"“”]+', text, re.I)
+    candidates = re.findall(r'https?://[^\s<>"“”\u3000-\u303f\uff00-\uffef\u4e00-\u9fff]+', text, re.I)
     candidates = list(dict.fromkeys(item.rstrip('.,，。!！;；)]}》」』') for item in candidates))
     supported = [item for item in candidates if source_platform(item) != 'unknown']
     if len(supported) > 1:
