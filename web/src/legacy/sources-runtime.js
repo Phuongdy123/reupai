@@ -3,6 +3,22 @@
 import { prepareSourceInput, isDirectVideoInput, isPublicSourceHost, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
 import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
+import {
+  readPresetsLocal,
+  readLastConfigLocal,
+  readActivePresetPref,
+  buildProcessPayloadFromSavedPreset,
+} from "../lib/process-config-store.js";
+import {
+  formatEpisodeTopic,
+  mapFilesToEpisodeSlots,
+  fileToThumbnailDataUrl,
+  readSavedSocialTarget,
+  readBatchAutoPublishPrefs,
+  writeBatchAutoPublishPrefs,
+  generateAndPublishEpisode,
+} from "../lib/batch-auto-publish.js";
+import { youtubeRequest, getSignedInAccountId } from "../lib/youtube-client.js";
 
 function threePlatformSvgs(size = 13) {
   return [
@@ -8032,6 +8048,17 @@ function ensureBatchBar() {
 
         <button
             type="button"
+            class="batch-action batch-auto-publish-trigger"
+            id="batchAutoPublishBtn"
+            title="Xử lý hàng loạt + AI đề xuất nội dung Tập 1..N + Gắn ảnh bìa từng tập + Tự động đăng MXH 100%"
+        >
+            ${PROCESSING_STAR_BORDER}
+            <span class="three-platform-icons" aria-hidden="true">${threePlatformSvgs(12)}</span>
+            <span>Xử lý &amp; Tự động đăng</span>
+        </button>
+
+        <button
+            type="button"
             class="secondary batch-action"
             id="batchDownload"
         >
@@ -8100,6 +8127,13 @@ function ensureBatchBar() {
             'voiceover'
         );
     };
+
+    const autoPublishBtn = document.getElementById('batchAutoPublishBtn');
+    if (autoPublishBtn) {
+        autoPublishBtn.onclick = () => {
+            openBatchAutoPublishDialog();
+        };
+    }
 
 
     document
@@ -8352,6 +8386,23 @@ function renderBatchBar(
 }
 
 
+function resolveSavedBatchProcessConfig(presetName = '') {
+    const baseDefaults = processConfigDefaults();
+    const presets = readPresetsLocal(localStorage);
+    if (presetName && presets[presetName]) {
+        return buildProcessPayloadFromSavedPreset(presets[presetName], baseDefaults);
+    }
+    const activePref = readActivePresetPref(localStorage);
+    const lastSaved = activePref.autoRemember ? readLastConfigLocal(localStorage) : null;
+    if (lastSaved?.config) {
+        return buildProcessPayloadFromSavedPreset(lastSaved.config, baseDefaults);
+    }
+    if (activePref.name && presets[activePref.name]) {
+        return buildProcessPayloadFromSavedPreset(presets[activePref.name], baseDefaults);
+    }
+    return baseDefaults;
+}
+
 async function runSelectedQueue(
     mode
 ) {
@@ -8374,6 +8425,8 @@ async function runSelectedQueue(
     renderBatchBar(
         `0/${videos.length}`
     );
+
+    const batchProcessConfig = resolveSavedBatchProcessConfig();
 
     try {
 
@@ -8425,7 +8478,8 @@ async function runSelectedQueue(
                 await processVideo(
                     video,
                     card,
-                    mode
+                    mode,
+                    batchProcessConfig
                 );
 
             } catch (
@@ -8462,6 +8516,600 @@ async function runSelectedQueue(
 
         saveUiState();
     }
+}
+
+let batchAutoPublishStopRequested = false;
+
+function ensureBatchAutoPublishDialog() {
+    let dialog = document.getElementById('batchAutoPublishDialog');
+    if (dialog) return dialog;
+
+    dialog = document.createElement('dialog');
+    dialog.id = 'batchAutoPublishDialog';
+    dialog.className = 'batch-auto-publish-dialog';
+    dialog.innerHTML = `
+        <form id="batchAutoPublishForm" method="dialog" novalidate>
+            <header class="batch-ap-header">
+                <div>
+                    <small class="batch-ap-eyebrow">TỰ ĐỘNG HÓA SERIES 100%</small>
+                    <h2>Xử lý hàng loạt &amp; Tự động đăng MXH</h2>
+                    <p id="batchApSubtitle">Cấu hình một lần cho cả series (Tập 1, 2, 3…), chọn ảnh bìa hàng loạt và tự động đăng lần lượt sau khi xử lý xong.</p>
+                </div>
+                <button type="button" class="modern-icon-btn" id="batchApCloseBtn" aria-label="Đóng">×</button>
+            </header>
+
+            <div class="batch-ap-body">
+                <div class="batch-ap-config-col">
+                    <section class="batch-ap-section">
+                        <h3>1. Chế độ xử lý &amp; cấu hình video</h3>
+                        <div class="batch-ap-grid-2">
+                            <label>
+                                <span>Chế độ xuất hàng loạt</span>
+                                <select id="batchApMode">
+                                    <option value="voiceover">Voice + Phụ đề (Lồng tiếng AI)</option>
+                                    <option value="subtitle">Chỉ Phụ đề (Sub)</option>
+                                </select>
+                            </label>
+                            <label>
+                                <span>Preset cấu hình (Giọng, Sub, Logo, Mờ)</span>
+                                <select id="batchApPreset">
+                                    <option value="">Tự động dùng cấu hình gần nhất</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="batch-ap-checkbox">
+                            <input type="checkbox" id="batchApSkipProcessed" checked>
+                            <span>Bỏ qua bước render nếu tập đó đã có sẵn thành phẩm tương ứng</span>
+                        </label>
+                    </section>
+
+                    <section class="batch-ap-section">
+                        <h3>2. Prompt Series &amp; Đánh số Tập tự động</h3>
+                        <label>
+                            <span>Chủ đề / Prompt chung cho AI (tự tăng Tập 1, 2, 3… hoặc dùng <code>{ep}</code>)</span>
+                            <input
+                                type="text"
+                                id="batchApBasePrompt"
+                                placeholder="Ví dụ: Xuyên không dị giới tập 1 (hoặc Xuyên không làm thần)"
+                                maxlength="300"
+                            >
+                        </label>
+                        <div class="batch-ap-grid-2">
+                            <label>
+                                <span>Bắt đầu từ Tập số</span>
+                                <input type="number" id="batchApStartEp" min="1" max="9999" value="1">
+                            </label>
+                            <label>
+                                <span>Thứ tự danh sách tập</span>
+                                <select id="batchApOrder">
+                                    <option value="selected">Giữ nguyên thứ tự trên danh sách</option>
+                                    <option value="reverse">Đảo ngược (Cũ → Mới / Tập 1 → Tập N)</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="batch-ap-checkbox">
+                            <input type="checkbox" id="batchApUseAi" checked>
+                            <span>Dùng AI Gemini tự viết Tiêu đề, Mô tả &amp; Hashtag riêng cho từng tập</span>
+                        </label>
+                    </section>
+
+                    <section class="batch-ap-section">
+                        <h3>3. Nền tảng tự động đăng sau khi xử lý xong từng tập</h3>
+                        <div class="batch-ap-platforms">
+                            <div class="batch-ap-platform-card">
+                                <label class="batch-ap-checkbox">
+                                    <input type="checkbox" id="batchApPlatYoutube" checked>
+                                    <strong>YouTube</strong>
+                                    <span class="batch-ap-conn-badge" id="batchApYtStatus">Đang kiểm tra…</span>
+                                </label>
+                                <div class="batch-ap-plat-options">
+                                    <label>
+                                        <span>Chế độ hiển thị YouTube</span>
+                                        <select id="batchApYtPrivacy">
+                                            <option value="public">Công khai (Public)</option>
+                                            <option value="unlisted">Không công khai (Unlisted)</option>
+                                            <option value="private">Riêng tư (Private)</option>
+                                        </select>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="batch-ap-platform-card">
+                                <label class="batch-ap-checkbox">
+                                    <input type="checkbox" id="batchApPlatFacebook">
+                                    <strong>Facebook Page</strong>
+                                    <span class="batch-ap-conn-badge" id="batchApFbStatus">Chưa lưu</span>
+                                </label>
+                            </div>
+
+                            <div class="batch-ap-platform-card">
+                                <label class="batch-ap-checkbox">
+                                    <input type="checkbox" id="batchApPlatTiktok">
+                                    <strong>TikTok</strong>
+                                    <span class="batch-ap-conn-badge" id="batchApTtStatus">Chưa lưu</span>
+                                </label>
+                            </div>
+                        </div>
+                        <small class="batch-ap-hint">Mẹo: Kết nối sẵn kênh YouTube / Fanpage Facebook / TikTok trong mục Đăng thành phẩm một lần, hệ thống sẽ tự đăng 100% không cần xác nhận lại.</small>
+                    </section>
+                </div>
+
+                <div class="batch-ap-episodes-col">
+                    <div class="batch-ap-episodes-header">
+                        <div>
+                            <h3>4. Danh sách tập &amp; Ảnh bìa từng tập (<span id="batchApEpCount">0</span> tập)</h3>
+                            <p>Chọn 1 lần nhiều ảnh (ví dụ 6 ảnh cho Tập 1 → 6) hoặc bấm vào từng tập để đổi ảnh riêng.</p>
+                        </div>
+                        <div class="batch-ap-thumb-actions">
+                            <label class="btn secondary batch-ap-multi-upload">
+                                📁 Chọn nhiều ảnh bìa (Tập 1 → N)
+                                <input type="file" id="batchApMultiThumbInput" accept="image/jpeg,image/png,image/webp" multiple hidden>
+                            </label>
+                            <button type="button" class="btn secondary" id="batchApClearThumbsBtn">Xóa ảnh</button>
+                        </div>
+                    </div>
+
+                    <div id="batchApOverallStatus" class="batch-ap-overall-status" hidden></div>
+                    <div id="batchApEpisodeList" class="batch-ap-episode-list"></div>
+                </div>
+            </div>
+
+            <footer class="batch-ap-footer">
+                <span id="batchApFooterHint">Sẵn sàng chạy tuần tự: Xử lý xong Tập 1 → Tự đăng MXH Tập 1 → Chuyển sang Tập 2…</span>
+                <div class="batch-ap-footer-btns">
+                    <button type="button" class="btn secondary" id="batchApStopBtn" hidden>Dừng sau bước hiện tại</button>
+                    <button type="button" class="btn secondary" id="batchApCancelBtn">Đóng</button>
+                    <button type="submit" class="btn primary" id="batchApStartBtn">🚀 Bắt đầu tự động 100%</button>
+                </div>
+            </footer>
+        </form>
+    `;
+    document.body.appendChild(dialog);
+    return dialog;
+}
+
+async function openBatchAutoPublishDialog() {
+    const rawVideos = selectedVideos();
+    if (!rawVideos.length) {
+        alert('Hãy tích chọn ít nhất 1 video trên danh sách trước khi mở Xử lý & Tự động đăng.');
+        return;
+    }
+
+    const dialog = ensureBatchAutoPublishDialog();
+    const form = dialog.querySelector('#batchAutoPublishForm');
+    const modeSelect = dialog.querySelector('#batchApMode');
+    const presetSelect = dialog.querySelector('#batchApPreset');
+    const skipProcessedInput = dialog.querySelector('#batchApSkipProcessed');
+    const basePromptInput = dialog.querySelector('#batchApBasePrompt');
+    const startEpInput = dialog.querySelector('#batchApStartEp');
+    const orderSelect = dialog.querySelector('#batchApOrder');
+    const useAiInput = dialog.querySelector('#batchApUseAi');
+    const platYtInput = dialog.querySelector('#batchApPlatYoutube');
+    const ytPrivacySelect = dialog.querySelector('#batchApYtPrivacy');
+    const platFbInput = dialog.querySelector('#batchApPlatFacebook');
+    const platTtInput = dialog.querySelector('#batchApPlatTiktok');
+    const ytStatusBadge = dialog.querySelector('#batchApYtStatus');
+    const fbStatusBadge = dialog.querySelector('#batchApFbStatus');
+    const ttStatusBadge = dialog.querySelector('#batchApTtStatus');
+    const multiThumbInput = dialog.querySelector('#batchApMultiThumbInput');
+    const clearThumbsBtn = dialog.querySelector('#batchApClearThumbsBtn');
+    const epCountEl = dialog.querySelector('#batchApEpCount');
+    const epListEl = dialog.querySelector('#batchApEpisodeList');
+    const overallStatusEl = dialog.querySelector('#batchApOverallStatus');
+    const footerHintEl = dialog.querySelector('#batchApFooterHint');
+    const startBtn = dialog.querySelector('#batchApStartBtn');
+    const stopBtn = dialog.querySelector('#batchApStopBtn');
+    const closeBtn = dialog.querySelector('#batchApCloseBtn');
+    const cancelBtn = dialog.querySelector('#batchApCancelBtn');
+
+    // Khôi phục cấu hình lần trước
+    const savedPrefs = readBatchAutoPublishPrefs(localStorage);
+    if (savedPrefs.mode === 'subtitle' || savedPrefs.mode === 'voiceover') {
+        modeSelect.value = savedPrefs.mode;
+    }
+    if (typeof savedPrefs.basePrompt === 'string') {
+        basePromptInput.value = savedPrefs.basePrompt;
+    }
+    if (Number.isFinite(Number(savedPrefs.startEp)) && Number(savedPrefs.startEp) >= 1) {
+        startEpInput.value = String(Math.floor(Number(savedPrefs.startEp)));
+    }
+    if (savedPrefs.order === 'reverse' || savedPrefs.order === 'selected') {
+        orderSelect.value = savedPrefs.order;
+    }
+    if (typeof savedPrefs.useAi === 'boolean') {
+        useAiInput.checked = savedPrefs.useAi;
+    }
+    if (typeof savedPrefs.ytPrivacy === 'string') {
+        ytPrivacySelect.value = savedPrefs.ytPrivacy;
+    }
+
+    // Nạp danh sách Preset
+    const presets = readPresetsLocal(localStorage);
+    const activePref = readActivePresetPref(localStorage);
+    presetSelect.innerHTML = '<option value="">Tự động dùng cấu hình gần nhất</option>';
+    Object.keys(presets).sort((a, b) => a.localeCompare(b, 'vi')).forEach((name) => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = `Preset: ${name}`;
+        presetSelect.appendChild(opt);
+    });
+    if (activePref.name && presets[activePref.name]) {
+        presetSelect.value = activePref.name;
+    }
+
+    // Trạng thái kết nối MXH
+    let youtubeConn = null;
+    const fbSaved = readSavedSocialTarget(localStorage, 'facebook');
+    const ttSaved = readSavedSocialTarget(localStorage, 'tiktok');
+
+    fbStatusBadge.textContent = fbSaved.connected ? `Đã nối: ${fbSaved.label}` : 'Chưa lưu Fanpage';
+    fbStatusBadge.dataset.connected = fbSaved.connected ? '1' : '0';
+    platFbInput.checked = Boolean(savedPrefs.platFacebook && fbSaved.connected);
+
+    ttStatusBadge.textContent = ttSaved.connected ? `Đã nối: ${ttSaved.label}` : 'Chưa lưu TikTok';
+    ttStatusBadge.dataset.connected = ttSaved.connected ? '1' : '0';
+    platTtInput.checked = Boolean(savedPrefs.platTiktok && ttSaved.connected);
+
+    ytStatusBadge.textContent = 'Đang kiểm tra kênh…';
+    ytStatusBadge.dataset.connected = '0';
+    void (async () => {
+        try {
+            const conn = await youtubeRequest(window.reupEngineClient, 'connection');
+            if (conn?.connected && conn?.channel?.id) {
+                youtubeConn = conn;
+                ytStatusBadge.textContent = `Kênh: ${conn.channel.title || conn.channel.id}`;
+                ytStatusBadge.dataset.connected = '1';
+                if (savedPrefs.platYoutube !== false) platYtInput.checked = true;
+            } else {
+                ytStatusBadge.textContent = 'Chưa kết nối kênh YouTube';
+                ytStatusBadge.dataset.connected = '0';
+            }
+        } catch {
+            ytStatusBadge.textContent = 'Chưa kết nối YouTube';
+            ytStatusBadge.dataset.connected = '0';
+        }
+    })();
+
+    // Danh sách ảnh bìa và trạng thái từng tập
+    let thumbnailSlots = Array.from({ length: rawVideos.length }, () => null);
+    let thumbnailDataUrls = Array.from({ length: rawVideos.length }, () => null);
+    const episodeStates = new Map();
+
+    const getOrderedVideos = () => {
+        const list = [...rawVideos];
+        if (orderSelect.value === 'reverse') {
+            list.reverse();
+        }
+        return list;
+    };
+
+    const persistCurrentPrefs = () => {
+        writeBatchAutoPublishPrefs(localStorage, {
+            mode: modeSelect.value,
+            basePrompt: basePromptInput.value.trim(),
+            startEp: Number(startEpInput.value || 1),
+            order: orderSelect.value,
+            useAi: useAiInput.checked,
+            platYoutube: platYtInput.checked,
+            ytPrivacy: ytPrivacySelect.value,
+            platFacebook: platFbInput.checked,
+            platTiktok: platTtInput.checked,
+        });
+    };
+
+    const renderEpisodeRows = () => {
+        const ordered = getOrderedVideos();
+        const startEp = Math.max(1, Number(startEpInput.value || 1));
+        const basePrompt = basePromptInput.value.trim();
+        epCountEl.textContent = String(ordered.length);
+        epListEl.innerHTML = '';
+
+        ordered.forEach((video, idx) => {
+            const epNum = startEp + idx;
+            const expectedTopic = formatEpisodeTopic(basePrompt, epNum, video.title || video.video_id);
+            const thumbUrl = thumbnailDataUrls[idx] || video.thumbnail || '';
+            const hasCustomThumb = Boolean(thumbnailDataUrls[idx]);
+            const stateInfo = episodeStates.get(video.video_id) || {
+                status: 'idle',
+                text: 'Chờ chạy',
+                links: [],
+            };
+
+            const row = document.createElement('div');
+            row.className = `batch-ap-ep-row is-${stateInfo.status}`;
+            row.dataset.videoId = video.video_id;
+
+            const linksHtml = Array.isArray(stateInfo.links) && stateInfo.links.length
+                ? `<div class="batch-ap-ep-links">${stateInfo.links
+                    .map((item) => `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.label)} ↗</a>`)
+                    .join('')}</div>`
+                : '';
+
+            row.innerHTML = `
+                <div class="batch-ap-ep-badge">Tập ${epNum}</div>
+                <div class="batch-ap-ep-thumb-wrap">
+                    ${thumbUrl
+                        ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb">`
+                        : `<div class="batch-ap-ep-thumb-empty">Chưa có ảnh</div>`}
+                    <label class="batch-ap-ep-thumb-btn" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
+                        <span>${hasCustomThumb ? 'Đổi ảnh' : '+ Ảnh bìa'}</span>
+                        <input type="file" accept="image/jpeg,image/png,image/webp" data-slot-index="${idx}" hidden>
+                    </label>
+                </div>
+                <div class="batch-ap-ep-info">
+                    <strong class="batch-ap-ep-topic">${escapeHtml(expectedTopic)}</strong>
+                    <span class="batch-ap-ep-origin" title="${escapeHtml(video.title || video.video_id)}">Nguồn: ${escapeHtml(video.title || video.video_id)}</span>
+                    ${hasCustomThumb && thumbnailSlots[idx]?.name
+                        ? `<small class="batch-ap-ep-filename">Ảnh bìa: ${escapeHtml(thumbnailSlots[idx].name)}</small>`
+                        : '<small class="batch-ap-ep-filename is-muted">Mặc định: khung hình video (hoặc bấm Chọn nhiều ảnh)</small>'}
+                    ${linksHtml}
+                </div>
+                <div class="batch-ap-ep-status">
+                    <span class="batch-ap-status-pill is-${stateInfo.status}">${escapeHtml(stateInfo.text)}</span>
+                </div>
+            `;
+
+            const singleInput = row.querySelector('input[type="file"]');
+            if (singleInput) {
+                singleInput.onchange = async (ev) => {
+                    const file = ev.target.files?.[0];
+                    if (!file) return;
+                    thumbnailSlots[idx] = file;
+                    thumbnailDataUrls[idx] = await fileToThumbnailDataUrl(file);
+                    renderEpisodeRows();
+                };
+            }
+
+            epListEl.appendChild(row);
+        });
+    };
+
+    basePromptInput.oninput = () => {
+        persistCurrentPrefs();
+        renderEpisodeRows();
+    };
+    startEpInput.oninput = () => {
+        persistCurrentPrefs();
+        renderEpisodeRows();
+    };
+    orderSelect.onchange = () => {
+        persistCurrentPrefs();
+        renderEpisodeRows();
+    };
+    modeSelect.onchange = persistCurrentPrefs;
+    useAiInput.onchange = persistCurrentPrefs;
+    platYtInput.onchange = persistCurrentPrefs;
+    ytPrivacySelect.onchange = persistCurrentPrefs;
+    platFbInput.onchange = persistCurrentPrefs;
+    platTtInput.onchange = persistCurrentPrefs;
+
+    multiThumbInput.value = '';
+    multiThumbInput.onchange = async (event) => {
+        const files = event.target.files;
+        if (!files || !files.length) return;
+        const total = getOrderedVideos().length;
+        thumbnailSlots = mapFilesToEpisodeSlots(files, total, thumbnailSlots);
+        overallStatusEl.hidden = false;
+        overallStatusEl.textContent = `Đang nạp ${Math.min(files.length, total)} ảnh bìa cho Tập ${startEpInput.value || 1} → Tập ${Number(startEpInput.value || 1) + total - 1}…`;
+        thumbnailDataUrls = await Promise.all(
+            thumbnailSlots.map((file, idx) => (file ? fileToThumbnailDataUrl(file) : Promise.resolve(thumbnailDataUrls[idx] || null))),
+        );
+        overallStatusEl.textContent = `✓ Đã gán ${thumbnailDataUrls.filter(Boolean).length}/${total} ảnh bìa theo đúng thứ tự Tập.`;
+        renderEpisodeRows();
+    };
+
+    clearThumbsBtn.onclick = () => {
+        thumbnailSlots = Array.from({ length: rawVideos.length }, () => null);
+        thumbnailDataUrls = Array.from({ length: rawVideos.length }, () => null);
+        multiThumbInput.value = '';
+        overallStatusEl.hidden = true;
+        renderEpisodeRows();
+    };
+
+    const closeDialog = () => {
+        if (batchRunning) return;
+        dialog.close();
+    };
+    closeBtn.onclick = closeDialog;
+    cancelBtn.onclick = closeDialog;
+
+    stopBtn.onclick = () => {
+        batchAutoPublishStopRequested = true;
+        stopBtn.disabled = true;
+        stopBtn.textContent = 'Đang chờ dừng sau tập hiện tại…';
+        footerHintEl.textContent = 'Hệ thống sẽ dừng lại ngay khi hoàn tất bước đang chạy.';
+    };
+
+    form.onsubmit = async (event) => {
+        event.preventDefault();
+        if (batchRunning) return;
+
+        const ordered = getOrderedVideos();
+        if (!ordered.length) return;
+
+        const mode = modeSelect.value || 'voiceover';
+        const selectedPreset = presetSelect.value || '';
+        const skipProcessed = Boolean(skipProcessedInput.checked);
+        const basePrompt = basePromptInput.value.trim();
+        const startEp = Math.max(1, Number(startEpInput.value || 1));
+        const useAiPrompt = Boolean(useAiInput.checked);
+        const platforms = {
+            youtube: Boolean(platYtInput.checked),
+            facebook: Boolean(platFbInput.checked),
+            tiktok: Boolean(platTtInput.checked),
+        };
+        const hasAnyPlatform = platforms.youtube || platforms.facebook || platforms.tiktok;
+
+        persistCurrentPrefs();
+
+        let accountId = 'local';
+        if (hasAnyPlatform || useAiPrompt) {
+            try {
+                accountId = await getSignedInAccountId();
+            } catch (authErr) {
+                if (hasAnyPlatform) {
+                    overallStatusEl.hidden = false;
+                    overallStatusEl.textContent = authErr?.message || 'Hãy đăng nhập tài khoản ReupAI trước khi tự động đăng MXH.';
+                    return;
+                }
+            }
+        }
+
+        if (platforms.youtube && (!youtubeConn?.connected || !youtubeConn?.channel?.id)) {
+            try {
+                const conn = await youtubeRequest(window.reupEngineClient, 'connection');
+                if (conn?.connected && conn?.channel?.id) {
+                    youtubeConn = conn;
+                } else {
+                    overallStatusEl.hidden = false;
+                    overallStatusEl.textContent = 'Bạn đã tích chọn YouTube nhưng chưa kết nối kênh YouTube. Hãy kết nối kênh hoặc bỏ tích YouTube.';
+                    return;
+                }
+            } catch (err) {
+                overallStatusEl.hidden = false;
+                overallStatusEl.textContent = err?.message || 'Chưa kết nối được kênh YouTube.';
+                return;
+            }
+        }
+
+        batchRunning = true;
+        batchAutoPublishStopRequested = false;
+        startBtn.disabled = true;
+        cancelBtn.disabled = true;
+        closeBtn.disabled = true;
+        stopBtn.hidden = false;
+        stopBtn.disabled = false;
+        stopBtn.textContent = 'Dừng sau tập hiện tại';
+        overallStatusEl.hidden = false;
+
+        const batchProcessConfig = resolveSavedBatchProcessConfig(selectedPreset);
+        const youtubeApi = (path, opts) => youtubeRequest(window.reupEngineClient, path, opts);
+
+        let completedCount = 0;
+
+        try {
+            for (let index = 0; index < ordered.length; index += 1) {
+                if (batchAutoPublishStopRequested) break;
+
+                const video = ordered[index];
+                const epNum = startEp + index;
+                const thumbDataUrl = thumbnailDataUrls[index] || null;
+                const stepPrefix = `Tập ${epNum} (${index + 1}/${ordered.length})`;
+
+                const updateEpisodeState = (status, text, links = []) => {
+                    episodeStates.set(video.video_id, { status, text, links });
+                    renderEpisodeRows();
+                    renderBatchBar(`${stepPrefix} · ${text}`);
+                    overallStatusEl.textContent = `${stepPrefix}: ${text}`;
+                };
+
+                let card = document.querySelector(
+                    `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"]`,
+                );
+                if (!card) {
+                    renderVideos();
+                    card = document.querySelector(
+                        `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"]`,
+                    );
+                }
+
+                const alreadyHasOutput = mode === 'voiceover'
+                    ? Boolean(video.has_voice_result)
+                    : Boolean(video.has_subtitle_result);
+
+                if (!(skipProcessed && alreadyHasOutput)) {
+                    updateEpisodeState('running', 'Đang xử lý video…');
+                    if (card) {
+                        await processVideo(video, card, mode, batchProcessConfig);
+                    }
+                    const finishedOk = mode === 'voiceover'
+                        ? Boolean(video.has_voice_result)
+                        : Boolean(video.has_subtitle_result);
+                    if (!finishedOk) {
+                        updateEpisodeState('error', 'Xử lý video gặp lỗi');
+                        continue;
+                    }
+                }
+
+                if (batchAutoPublishStopRequested) {
+                    updateEpisodeState('complete', 'Đã xử lý xong (Đã dừng trước khi đăng)');
+                    break;
+                }
+
+                if (hasAnyPlatform) {
+                    const pubOutcome = await generateAndPublishEpisode({
+                        youtubeApi,
+                        accountId,
+                        video,
+                        channel: video.channel_key || 'default',
+                        mode,
+                        episodeNumber: epNum,
+                        totalEpisodes: ordered.length,
+                        basePrompt,
+                        useAiPrompt,
+                        thumbnailDataUrl: thumbDataUrl,
+                        platforms,
+                        youtubeConfig: {
+                            channelId: youtubeConn?.channel?.id || '',
+                            privacy: ytPrivacySelect.value || 'public',
+                            madeForKids: false,
+                        },
+                        facebookSaved: readSavedSocialTarget(localStorage, 'facebook'),
+                        tiktokSaved: readSavedSocialTarget(localStorage, 'tiktok'),
+                        onStage: (stageText) => {
+                            updateEpisodeState('running', stageText);
+                        },
+                    });
+
+                    const links = [];
+                    if (pubOutcome.results.youtube?.url) {
+                        links.push({ label: 'YouTube', url: pubOutcome.results.youtube.url });
+                    }
+                    if (pubOutcome.results.facebook?.url) {
+                        links.push({ label: 'Facebook', url: pubOutcome.results.facebook.url });
+                    }
+                    if (pubOutcome.results.tiktok?.url) {
+                        links.push({ label: 'TikTok', url: pubOutcome.results.tiktok.url });
+                    }
+
+                    if (pubOutcome.errors.length) {
+                        updateEpisodeState(
+                            links.length ? 'complete' : 'error',
+                            links.length
+                                ? `Đã đăng 1 phần (${pubOutcome.errors.join('; ')})`
+                                : pubOutcome.errors.join(' · '),
+                            links,
+                        );
+                    } else {
+                        completedCount += 1;
+                        updateEpisodeState('complete', `✓ Hoàn tất (${pubOutcome.metadata.title})`, links);
+                    }
+                } else {
+                    completedCount += 1;
+                    updateEpisodeState('complete', '✓ Đã xử lý xong video');
+                }
+            }
+
+            overallStatusEl.textContent = batchAutoPublishStopRequested
+                ? `Đã dừng theo yêu cầu. Hoàn tất ${completedCount}/${ordered.length} tập.`
+                : `🎉 Hoàn tất tự động hóa ${completedCount}/${ordered.length} tập!`;
+            footerHintEl.textContent = overallStatusEl.textContent;
+        } finally {
+            batchRunning = false;
+            startBtn.disabled = false;
+            cancelBtn.disabled = false;
+            closeBtn.disabled = false;
+            stopBtn.hidden = true;
+            renderBatchBar('Hoàn tất');
+            setTimeout(() => renderBatchBar(), 2000);
+            await hydrateCurrentLibraryMeta();
+            saveUiState();
+        }
+    };
+
+    overallStatusEl.hidden = true;
+    renderEpisodeRows();
+    dialog.showModal();
 }
 
 

@@ -10,3 +10,9 @@ export async function youtubeRequest(client, path, options = {}) {
   return client.json(`/api/youtube/${path}`, { ...options, headers });
 }
 
+export async function getSignedInAccountId() {
+  const { data, error } = await createClient().auth.getSession();
+  if (error || !data.session?.user?.id) throw new Error("Hãy đăng nhập ReupAI để sử dụng tính năng tự động đăng.");
+  return data.session.user.id;
+}
+

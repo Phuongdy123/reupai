@@ -236,3 +236,99 @@ export function mergeSectionIntoConfig(baseConfig, currentConfig, section) {
     });
     return next;
 }
+
+export function buildProcessPayloadFromSavedPreset(presetConfig, defaults = {}) {
+    const base = { ...(isPlainObject(defaults) ? defaults : {}) };
+    if (!isPlainObject(presetConfig)) return base;
+
+    const str = (key, fallback = '') => {
+        const val = presetConfig[key];
+        return val === undefined || val === null ? fallback : String(val);
+    };
+    const numOrNull = (key) => {
+        const raw = str(key, '').trim();
+        if (!raw) return null;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const blur = {};
+    [['x', 'X'], ['y', 'Y'], ['width', 'Width'], ['height', 'Height']].forEach(([key, suffix]) => {
+        const parsed = numOrNull(`processBlur${suffix}`);
+        if (parsed !== null) blur[key] = parsed;
+    });
+
+    const customBlurComplete = ['X', 'Y', 'Width', 'Height'].every(
+        (suffix) => numOrNull(`processCustomBlur${suffix}`) !== null,
+    );
+    const customBlurRegion = customBlurComplete
+        ? {
+            x: numOrNull('processCustomBlurX'),
+            y: numOrNull('processCustomBlurY'),
+            width: numOrNull('processCustomBlurWidth'),
+            height: numOrNull('processCustomBlurHeight'),
+        }
+        : null;
+
+    const blurIntervals = Array.isArray(presetConfig.blur_intervals)
+        ? presetConfig.blur_intervals
+            .map((item) => ({
+                start: Number(item?.start),
+                end: Number(item?.end),
+                x: Number(numOrNull('processCustomBlurX') ?? 0),
+                y: Number(numOrNull('processCustomBlurY') ?? 0),
+                width: Number(numOrNull('processCustomBlurWidth') ?? 0),
+                height: Number(numOrNull('processCustomBlurHeight') ?? 0),
+            }))
+            .filter((item) => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start)
+        : [];
+
+    const musicVolumeNum = Number(str('processMusicVolume', '0.25'));
+
+    return {
+        ...base,
+        preview_seconds: numOrNull('processPreviewSeconds'),
+        subtitle_font_size: numOrNull('processFontSize'),
+        source_language: str('processSourceLanguage', base.source_language || 'auto') || 'auto',
+        target_language: str('processTargetLanguage', base.target_language || 'vi') || 'vi',
+        translation_model: str('processTranslationModel', base.translation_model || 'gemini-3.1-flash-lite') || 'gemini-3.1-flash-lite',
+        transcript_source: str('processTranscriptSource', base.transcript_source || 'audio') || 'audio',
+        output_format: 'video',
+        ocr_language: str('processOcrLanguage', base.ocr_language || 'auto') || 'auto',
+        ocr_fps: numOrNull('processOcrFps') ?? base.ocr_fps ?? 2,
+        ocr_min_confidence: numOrNull('processOcrConfidence') ?? base.ocr_min_confidence ?? 0.45,
+        ocr_parallelism: numOrNull('processOcrParallelism') ?? base.ocr_parallelism ?? 2,
+        ocr_use_gpu: Boolean(presetConfig.ocr_use_gpu ?? base.ocr_use_gpu),
+        boost_gpu: Boolean(presetConfig.boost_gpu ?? presetConfig.ocr_use_gpu ?? base.boost_gpu),
+        stability_mode: true,
+        ocr_merge_similar: presetConfig.ocr_merge_similar !== undefined
+            ? Boolean(presetConfig.ocr_merge_similar)
+            : (base.ocr_merge_similar ?? true),
+        ocr_similarity_threshold: numOrNull('processOcrSimilarity') ?? base.ocr_similarity_threshold ?? 0.82,
+        subtitle_style: str('processSubtitleStyle', base.subtitle_style || 'minimal') || 'minimal',
+        original_volume: numOrNull('processOriginalVolume') ?? 0.15,
+        voice_volume: numOrNull('processVoiceVolume') ?? 1,
+        tts_speed: numOrNull('processTtsSpeed') ?? 1.0,
+        voice: str('processVoice', base.voice || 'Trúc Ly') || 'Trúc Ly',
+        music_url: str('processMusicUrl', '').trim() || null,
+        music_volume: Number.isFinite(musicVolumeNum) ? Math.min(2, Math.max(0, musicVolumeNum)) : 0.25,
+        auto_brand_blur: Boolean(presetConfig.auto_brand_blur),
+        source_subtitle_mode: presetConfig.source_subtitle_mode === 'none' ? 'none' : 'auto',
+        aspect_ratio: str('processAspectRatio', '') || null,
+        blur_preset: str('processBlurPreset', '') || null,
+        logo_size: numOrNull('processLogoSize'),
+        logo_width: numOrNull('processLogoWidth'),
+        logo_height: numOrNull('processLogoHeight'),
+        logo_x: numOrNull('processLogoX'),
+        logo_y: numOrNull('processLogoY'),
+        blur_region: Object.keys(blur).length ? blur : null,
+        custom_blur_region: customBlurRegion,
+        blur_intervals: blurIntervals,
+        logo_mode: str('processLogoMode', base.logo_mode || 'none') || 'none',
+        logo_shape: str('processLogoShape', 'rect') || 'rect',
+        logo_path: str('processLogoPath', '') || null,
+        logo_text: str('processLogoText', '') || null,
+        logo_data: presetConfig.logo_data || null,
+        logo_filename: presetConfig.logo_filename || null,
+    };
+}
