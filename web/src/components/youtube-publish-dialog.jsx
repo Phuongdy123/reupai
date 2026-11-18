@@ -111,6 +111,37 @@ export function YoutubePublishDialog({ client, item, connection, platformTabs, o
     } catch (requestError) { if (live.current) setError(requestError.message); }
     finally { if (live.current) setBusy(""); }
   };
+  const [seoTrendNote, setSeoTrendNote] = useState("");
+  const fetchSeoTrends = async () => {
+    const q = String(title || video?.title || instructions || "review phim").trim();
+    if (!q) return;
+    setBusy("seo"); setError("");
+    try {
+      const res = await client.json("/api/youtube/seo-trends", {
+        method: "POST",
+        body: JSON.stringify({ query: q }),
+      });
+      if (!live.current) return;
+      const kws = Array.isArray(res?.keywords) ? res.keywords.filter(Boolean) : [];
+      const hashtags = Array.isArray(res?.hashtags) ? res.hashtags.filter(Boolean) : [];
+      if (kws.length) {
+        const mergedTags = Array.from(new Set([...tags.split(",").map(t => t.trim()).filter(Boolean), ...kws])).slice(0, 15);
+        setTags(mergedTags.join(", "));
+      }
+      if (hashtags.length) {
+        const missingHashes = hashtags.filter(h => !description.includes(h));
+        if (missingHashes.length) {
+          setDescription(prev => `${String(prev || "").trim()}\n\n${missingHashes.join(" ")}`.trim().slice(0, 5000));
+        }
+      }
+      setSeoTrendNote(kws.length ? `Đã gắn ${kws.length} từ khóa Trend: ${kws.slice(0, 5).join(", ")}` : "Đã kiểm tra xu hướng YouTube.");
+      setConfirmed(false);
+    } catch (requestError) {
+      if (live.current) setError(requestError?.message || "Chưa soi được xu hướng từ khóa YouTube.");
+    } finally {
+      if (live.current) setBusy("");
+    }
+  };
   const translateThumbnailTitle = async () => {
     setConfirmed(false);
     if (!/[\p{Script=Han}]/u.test(title)) return title;
@@ -179,7 +210,7 @@ export function YoutubePublishDialog({ client, item, connection, platformTabs, o
         {error && <p className="youtube-error" role="alert">{error}</p>}
         {job && <section className="youtube-upload-status" role="status"><strong>{job.state === "completed" ? "Đã tải lên YouTube" : job.state === "failed" ? "Chưa hoàn tất lượt đăng" : "Đang tải lên YouTube"}</strong><progress aria-label="Tiến độ tải lên YouTube" value={job.percent || 0} max="100" /><span>{job.percent || 0}%</span>{job.error && <p>{job.error}</p>}{job.warning && <p>{job.warning}</p>}{job.url && <a href={job.url} target="_blank" rel="noopener noreferrer">Mở video trên YouTube ↗</a>}{job.state === "completed" && <p>YouTube có thể cần thêm thời gian xử lý video. Chế độ: {job.privacy === "private" ? "Riêng tư" : job.privacy === "unlisted" ? "Không công khai" : job.privacy === "public" ? "Công khai" : "Chưa xác nhận; kiểm tra trong YouTube Studio"}.</p>}</section>}
         <fieldset disabled={locked} className="youtube-publish-fields">
-          <section className="youtube-ai-draft"><label>Yêu cầu cho AI (tùy chọn)<input value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Ví dụ: Tiêu đề ngắn, mô tả tiếng Việt, nhấn vào tập 3" maxLength={2000} /></label><small>Khi dùng AI, tiêu đề, phụ đề và ảnh đã chọn được gửi tới Gemini bằng project của bạn.</small><button type="button" className="btn secondary" onClick={suggest}><Icon name="sparkles" size={16} />{busy === "ai" ? "AI đang chuẩn bị…" : "AI gợi ý nội dung"}</button></section>
+          <section className="youtube-ai-draft"><label>Yêu cầu cho AI (tùy chọn)<input value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Ví dụ: Tiêu đề ngắn, mô tả tiếng Việt, nhấn vào tập 3" maxLength={2000} /></label><small>Khi dùng AI, tiêu đề, phụ đề và ảnh đã chọn được gửi tới Gemini bằng project của bạn.</small><div className="library-actions"><button type="button" className="btn secondary" onClick={suggest}><Icon name="sparkles" size={16} />{busy === "ai" ? "AI đang chuẩn bị…" : "AI gợi ý nội dung"}</button><button type="button" className="btn secondary" onClick={fetchSeoTrends}>{busy === "seo" ? "Đang soi Trend…" : "Soi Trend & Gắn Tag SEO"}</button></div>{seoTrendNote && <small style={{ color: "#60a5fa", display: "block", marginTop: "6px" }}>{seoTrendNote}</small>}</section>
           <label>Tiêu đề <small>{title.length}/100</small><input required maxLength={100} value={title} onChange={e => { setTitle(e.target.value); setConfirmed(false); }} /></label>
           <label>Mô tả và hashtag<textarea rows={6} value={description} onChange={e => { setDescription(e.target.value); setConfirmed(false); }} maxLength={5000} /></label>
           <label>Tag / từ khóa<input value={tags} onChange={e => { setTags(e.target.value); setConfirmed(false); }} placeholder="Các từ khóa, ngăn cách bằng dấu phẩy" /></label>
