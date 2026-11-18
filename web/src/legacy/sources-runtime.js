@@ -8656,9 +8656,10 @@ async function openCopyrightReportDialog(video, card) {
             recsList.appendChild(li);
         });
 
-        footerStatus.textContent = report.ai_scanned
-            ? 'Đã quét sâu âm thanh & khung hình bằng AI Gemini.'
-            : 'Đã kiểm tra nhanh thông tin nguồn. Bấm "Quét sâu Nhạc & Hình (AI)" để phân tích sâu mẫu âm thanh.';
+        footerStatus.textContent = report.scan_note
+            || (report.ai_scanned
+                ? 'Đã quét sâu âm thanh & khung hình bằng AI Gemini.'
+                : 'Đã kiểm tra nhanh thông tin nguồn. Bấm "Quét sâu Nhạc & Hình (AI)" để phân tích sâu bằng Gemini.');
     };
 
     renderReport(analyzeVideoCopyrightRisk(buildPayload()));
@@ -8671,6 +8672,7 @@ async function openCopyrightReportDialog(video, card) {
     deepScanBtn.onclick = async () => {
         deepScanBtn.disabled = true;
         deepScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Đang quét Nhạc &amp; Hình…</span>`;
+        footerStatus.textContent = 'Đang gửi AI Gemini phân tích bản quyền Video & Nhạc…';
         try {
             const reqJson = (path, opts) => window.reupEngineClient.json(path, opts);
             const report = await checkVideoCopyrightWithEngine(reqJson, {

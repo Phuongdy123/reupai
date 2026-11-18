@@ -2343,7 +2343,21 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const copyrightFixBtn = dialog.querySelector('#processCopyrightFixBtn');
     let latestAiCopyrightReport = null;
 
-    const collectCopyrightCheckPayload = () => {
+    const captureCopyrightPreviewFrame = () => {
+        if (!preview || !preview.videoWidth || !preview.videoHeight) return null;
+        try {
+            const frame = document.createElement('canvas');
+            const scale = Math.min(1, 960 / preview.videoWidth);
+            frame.width = Math.max(1, Math.round(preview.videoWidth * scale));
+            frame.height = Math.max(1, Math.round(preview.videoHeight * scale));
+            frame.getContext('2d').drawImage(preview, 0, 0, frame.width, frame.height);
+            return frame.toDataURL('image/jpeg', 0.78);
+        } catch {
+            return null;
+        }
+    };
+
+    const collectCopyrightCheckPayload = ({ includeFrame = false } = {}) => {
         const origVol = Number(dialog.querySelector('#processOriginalVolume')?.value ?? 0.15);
         const hasBlurCoords = ['X', 'Y', 'Width', 'Height'].some(
             suffix => String(dialog.querySelector(`#processBlur${suffix}`)?.value || '').trim() !== '',
@@ -2363,6 +2377,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             auto_brand_blur: Boolean(dialog.querySelector('#processAutoBrandBlur')?.checked),
             has_blur_region: hasBlurCoords,
             aspect_ratio: dialog.querySelector('#processAspectRatio')?.value || '',
+            duration_seconds: Number(video.duration_seconds || video.duration || preview.duration || 0) || undefined,
+            width: preview.videoWidth || sourceWidth || undefined,
+            height: preview.videoHeight || sourceHeight || undefined,
+            image_data: includeFrame ? captureCopyrightPreviewFrame() : null,
         };
     };
 
@@ -2383,7 +2401,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             copyrightVisualPill.innerHTML = `${copyrightIconSvg('film', 13)}<span>Hình ảnh: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)</span>`;
         }
         if (copyrightMusicNote) {
-            copyrightMusicNote.textContent = report.detected_music ? `· ${report.detected_music}` : '';
+            const noteText = report.scan_note || report.detected_music || '';
+            copyrightMusicNote.textContent = noteText ? `· ${noteText}` : '';
         }
         if (copyrightWarnings) {
             copyrightWarnings.replaceChildren();
@@ -2408,6 +2427,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             renderCopyrightReport({
                 ...localReport,
                 detected_music: latestAiCopyrightReport.detected_music || localReport.detected_music,
+                scan_note: latestAiCopyrightReport.scan_note || '',
+                warnings: [
+                    ...(Array.isArray(latestAiCopyrightReport.warnings) ? latestAiCopyrightReport.warnings.slice(0, 1) : []),
+                    ...localReport.warnings,
+                ],
             });
         } else {
             renderCopyrightReport(localReport);
@@ -2419,9 +2443,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (!isCurrent()) return;
             copyrightScanBtn.disabled = true;
             copyrightScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Đang quét Nhạc &amp; Hình…</span>`;
+            if (copyrightMusicNote) {
+                copyrightMusicNote.textContent = '· Đang gửi AI Gemini phân tích bản quyền…';
+            }
             try {
                 const report = await checkVideoCopyrightWithEngine(requestJson, {
-                    ...collectCopyrightCheckPayload(),
+                    ...collectCopyrightCheckPayload({ includeFrame: true }),
                     use_ai: true,
                 });
                 if (!isCurrent()) return;

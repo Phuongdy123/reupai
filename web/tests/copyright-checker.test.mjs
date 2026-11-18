@@ -71,3 +71,31 @@ test('checkVideoCopyrightWithEngine merges AI deep scan results from Local Engin
     assert.equal(report.overall_risk, 'high');
     assert.match(report.detected_music, /Phát hiện nhạc nền thương mại/);
 });
+
+test('checkVideoCopyrightWithEngine falls back to /api/assistant when Local Engine returns 404 for /api/copyright/check', async () => {
+    const calledPaths = [];
+    const fakeRequestJson = async (path) => {
+        calledPaths.push(path);
+        if (path === '/api/copyright/check') {
+            const err = new Error('Not Found');
+            err.status = 404;
+            throw err;
+        }
+        assert.equal(path, '/api/assistant');
+        return {
+            answer: 'Video có nhạc nền OST dễ dính Content ID và có logo Tencent ở góc phải.',
+        };
+    };
+
+    const report = await checkVideoCopyrightWithEngine(fakeRequestJson, {
+        video_id: 'vid_02',
+        title: 'Phim mới tập 1',
+        mode: 'voiceover',
+        original_volume: 0.15,
+    });
+
+    assert.deepEqual(calledPaths, ['/api/copyright/check', '/api/assistant']);
+    assert.equal(report.ai_scanned, true);
+    assert.equal(report.music_risk, 'high');
+    assert.equal(report.scan_note, 'Đã quét sâu bằng AI Gemini.');
+});

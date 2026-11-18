@@ -197,8 +197,23 @@ export function analyzeVideoCopyrightRisk({
 export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
     const localReport = analyzeVideoCopyrightRisk(payload);
     if (typeof requestJson !== 'function') {
-        return localReport;
+        return {
+            ...localReport,
+            scan_note: 'Chưa kết nối Local Engine nên chỉ phân tích nhanh từ thông tin nguồn.',
+        };
     }
+
+    const mergeRemoteReport = (remote, fallbackNote = '') => {
+        const overallRisk = remote.overall_risk || localReport.overall_risk;
+        return {
+            ...localReport,
+            ...remote,
+            overall_risk: overallRisk,
+            badge_label: riskLabelFromLevel(overallRisk),
+            scan_note: remote.scan_note || fallbackNote || (remote.ai_scanned ? 'Đã quét sâu Nhạc & Hình bằng AI Gemini.' : ''),
+        };
+    };
+
     try {
         const remote = await requestJson('/api/copyright/check', {
             method: 'POST',
@@ -209,17 +224,93 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
                 use_ai: payload.use_ai !== false,
             }),
         });
-        if (!remote || typeof remote !== 'object') {
-            return localReport;
+        if (remote && typeof remote === 'object') {
+            return mergeRemoteReport(remote);
         }
-        const overallRisk = remote.overall_risk || localReport.overall_risk;
+    } catch (error) {
+        const status = Number(error?.status || 0);
+        const isMissingRoute = status === 404 || /not found/i.test(String(error?.message || ''));
+        if (!isMissingRoute) {
+            return {
+                ...localReport,
+                scan_note: `Không quét AI được (${error?.message || 'lỗi kết nối Engine'}) — đang hiển thị đánh giá nhanh.`,
+            };
+        }
+    }
+
+    // Fallback for Local Engine 0.2.55 which already has /api/assistant (with Gemini OAuth + image_data)
+    try {
+        const promptLines = [
+            'Hãy đánh giá nguy cơ bản quyền YouTube Content ID (Nhạc & Hình ảnh) cho video này và trả lời ngắn gọn bằng tiếng Việt:',
+            `- Tiêu đề: ${String(payload.title || '').slice(0, 180)}`,
+            payload.track ? `- Nhạc/Track: ${String(payload.track).slice(0, 120)}` : '',
+            payload.artist ? `- Nghệ sĩ: ${String(payload.artist).slice(0, 100)}` : '',
+            payload.url ? `- Nguồn: ${String(payload.url).slice(0, 180)}` : '',
+            `- Chế độ xử lý dự kiến: ${payload.mode === 'subtitle' ? 'Chỉ Phụ đề (giữ tiếng gốc)' : 'Voice + Phụ đề'}`,
+            `- Âm lượng gốc: ${Math.round(Number(payload.original_volume ?? 0.15) * 100)}%`,
+            `- Làm mờ watermark/logo: ${payload.auto_brand_blur || payload.has_blur_region ? 'Có' : 'Chưa bật'}`,
+            'Nêu rõ: 1) Nguy cơ nhạc nền/bài hát gốc, 2) Nguy cơ hình ảnh/logo nhà đài nếu thấy trên khung hình, 3) Cách xử lý an toàn nhất.',
+        ].filter(Boolean).join('\n');
+
+        const assistantRes = await requestJson('/api/assistant', {
+            method: 'POST',
+            timeoutMs: 60000,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: promptLines,
+                kind: 'question',
+                mode: payload.mode === 'subtitle' ? 'subtitle' : 'voiceover',
+                image_data: payload.image_data || null,
+                video_context: {
+                    title: String(payload.title || '').slice(0, 180),
+                    duration_seconds: Number(payload.duration_seconds || 0) || null,
+                    width: Number(payload.width || 0) || null,
+                    height: Number(payload.height || 0) || null,
+                },
+            }),
+        });
+
+        const answer = String(assistantRes?.answer || '').trim();
+        if (answer) {
+            const lower = answer.toLowerCase();
+            let musicScore = localReport.music_score;
+            let visualScore = localReport.visual_score;
+            if (/(nguy cơ cao|dễ dính bản quyền|content id|bản quyền nặng|commercial|ost gốc|nhạc có lời)/.test(lower)) {
+                musicScore = Math.max(musicScore, 72);
+            }
+            if (/(logo|watermark|nhà đài|tencent|iqiyi|youku|bilibili|netflix|kênh truyền hình)/.test(lower)) {
+                visualScore = Math.max(visualScore, payload.auto_brand_blur || payload.has_blur_region ? 38 : 65);
+            }
+            const level = (s) => (s >= 65 ? 'high' : s >= 38 ? 'medium' : 'low');
+            const musicRisk = level(musicScore);
+            const visualRisk = level(visualScore);
+            const overallScore = Math.round(Math.max(musicScore, visualScore) * 0.7 + Math.min(musicScore, visualScore) * 0.3);
+            const overallRisk = level(overallScore);
+
+            return mergeRemoteReport({
+                overall_risk: overallRisk,
+                overall_score: overallScore,
+                music_risk: musicRisk,
+                music_score: musicScore,
+                visual_risk: visualRisk,
+                visual_score: visualScore,
+                detected_music: payload.image_data
+                    ? 'AI Gemini đã phân tích khung hình & thông tin nguồn'
+                    : 'AI Gemini đã phân tích thông tin nguồn',
+                warnings: [answer, ...localReport.warnings.filter((w) => w !== answer)].slice(0, 4),
+                ai_scanned: true,
+                scan_note: 'Đã quét sâu bằng AI Gemini.',
+            });
+        }
+    } catch (fallbackErr) {
         return {
             ...localReport,
-            ...remote,
-            overall_risk: overallRisk,
-            badge_label: riskLabelFromLevel(overallRisk),
+            scan_note: fallbackErr?.message || 'Chưa kết nối Gemini trong Cài đặt nên đang dùng đánh giá nhanh.',
         };
-    } catch {
-        return localReport;
     }
+
+    return {
+        ...localReport,
+        scan_note: 'Đã kiểm tra nhanh theo thông tin nguồn và cấu hình hiện tại.',
+    };
 }
