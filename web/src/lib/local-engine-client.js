@@ -56,6 +56,7 @@ export class LocalEngineClient {
     this.mediaTicketRequests = new Map();
     this.refreshingSession = null;
     this.checkingConnection = null;
+    this._consecutiveHealthFailures = 0;
   }
 
   get engineUrl() { return this.baseUrl; }
@@ -120,8 +121,11 @@ export class LocalEngineClient {
           response = await fetchWithTimeout(`${this.baseUrl}${mapPath(path)}`, { cache: "no-store", ...options, headers });
         }
       }
+      if (response.ok) this._consecutiveHealthFailures = 0;
     } catch (error) {
-      if (error.name !== "AbortError" && /fetch|network/i.test(error.message || "")) this.emit("disconnected", error);
+      if (error.name !== "AbortError" && /fetch|network/i.test(error.message || "") && this.status !== "connected") {
+        this.emit("disconnected", error);
+      }
       throw error;
     }
     if (response.status === 401) this.emit("authorization_required");
@@ -193,8 +197,9 @@ export class LocalEngineClient {
   }
 
   async probeHealth() {
+    const probeTimeout = this.status === "connected" ? 4500 : 2500;
     try {
-      const primary = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: 1800 });
+      const primary = await fetchWithTimeout(`${this.baseUrl}/api/health`, { cache: "no-store", timeoutMs: probeTimeout });
       if (primary.ok) return primary;
     } catch (_) { /* Fallback in parallel below. */ }
 
@@ -202,7 +207,7 @@ export class LocalEngineClient {
     if (fallbacks.length === 0) throw new TypeError("Failed to fetch");
     return Promise.any(
       fallbacks.map(async (candidate) => {
-        const res = await fetchWithTimeout(`${candidate}/api/health`, { cache: "no-store", timeoutMs: 1800 });
+        const res = await fetchWithTimeout(`${candidate}/api/health`, { cache: "no-store", timeoutMs: probeTimeout });
         if (!res.ok) throw await responseError(res, "Không thể kiểm tra Local Engine");
         this.baseUrl = candidate;
         return res;
@@ -224,15 +229,24 @@ export class LocalEngineClient {
         status = await this.request("/api/status", { cache: "no-store" });
       }
       if (status.status === 401) {
+        this._consecutiveHealthFailures = 0;
         this.emit("authorization_required");
         return false;
       }
       if (!status.ok) throw new Error(`Status HTTP ${status.status}`);
+      this._consecutiveHealthFailures = 0;
       this.emit("connected");
       return true;
     } catch (error) {
       const normalized = error?.name === "AggregateError" ? (error.errors?.[0] || new TypeError("Failed to fetch")) : error;
-      if (["AbortError", "TimeoutError", "TypeError"].includes(normalized?.name) || /fetch|network|All promises were rejected/i.test(normalized?.message || "")) this.emit("disconnected", normalized);
+      if (["AbortError", "TimeoutError", "TypeError"].includes(normalized?.name) || /fetch|network|All promises were rejected/i.test(normalized?.message || "")) {
+        this._consecutiveHealthFailures += 1;
+        // Keep an established workspace session alive across a single transient
+        // timeout while the Engine is busy syncing or rendering.
+        if (this.status !== "connected" || !silent || this._consecutiveHealthFailures >= 2) {
+          this.emit("disconnected", normalized);
+        }
+      }
       else if (normalized?.code === "engine_update_required") this.emit("update_required", normalized);
       else this.emit(normalized?.status === 403 ? "permission_denied" : "error", normalized);
       return false;

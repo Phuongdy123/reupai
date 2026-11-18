@@ -6840,6 +6840,90 @@ async function loadLibraryView(
 }
 
 
+async function loadDownloadedLibrarySources() {
+    const info = document.getElementById('info');
+    const button = document.getElementById('loadDownloadedSourceBtn');
+    const root = document.getElementById('videos');
+    if (root) root.classList.remove('tracked-sources-view');
+    setTrackedSidebarActive(false);
+    setSidebarFavoriteActive(false);
+
+    if (button) button.disabled = true;
+    if (info) {
+        info.className = 'info-line';
+        info.textContent = 'Đang lấy danh sách video đã tải trên máy...';
+    }
+    renderVideoLoadingState();
+
+    try {
+        const [downloadsRes, libraryRes, outputsRes] = await Promise.allSettled([
+            apiJson('/api/library/downloads'),
+            apiJson('/api/library/videos?downloaded=1&limit=2000'),
+            apiJson('/api/library/outputs'),
+        ]);
+        const downloads = downloadsRes.status === 'fulfilled' ? (downloadsRes.value?.videos || []) : [];
+        const libraryRows = libraryRes.status === 'fulfilled' ? (libraryRes.value?.videos || []) : [];
+        const outputs = outputsRes.status === 'fulfilled' ? (outputsRes.value?.outputs || []) : [];
+
+        const outputModesById = new Map();
+        for (const out of outputs) {
+            const vid = String(out?.video_id || '').trim();
+            if (!vid) continue;
+            if (!outputModesById.has(vid)) outputModesById.set(vid, new Set());
+            outputModesById.get(vid).add(String(out?.mode || 'subtitle'));
+        }
+
+        const mergedById = new Map();
+        for (const item of [...libraryRows, ...downloads]) {
+            const vid = String(item?.video_id || item?.platform_video_id || '').trim();
+            if (!vid) continue;
+            const prev = mergedById.get(vid) || {};
+            const modes = outputModesById.get(vid);
+            const fallbackUrl = item.url || item.source_url || prev.url || videoUrlForIdentity(vid);
+            mergedById.set(vid, {
+                ...prev,
+                ...item,
+                video_id: vid,
+                platform: item.platform || prev.platform || (/^\d+$/.test(vid) ? 'douyin' : 'bilibili'),
+                title: (item.title && item.title !== vid ? item.title : '') || (prev.title && prev.title !== vid ? prev.title : '') || vid,
+                cover_url: item.cover_url || prev.cover_url || '',
+                url: fallbackUrl,
+                channel_key: item.channel_key || item.channel || prev.channel_key || 'default',
+                downloaded: true,
+                has_subtitle_result: Boolean(item.has_subtitle_result || prev.has_subtitle_result || modes?.has('subtitle')),
+                has_voice_result: Boolean(item.has_voice_result || prev.has_voice_result || modes?.has('voiceover')),
+            });
+        }
+
+        const items = [...mergedById.values()];
+        currentView = 'downloads';
+        activeSeriesKey = '';
+        currentPage = 1;
+        for (const key of Object.keys(pageCache)) delete pageCache[key];
+        currentVideos = items;
+        sourceTotal = items.length;
+        totalPages = 1;
+        remoteHasMore = false;
+
+        await hydrateCurrentLibraryMeta().catch(() => {});
+        renderVideos();
+        updateViewLabel('Video đã tải');
+        updateSourceInfo(items.length ? `Đã nạp ${items.length} video đã tải trên máy` : 'Chưa có video nào trong thư viện Video đã tải.');
+        updateFollowSourceButton();
+        saveUiState();
+    } catch (error) {
+        currentVideos = [];
+        renderVideos();
+        if (info) {
+            info.className = 'info-line warning';
+            info.textContent = 'Không lấy được video đã tải: ' + (error?.message || 'Lỗi kết nối Local Engine.');
+        }
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
+
 async function showFavorites() {
 
     currentView =
@@ -11447,7 +11531,7 @@ function saveSourceSession() {
 }
 
 
-function restoreSourceSession() {
+function restoreSourceSession(restoredState = null) {
 
     try {
         const raw = window.sessionStorage.getItem(SOURCE_SESSION_KEY);
@@ -11458,7 +11542,13 @@ function restoreSourceSession() {
             return false;
         }
 
-        resetSourceSessionData();
+        const alreadyRestoredMatchingVideos = (
+            currentVideos.length > 0
+            && String(restoredState?.sourceUrl || '').trim() === sourceUrl
+        );
+        if (!alreadyRestoredMatchingVideos) {
+            resetSourceSessionData();
+        }
 
         const sourceInput = document.getElementById('sourceUrl');
         const inputMode = document.getElementById('sourceInputMode');
@@ -11508,6 +11598,13 @@ function clearSourceSessionState() {
 
 
 function labelForCurrentView() {
+
+    if (
+        currentView
+        === 'downloads'
+    ) {
+        return 'Video đã tải';
+    }
 
     if (
         currentView
@@ -11888,9 +11985,9 @@ async function initializeV13() {
         state
     );
 
-    // The Engine UI state intentionally does not restore a source across
-    // devices.  Prefer the current browser tab's session when it exists.
-    if (!restoreSourceSession()) {
+    // Keep any already-restored downloads/collection/series view or matching
+    // session videos intact across remounts instead of wiping them mid-load.
+    if (!restoreSourceSession(state) && currentVideos.length === 0) {
         clearSourceSessionState();
     }
 
@@ -11903,7 +12000,7 @@ async function initializeV13() {
         );
     }
 
-    await Promise.all([
+    await Promise.allSettled([
         loadSavedSources(),
         loadCollections(),
         loadSeries(),

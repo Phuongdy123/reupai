@@ -59,8 +59,9 @@ export function SourcesPage() {
   }, []);
   const { beginWaiting, endWaiting } = useFeedback();
 
+  const isConnected = status === "connected";
   useEffect(() => {
-    if (status !== "connected" || !host.current) return;
+    if (!isConnected || !host.current) return;
     const element = host.current;
     let active = true;
     let dispose;
@@ -92,7 +93,7 @@ export function SourcesPage() {
       dispose?.();
       element.innerHTML = "";
     };
-  }, [client, status, retry]);
+  }, [client, isConnected, retry]);
 
   useEffect(() => {
     if (status !== "connected" || !ready) return;
