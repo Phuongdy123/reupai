@@ -35,7 +35,11 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
         const hasSelectedRegion = Number.isFinite(width) && width > 0
             && Number.isFinite(height) && height > 0;
 
-        write('mode', value('processOutputFormat') === 'srt' ? 'Chỉ SRT' : mode === 'subtitle' ? 'Vietsub' : 'Vietsub + Voice');
+        const baseMode = value('processOutputFormat') === 'srt' ? 'Chỉ SRT' : mode === 'subtitle' ? 'Vietsub' : 'Vietsub + Voice';
+        const extraTags = [];
+        if (dialog.querySelector('#processAntiReuse')?.checked) extraTags.push('Anti-Reuse');
+        if (dialog.querySelector('#processVocalSeparation')?.checked) extraTags.push('Giữ SFX');
+        write('mode', extraTags.length ? `${baseMode} · ${extraTags.join(' + ')}` : baseMode);
         write('frame', value('processAspectRatio')
             ? selectedLabel('processAspectRatio', 'Giữ tỷ lệ gốc')
             : 'Giữ tỷ lệ gốc');
@@ -45,10 +49,17 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
         write('duration', value('processPreviewSeconds')
             ? selectedLabel('processPreviewSeconds', 'Toàn bộ video')
             : 'Toàn bộ video');
-        write('blur', dialog.querySelector('#processSourceNoSub')?.checked
-            ? 'Không làm mờ'
+        const eraseModeVal = value('processEraseMode') || 'blur';
+        const eraseLabel = eraseModeVal === 'inpaint'
+            ? 'Inpaint (Không mờ)'
+            : eraseModeVal === 'delogo'
+                ? 'Delogo (Không mờ)'
+                : 'Làm mờ gốc';
+        const regionLabel = dialog.querySelector('#processSourceNoSub')?.checked
+            ? 'Không xóa'
             : hasSelectedRegion ? 'Vùng đã chọn'
-                : blurPreset ? selectedLabel('processBlurPreset', 'Theo vị trí đã chọn') : 'Tự nhận diện');
+                : blurPreset ? selectedLabel('processBlurPreset', 'Theo vị trí đã chọn') : 'Tự nhận diện';
+        write('blur', dialog.querySelector('#processSourceNoSub')?.checked ? regionLabel : `${eraseLabel} · ${regionLabel}`);
         summary.querySelectorAll('[data-output-summary-row="voice"]').forEach(row => {
             const hidden = mode === 'subtitle' || value('processOutputFormat') === 'srt';
             if (row.hidden !== hidden) row.hidden = hidden;

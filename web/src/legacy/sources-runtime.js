@@ -9343,7 +9343,12 @@ async function openBatchAutoPublishDialog() {
             const logoLabel = resolved.logo_mode && resolved.logo_mode !== 'none'
                 ? `Có Logo (${resolved.logo_shape === 'circle' ? 'Tròn' : 'Chữ nhật'})`
                 : 'Không Logo';
-            configSummaryEl.textContent = `Đang áp dụng: ${langLabel} · Giọng ${voiceLabel} · Sub ${styleLabel} · ${logoLabel}`;
+            const extras = [];
+            if (resolved.blur_mode === 'inpaint') extras.push('Inpaint');
+            else if (resolved.blur_mode === 'delogo') extras.push('Delogo');
+            if (resolved.anti_reuse) extras.push('Anti-Reuse');
+            if (resolved.vocal_separation) extras.push('Giữ SFX');
+            configSummaryEl.textContent = `Đang áp dụng: ${langLabel} · Giọng ${voiceLabel} · Sub ${styleLabel} · ${logoLabel}${extras.length ? ` · ${extras.join(' · ')}` : ''}`;
         }
     };
     refreshBatchPresetListAndSummary();
@@ -9836,7 +9841,17 @@ async function openBatchAutoPublishDialog() {
                 const dlUrl = res?.download_url && window.reupEngineClient?.mediaUrl
                     ? await window.reupEngineClient.mediaUrl(res.download_url)
                     : '';
-                overallStatusEl.innerHTML = `✓ Đã gộp ${res.episode_count} tập (${Math.round(res.total_duration || 0)}s)! ${dlUrl ? `<a href="${dlUrl}" download style="color:#60a5fa;text-decoration:underline;margin:0 8px;">Tải Video Full Bộ ↗</a>` : ''}<br><small style="white-space:pre-wrap;color:#cbd5e1;">YouTube Chapters:\n${escapeHtml(res.chapters_text || '')}</small>`;
+                overallStatusEl.innerHTML = `✓ Đã gộp ${res.episode_count} tập (${Math.round(res.total_duration || 0)}s)! ${dlUrl ? `<a href="${dlUrl}" download style="color:#60a5fa;text-decoration:underline;margin:0 8px;">Tải Video Full Bộ ↗</a>` : ''} <button type="button" class="btn secondary" id="batchApCopyChaptersBtn" style="padding:3px 8px;font-size:11px;margin-left:4px;">Copy Chapters</button><br><small style="white-space:pre-wrap;color:#cbd5e1;">YouTube Chapters:\n${escapeHtml(res.chapters_text || '')}</small>`;
+                const copyChapBtn = overallStatusEl.querySelector('#batchApCopyChaptersBtn');
+                if (copyChapBtn) {
+                    copyChapBtn.onclick = async () => {
+                        try {
+                            await navigator.clipboard.writeText(String(res.chapters_text || ''));
+                            copyChapBtn.textContent = '✓ Đã copy Chapters';
+                            setTimeout(() => { copyChapBtn.textContent = 'Copy Chapters'; }, 1800);
+                        } catch {}
+                    };
+                }
             } catch (err) {
                 overallStatusEl.textContent = err?.status === 404
                     ? 'Cần cập nhật Local Engine mới để gộp Full Bộ tự động.'

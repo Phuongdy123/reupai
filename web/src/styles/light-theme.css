@@ -932,3 +932,39 @@ html[data-theme="light"] body.theme-xports .tracked-channel-delete {
   color: #1e293b !important;
   border-color: rgba(15, 23, 42, 0.14) !important;
 }
+html[data-theme="light"] body.theme-xports #processConfigDialog .process-settings-card .process-config-grid textarea {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+}
+html[data-theme="light"] body.theme-xports .process-subsection-title {
+  border-top-color: rgba(15, 23, 42, 0.1) !important;
+  color: #475569 !important;
+}
+html[data-theme="light"] body.theme-xports .batch-ap-lang-chip {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.18) !important;
+  color: #334155 !important;
+}
+html[data-theme="light"] body.theme-xports .batch-ap-lang-chip:has(input:checked) {
+  background: rgba(37, 99, 235, 0.1) !important;
+  border-color: #2563eb !important;
+  color: #1d4ed8 !important;
+}
+html[data-theme="light"] body.theme-xports .batch-ap-schedule-box,
+html[data-theme="light"] body.theme-xports .cr-api-keys-panel,
+html[data-theme="light"] body.theme-xports .shorts-clip-card {
+  background: #f8fafc !important;
+  border-color: rgba(15, 23, 42, 0.14) !important;
+  color: #0f172a !important;
+}
+html[data-theme="light"] body.theme-xports .cr-api-keys-panel input,
+html[data-theme="light"] body.theme-xports .batch-ap-schedule-box input[type="datetime-local"] {
+  background: #ffffff !important;
+  border-color: rgba(15, 23, 42, 0.2) !important;
+  color: #0f172a !important;
+  color-scheme: light;
+}
+html[data-theme="light"] body.theme-xports .shorts-clip-card :is(span, div) {
+  color: inherit;
+}
