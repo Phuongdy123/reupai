@@ -19,8 +19,8 @@ def analyze_youtube_seo_trends(query: str, *, owner: str = "") -> dict[str, Any]
     # 1. Try YouTube Data API v3 using connected channel OAuth if available
     if owner:
         try:
-            from services.youtube_publishing import load_authorized_credentials
-            creds = load_authorized_credentials(owner)
+            from services.youtube_publishing import _credentials
+            creds = _credentials(owner)
             if creds and getattr(creds, "token", None):
                 url = (
                     "https://www.googleapis.com/youtube/v3/search"
