@@ -66,6 +66,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <video id="processConfigPreview" controls preload="metadata"></video>
                     <canvas id="processPreviewCanvas"></canvas>
                     <div id="processBlurPreviewOverlay" class="process-blur-preview-overlay" hidden aria-hidden="true"></div>
+                    <div id="processStageSubtitlePreview" class="process-stage-subtitle-preview" data-style="minimal" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSubtitleText"></span></div>
                 </div>
                 <div id="processConfigPreviewEmpty">
                     <span class="process-empty-icon" aria-hidden="true">${uiIcon('play', 22)}</span>
@@ -319,6 +320,27 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <option value="box">Simple Box</option>
                     </select>
                 </label>
+
+                <div class="process-sub-preview-card" id="processSubtitleStylePreview">
+                    <div class="process-sub-preview-head">
+                        <div>
+                            <strong id="processSubPreviewTitle">Minimal Clean</strong>
+                            <small id="processSubPreviewDesc">Chữ trắng sáng, viền đen mảnh gọn gàng, dễ đọc mọi video.</small>
+                        </div>
+                    </div>
+                    <div class="process-sub-style-chips" id="processSubStyleChips" role="group" aria-label="Chọn nhanh kiểu phụ đề">
+                        <button type="button" class="is-active" data-sub-style="minimal">Minimal Clean</button>
+                        <button type="button" data-sub-style="bold">Creator Bold</button>
+                        <button type="button" data-sub-style="cinema">Cinema</button>
+                        <button type="button" data-sub-style="neon">Neon Pop</button>
+                        <button type="button" data-sub-style="box">Simple Box</button>
+                    </div>
+                    <div class="process-sub-preview-stage" id="processSubPreviewStage" data-style="minimal">
+                        <span class="process-sub-preview-badge">Xem trước mẫu phụ đề</span>
+                        <span class="process-sub-render-text" id="processSubPreviewText">Chào mừng bạn đến với kênh hôm nay!</span>
+                    </div>
+                    <div class="process-sub-sample-list" id="processSubSampleList" role="listbox" aria-label="Các câu mẫu xem trước"></div>
+                </div>
 
                 </div>
             </section>

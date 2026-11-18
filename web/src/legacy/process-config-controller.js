@@ -2,6 +2,7 @@
 import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
 import { playVoicePreview } from '../lib/tts-voices.js';
+import { SUBTITLE_SAMPLE_LINES, getSubtitlePreviewData } from '../lib/subtitle-style-previews.js';
 import {
     clearLastConfig,
     mergeSectionIntoConfig,
@@ -195,6 +196,111 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     if (outputFormat) outputFormat.onchange = syncOutputLabel;
     syncOutputLabel();
     set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
+    const bindSubtitleStylePreview = () => {
+        const cardRoot = dialog.querySelector('#processSubtitleStylePreview');
+        const styleSelect = dialog.querySelector('#processSubtitleStyle');
+        const fontSizeSelect = dialog.querySelector('#processFontSize');
+        const titleEl = dialog.querySelector('#processSubPreviewTitle');
+        const descEl = dialog.querySelector('#processSubPreviewDesc');
+        const stageEl = dialog.querySelector('#processSubPreviewStage');
+        const textEl = dialog.querySelector('#processSubPreviewText');
+        const stageOverlay = dialog.querySelector('#processStageSubtitlePreview');
+        const stageOverlayText = dialog.querySelector('#processStageSubtitleText');
+        const chipsRoot = dialog.querySelector('#processSubStyleChips');
+        const sampleListRoot = dialog.querySelector('#processSubSampleList');
+        const subPanel = dialog.querySelector('#processInspectorSubtitles');
+        if (!cardRoot || !styleSelect || !stageEl || !textEl) return;
+
+        let activeSample = 0;
+        let previewHovering = false;
+
+        if (sampleListRoot) {
+            sampleListRoot.innerHTML = '';
+            SUBTITLE_SAMPLE_LINES.forEach((line, index) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'process-sub-sample-item';
+                btn.dataset.subSample = String(index);
+                const badge = document.createElement('b');
+                badge.textContent = `Câu ${index + 1}`;
+                const copy = document.createElement('span');
+                copy.textContent = line;
+                btn.appendChild(badge);
+                btn.appendChild(copy);
+                btn.onclick = () => {
+                    activeSample = index;
+                    renderSubtitlePreview();
+                };
+                sampleListRoot.appendChild(btn);
+            });
+        }
+
+        const renderSubtitlePreview = () => {
+            if (signal.aborted) return;
+            const { spec, sampleIndex, sampleText, previewFontPx, stageFontPx } = getSubtitlePreviewData(
+                styleSelect.value,
+                fontSizeSelect?.value,
+                activeSample,
+            );
+            if (titleEl) titleEl.textContent = spec.label;
+            if (descEl) descEl.textContent = spec.description;
+            stageEl.dataset.style = spec.id;
+            textEl.textContent = sampleText;
+            textEl.style.fontSize = `${previewFontPx}px`;
+
+            chipsRoot?.querySelectorAll('[data-sub-style]').forEach(btn => {
+                const selected = btn.dataset.subStyle === spec.id;
+                btn.classList.toggle('is-active', selected);
+                btn.setAttribute('aria-pressed', String(selected));
+            });
+
+            sampleListRoot?.querySelectorAll('[data-sub-sample]').forEach(btn => {
+                const selected = Number(btn.dataset.subSample) === sampleIndex;
+                btn.classList.toggle('is-active', selected);
+                btn.setAttribute('aria-selected', String(selected));
+            });
+
+            if (stageOverlay && stageOverlayText) {
+                const showOnStage = Boolean(subPanel && !subPanel.hidden && dialog.dataset.previewState === 'ready');
+                stageOverlay.hidden = !showOnStage;
+                stageOverlay.dataset.style = spec.id;
+                stageOverlayText.textContent = sampleText;
+                stageOverlayText.style.fontSize = `${stageFontPx}px`;
+            }
+        };
+
+        chipsRoot?.querySelectorAll('[data-sub-style]').forEach(btn => {
+            btn.onclick = () => {
+                const nextStyle = btn.dataset.subStyle || 'minimal';
+                if (styleSelect.value !== nextStyle) {
+                    styleSelect.value = nextStyle;
+                    styleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                renderSubtitlePreview();
+            };
+        });
+
+        styleSelect.addEventListener('change', renderSubtitlePreview, { signal });
+        styleSelect.addEventListener('input', renderSubtitlePreview, { signal });
+        fontSizeSelect?.addEventListener('change', renderSubtitlePreview, { signal });
+        fontSizeSelect?.addEventListener('input', renderSubtitlePreview, { signal });
+        dialog.querySelectorAll('.process-inspector-tab').forEach(tab => {
+            tab.addEventListener('click', () => setTimeout(renderSubtitlePreview, 0), { signal });
+        });
+        cardRoot.addEventListener('mouseenter', () => { previewHovering = true; }, { signal });
+        cardRoot.addEventListener('mouseleave', () => { previewHovering = false; }, { signal });
+
+        const cycleTimer = setInterval(() => {
+            if (!isCurrent() || previewHovering || !subPanel || subPanel.hidden) return;
+            activeSample = (activeSample + 1) % SUBTITLE_SAMPLE_LINES.length;
+            renderSubtitlePreview();
+        }, 2600);
+        signal.addEventListener('abort', () => clearInterval(cycleTimer), { once: true });
+
+        dialog._renderSubtitleStylePreview = renderSubtitlePreview;
+        renderSubtitlePreview();
+    };
+    bindSubtitleStylePreview();
     set('processOriginalVolume', defaults.original_volume ?? 0.15);
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.00);
@@ -1250,6 +1356,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         dialog.querySelector('#processConfigResolution').textContent = `${preview.videoWidth} × ${preview.videoHeight}`;
         dialog.querySelector('#processConfigRatio').textContent = formatVideoRatio({ width: preview.videoWidth, height: preview.videoHeight }) || 'Chưa rõ';
         drawSelection();
+        dialog._renderSubtitleStylePreview?.();
     };
     preview.onresize = drawSelection;
     preview.ontimeupdate = () => {
@@ -1505,6 +1612,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     : 'Đã khôi phục cấu hình thao tác gần nhất.';
             }
             outputSummary.refresh();
+            dialog._renderSubtitleStylePreview?.();
         } finally {
             dialog.dataset.presetApplying = '0';
         }

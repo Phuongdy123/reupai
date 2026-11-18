@@ -261,3 +261,29 @@ body.theme-xports #processConfigDialog .process-recognition-controls > label { d
 .process-transcript-review-dialog .ocr-line-translation:read-only{color:#9ca3af;background:#14171d}
 .process-transcript-review-buttons{flex-wrap:wrap;justify-content:flex-end}
 .process-transcript-review-buttons [hidden]{display:none!important}
+
+/* Subtitle style live preview card & source-stage overlay */
+body.theme-xports #processConfigDialog .process-sub-preview-card { grid-column: 1 / -1; display: grid; gap: 11px; padding: 13px; border: 1px solid #353535; border-radius: 14px; background: #171717; }
+body.theme-xports #processConfigDialog .process-sub-preview-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+body.theme-xports #processConfigDialog .process-sub-preview-head strong { display: block; color: #f0f0f0; font-size: 13px; font-weight: 600; }
+body.theme-xports #processConfigDialog .process-sub-preview-head small { display: block; margin-top: 2px; color: #a0a0a0; font-size: 11px; line-height: 1.45; }
+body.theme-xports #processConfigDialog .process-sub-style-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+body.theme-xports #processConfigDialog .process-sub-style-chips button { min-height: 30px; padding: 4px 10px; border: 1px solid #3e3e3e; border-radius: 999px; background: #232323; color: #cccccc; font-size: 11px; font-weight: 500; cursor: pointer; transition: border-color .15s ease, background-color .15s ease, color .15s ease; }
+body.theme-xports #processConfigDialog .process-sub-style-chips button:hover { border-color: #6b6b6b; color: #ffffff; }
+body.theme-xports #processConfigDialog .process-sub-style-chips button.is-active { border-color: #e7e7e7; background: #e7e7e7; color: #191919; font-weight: 600; }
+body.theme-xports #processConfigDialog .process-sub-preview-stage { position: relative; display: flex; align-items: flex-end; justify-content: center; min-height: 116px; padding: 30px 14px 16px; overflow: hidden; border: 1px solid #2f2f2f; border-radius: 12px; background: radial-gradient(circle at 22% 24%, rgba(78, 92, 128, 0.34), transparent 55%), radial-gradient(circle at 80% 30%, rgba(168, 72, 92, 0.24), transparent 50%), linear-gradient(180deg, #1b2029 0%, #101319 65%, #090b0f 100%); text-align: center; }
+body.theme-xports #processConfigDialog .process-sub-preview-badge { position: absolute; left: 10px; top: 8px; padding: 2px 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.48); color: #b7becb; font-size: 9.5px; letter-spacing: .02em; }
+body.theme-xports #processConfigDialog .process-sub-render-text { display: inline-block; max-width: 94%; line-height: 1.38; text-align: center; overflow-wrap: anywhere; transition: color .15s ease, text-shadow .15s ease, background-color .15s ease; }
+body.theme-xports #processConfigDialog [data-style="minimal"] .process-sub-render-text { color: #ffffff; font-weight: 600; text-shadow: -1.5px -1.5px 0 #101010, 1.5px -1.5px 0 #101010, -1.5px 1.5px 0 #101010, 1.5px 1.5px 0 #101010, 0 2px 3px rgba(0,0,0,0.85); }
+body.theme-xports #processConfigDialog [data-style="bold"] .process-sub-render-text { color: #ffffff; font-weight: 800; letter-spacing: 0.01em; text-shadow: -2px -2px 0 #0a0a0a, 2px -2px 0 #0a0a0a, -2px 2px 0 #0a0a0a, 2px 2px 0 #0a0a0a, 0 -2px 0 #0a0a0a, 0 2px 0 #0a0a0a, -2px 0 0 #0a0a0a, 2px 0 0 #0a0a0a; }
+body.theme-xports #processConfigDialog [data-style="cinema"] .process-sub-render-text { color: #fff3e9; font-weight: 500; text-shadow: -1px -1px 0 #181818, 1px -1px 0 #181818, -1px 1px 0 #181818, 1px 1px 0 #181818, 0 3px 8px rgba(0,0,0,0.92); }
+body.theme-xports #processConfigDialog [data-style="neon"] .process-sub-render-text { color: #ff4673; font-weight: 800; text-shadow: -1.5px -1.5px 0 #2a1020, 1.5px -1.5px 0 #2a1020, -1.5px 1.5px 0 #2a1020, 1.5px 1.5px 0 #2a1020, 0 0 12px rgba(255,70,115,0.65); }
+body.theme-xports #processConfigDialog [data-style="box"] .process-sub-render-text { padding: 4px 11px; border-radius: 6px; background: rgba(16, 16, 16, 0.72); color: #ffffff; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.65); }
+body.theme-xports #processConfigDialog .process-sub-sample-list { display: grid; gap: 5px; }
+body.theme-xports #processConfigDialog .process-sub-sample-item { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 6px 9px; border: 1px solid #2b2b2b; border-radius: 9px; background: #1e1e1e; color: #a7a7a7; font-size: 11px; line-height: 1.45; text-align: left; cursor: pointer; }
+body.theme-xports #processConfigDialog .process-sub-sample-item b { flex: 0 0 auto; color: #7e7e7e; font-size: 10px; font-variant-numeric: tabular-nums; }
+body.theme-xports #processConfigDialog .process-sub-sample-item:hover { border-color: #464646; color: #e2e2e2; }
+body.theme-xports #processConfigDialog .process-sub-sample-item.is-active { border-color: #6a6a6a; background: #262626; color: #f1f1f1; }
+body.theme-xports #processConfigDialog .process-sub-sample-item.is-active b { color: #e7e7e7; }
+body.theme-xports #processConfigDialog .process-stage-subtitle-preview { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 3; width: min(92%, 520px); pointer-events: none; text-align: center; }
+body.theme-xports #processConfigDialog .process-stage-subtitle-preview[hidden] { display: none !important; }
