@@ -549,6 +549,12 @@ class ProcessRequest(BaseModel):
     blur_mode: Literal["blur", "delogo", "inpaint"] = "blur"
     glossary: Optional[Any] = None
     vocal_separation: bool = False
+    trim_silence: bool = False
+    multi_voice: bool = False
+    secondary_voice: Optional[str] = None
+    outro_cta_enabled: bool = False
+    outro_cta_text: Optional[str] = None
+    bgm_mood: Optional[str] = None
     anti_reuse: bool = False
     anti_reuse_zoom: float = 1.04
     anti_reuse_speed: float = 1.03

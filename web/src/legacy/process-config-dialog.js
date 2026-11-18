@@ -389,6 +389,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <button type="button" class="process-inspector-tab" id="processInspectorTabOcr" role="tab" data-inspector-tab="ocr" aria-controls="processInspectorOcr" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>SRT</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabAudio" role="tab" data-inspector-tab="audio" aria-controls="processInspectorAudio" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('voice', 18)}</span><span>Âm thanh</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabPresets" role="tab" data-inspector-tab="presets" aria-controls="processInspectorPresets" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('save', 18)}</span><span>Cấu hình</span></button>
+                    <button type="button" class="process-inspector-tab" id="processInspectorTabAdvanced" role="tab" data-inspector-tab="advanced" aria-controls="processInspectorAdvanced" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('sparkles', 18)}</span><span>Nâng cao</span></button>
                 </nav>
                 <div class="process-inspector-content">
                 <div class="process-inspector-heading"><span class="process-inspector-dot" aria-hidden="true"></span>Thiết lập đầu ra</div>
@@ -413,7 +414,6 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <option value="tiktok">TikTok · 9:16</option>
                     </select>
                 </label>
-                <div class="process-subsection-title">Xóa chữ, Logo &amp; Chống Reused Content</div>
                 <label style="grid-column:1 / -1;">
                     Chế độ xóa chữ/logo gốc (Song song)
                     <select id="processEraseMode">
@@ -428,34 +428,9 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <small>Che ID hoặc chữ ở góc trên video.</small>
                 </label>
                 <label class="process-check-option">
-                    <input id="processAntiReuse" type="checkbox">
-                    Gói chống Reused Content (YouTube)
-                    <small>Zoom nhẹ 1.04x + tốc độ 1.03x để né quét trùng lặp.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAntiReuseMirror" type="checkbox">
-                    Lật gương video (Mirror)
-                    <small>Lật ngang khung hình gốc (giữ nguyên phụ đề đúng chiều).</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAntiReuseColor" type="checkbox">
-                    Chỉnh màu nhẹ (Contrast/Sat)
-                    <small>Tăng nhẹ tương phản &amp; bão hòa để đổi chữ ký khung hình.</small>
-                </label>
-                <div class="process-subsection-title">Hiệu năng, Âm thanh &amp; Thuật ngữ Series</div>
-                <label class="process-check-option">
                     <input id="processBoostGpu" type="checkbox">
                     Boost GPU
                     <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processVocalSeparation" type="checkbox">
-                    Tách giọng gốc giữ SFX/Nhạc
-                    <small>Xóa riêng tiếng nói gốc, giữ lại hiệu ứng âm thanh &amp; nhạc nền.</small>
-                </label>
-                <label style="grid-column:1 / -1;">
-                    Từ điển nhân vật / thuật ngữ Series (tùy chọn, 1 dòng/từ)
-                    <textarea id="processGlossary" rows="2" placeholder="Ví dụ:&#10;萧炎 = Tiêu Viêm&#10;斗气 = Đấu Khí" style="width:100%;margin-top:4px;resize:vertical;"></textarea>
                 </label>
                 </div>
             </section>
@@ -653,6 +628,73 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <small id="processPresetStatus">Tự động lưu thao tác gần nhất. Chọn preset sẽ áp dụng ngay.</small>
             </div>
 
+</section>
+<section class="process-settings-card process-inspector-panel" id="processInspectorAdvanced" data-inspector-panel="advanced" role="tabpanel" aria-labelledby="processInspectorTabAdvanced" tabindex="0" hidden>
+    <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('sparkles', 18)}</span><strong>Tính năng nâng cao</strong><small>Chống bản quyền, cắt khoảng lặng, 2 giọng đọc, nhạc Mood &amp; CTA</small></div>
+    <div class="process-config-grid">
+        <div class="process-subsection-title" style="border-top:none;padding-top:0;">Chống Reused Content &amp; Nhịp độ</div>
+        <label class="process-check-option">
+            <input id="processAntiReuse" type="checkbox">
+            Gói chống Reused Content
+            <small>Zoom nhẹ 1.04x + tốc độ 1.03x để né quét trùng lặp.</small>
+        </label>
+        <label class="process-check-option">
+            <input id="processAntiReuseMirror" type="checkbox">
+            Lật gương video (Mirror)
+            <small>Lật ngang khung hình gốc (giữ phụ đề đúng chiều).</small>
+        </label>
+        <label class="process-check-option">
+            <input id="processAntiReuseColor" type="checkbox">
+            Chỉnh màu nhẹ (Contrast/Sat)
+            <small>Tăng nhẹ tương phản &amp; bão hòa đổi chữ ký hình.</small>
+        </label>
+        <label class="process-check-option">
+            <input id="processTrimSilence" type="checkbox">
+            Cắt khoảng lặng thừa
+            <small>Tự động cắt bỏ đoạn im lặng &gt; 1.2 giây cho nhịp nhanh.</small>
+        </label>
+        <div class="process-subsection-title">Âm thanh nâng cao &amp; Nhạc nền sạch</div>
+        <label class="process-check-option">
+            <input id="processVocalSeparation" type="checkbox">
+            Tách giọng gốc giữ SFX/Nhạc
+            <small>Xóa tiếng nói gốc, giữ lại hiệu ứng &amp; nhạc nền.</small>
+        </label>
+        <label class="process-check-option">
+            <input id="processMultiVoice" type="checkbox">
+            Đọc 2 giọng (Hội thoại Nam/Nữ)
+            <small>Tự luân phiên 2 giọng đọc cho các câu đối thoại.</small>
+        </label>
+        <label>Giọng nhân vật 2
+            <select id="processSecondaryVoice">
+                <option value="Nam Minh">Nam Minh (Nam)</option>
+                <option value="Trúc Ly">Trúc Ly (Nữ)</option>
+                <option value="Hoài My">Hoài My (Nữ)</option>
+            </select>
+        </label>
+        <label>Kho nhạc nền Mood sạch bản quyền
+            <select id="processBgmMood">
+                <option value="">Không dùng nhạc Mood sẵn</option>
+                <option value="lofi">Lo-fi Chill (Kể chuyện / Review)</option>
+                <option value="epic">Hào hùng / Tiên hiệp (Epic)</option>
+                <option value="action">Kịch tính / Hành động</option>
+                <option value="funny">Vui tươi / Hài hước</option>
+            </select>
+        </label>
+        <div class="process-subsection-title">CTA cuối video &amp; Từ điển Series</div>
+        <label class="process-check-option" style="grid-column:1 / -1;">
+            <input id="processOutroCtaEnabled" type="checkbox">
+            Tự chèn CTA "Đăng ký kênh" (5 giây cuối)
+            <small>Hiển thị banner kêu gọi đăng ký/xem tập tiếp ở 5s cuối.</small>
+        </label>
+        <label style="grid-column:1 / -1;">
+            Nội dung chữ CTA (5 giây cuối)
+            <input id="processOutroCtaText" type="text" placeholder="Đăng ký kênh để xem tập tiếp theo!">
+        </label>
+        <label style="grid-column:1 / -1;">
+            Từ điển nhân vật / thuật ngữ Series (tùy chọn, 1 dòng/từ)
+            <textarea id="processGlossary" rows="2" placeholder="Ví dụ:&#10;萧炎 = Tiêu Viêm&#10;斗气 = Đấu Khí" style="width:100%;margin-top:4px;resize:vertical;"></textarea>
+        </label>
+    </div>
 </section>
                 <div class="process-output-review">
                 <section class="process-output-summary" id="processOutputSummary" aria-labelledby="processOutputSummaryTitle">

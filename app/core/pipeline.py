@@ -2059,6 +2059,7 @@ def create_voice(
     voice_name=None,
 
     speed=None,
+    secondary_voice=None,
 
     on_progress=None,
 
@@ -2152,6 +2153,7 @@ def create_voice(
 
     if voice_name:
         tts.set_voice(voice_name)
+    tts.SECONDARY_VOICE = secondary_voice if secondary_voice else None
 
     if speed is not None:
         tts.BASE_TTS_SPEED = max(0.5, min(float(speed), 2.0))
@@ -2659,6 +2661,8 @@ def render_voiceover(
     anti_reuse_mirror=False,
     anti_reuse_color=False,
     blur_mode="blur",
+    outro_cta_enabled=False,
+    outro_cta_text=None,
     on_render_progress=None,
 
 
@@ -2734,6 +2738,24 @@ def render_voiceover(
     renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
     renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
     renderer.BLUR_MODE = str(blur_mode or "blur").strip().lower() or "blur"
+    renderer.OUTRO_CTA_ENABLED = bool(outro_cta_enabled)
+    renderer.OUTRO_CTA_TEXT = str(outro_cta_text or "").strip() or "Đăng ký kênh để xem tập tiếp theo!"
+    if renderer.OUTRO_CTA_ENABLED:
+        dur_probe = None
+        try:
+            dur_probe = float(preview_seconds) if preview_seconds else None
+        except (TypeError, ValueError):
+            dur_probe = None
+        if not dur_probe:
+            try:
+                from services.tts import get_video_duration_ms
+                ms = get_video_duration_ms(rel(source_video))
+                dur_probe = (ms / 1000.0) if ms else None
+            except Exception:
+                dur_probe = None
+        renderer.OUTRO_CTA_START = max(0.0, (dur_probe or 15.0) - 5.0)
+    else:
+        renderer.OUTRO_CTA_START = None
 
     renderer.PREVIEW_SECONDS = preview_seconds
 
@@ -2832,6 +2854,8 @@ def render_subtitle_only(
     anti_reuse_mirror=False,
     anti_reuse_color=False,
     blur_mode="blur",
+    outro_cta_enabled=False,
+    outro_cta_text=None,
     on_render_progress=None,
 
     force=False,
@@ -2899,6 +2923,24 @@ def render_subtitle_only(
     renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
     renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
     renderer.BLUR_MODE = str(blur_mode or "blur").strip().lower() or "blur"
+    renderer.OUTRO_CTA_ENABLED = bool(outro_cta_enabled)
+    renderer.OUTRO_CTA_TEXT = str(outro_cta_text or "").strip() or "Đăng ký kênh để xem tập tiếp theo!"
+    if renderer.OUTRO_CTA_ENABLED:
+        dur_probe = None
+        try:
+            dur_probe = float(preview_seconds) if preview_seconds else None
+        except (TypeError, ValueError):
+            dur_probe = None
+        if not dur_probe:
+            try:
+                from services.tts import get_video_duration_ms
+                ms = get_video_duration_ms(rel(source_video))
+                dur_probe = (ms / 1000.0) if ms else None
+            except Exception:
+                dur_probe = None
+        renderer.OUTRO_CTA_START = max(0.0, (dur_probe or 15.0) - 5.0)
+    else:
+        renderer.OUTRO_CTA_START = None
 
     renderer.RENDER_MODE = "subtitle"
     renderer.RENDER_PROGRESS_CALLBACK = on_render_progress
@@ -4154,6 +4196,11 @@ def pipeline(
 
 
                 speed=config.get("tts_speed"),
+                secondary_voice=(
+                    (config.get("secondary_voice") or ("Nam Minh" if "Trúc" in str(effective_voice) else "Trúc Ly"))
+                    if config.get("multi_voice")
+                    else None
+                ),
 
                 on_progress=on_voice_progress,
 
@@ -4385,6 +4432,14 @@ def pipeline(
         effective_original_volume = original_volume
         effective_music_path = config.get("music_path")
         effective_music_volume = float(config.get("music_volume", 0.25))
+        if not effective_music_path and config.get("bgm_mood"):
+            try:
+                from services.bgm_library import get_or_generate_bgm_preset
+                bgm_wav = get_or_generate_bgm_preset(str(config.get("bgm_mood")), job_dir / "bgm_cache")
+                if bgm_wav and bgm_wav.is_file():
+                    effective_music_path = str(bgm_wav)
+            except Exception as bgm_err:
+                print(f"[BGM PRESET FALLBACK] {bgm_err}")
         if bool(config.get("vocal_separation")) and mode == "voiceover" and not no_speech and not effective_music_path:
             try:
                 from services.vocal_separator import separate_vocals_preserve_sfx
@@ -4456,6 +4511,8 @@ def pipeline(
                 anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
                 anti_reuse_color=bool(config.get("anti_reuse_color", False)),
                 blur_mode=effective_blur_mode,
+                outro_cta_enabled=bool(config.get("outro_cta_enabled", False)),
+                outro_cta_text=config.get("outro_cta_text"),
                 on_render_progress=on_render_progress,
 
                 force=render_force,
@@ -4516,17 +4573,31 @@ def pipeline(
                 anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
                 anti_reuse_color=bool(config.get("anti_reuse_color", False)),
                 blur_mode=effective_blur_mode,
+                outro_cta_enabled=bool(config.get("outro_cta_enabled", False)),
+                outro_cta_text=config.get("outro_cta_text"),
                 on_render_progress=on_render_progress,
 
                 force=render_force,
 
             )
 
-
-
-
-
-
+        if bool(config.get("trim_silence", False)) and output_path.is_file():
+            try:
+                from services.silence_trimmer import trim_video_silence
+                write_progress(
+                    job_dir,
+                    stage="render",
+                    percent=98,
+                    status="running",
+                    message="Đang tự động cắt khoảng lặng thừa (Silence Trimmer)…",
+                    mode=mode,
+                )
+                trimmed_tmp = output_path.with_suffix(".trimmed.mp4")
+                trimmed = trim_video_silence(output_path, trimmed_tmp)
+                if trimmed != output_path and trimmed.is_file() and trimmed.stat().st_size > 1024:
+                    shutil.move(str(trimmed), str(output_path))
+            except Exception as trim_err:
+                print(f"[SILENCE TRIMMER FALLBACK] {trim_err}")
 
         completed_job = {
 

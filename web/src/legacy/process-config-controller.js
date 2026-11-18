@@ -2136,6 +2136,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (dialog.querySelector('#processAntiReuseMirror')) dialog.querySelector('#processAntiReuseMirror').checked = false;
             if (dialog.querySelector('#processAntiReuseColor')) dialog.querySelector('#processAntiReuseColor').checked = false;
             if (dialog.querySelector('#processVocalSeparation')) dialog.querySelector('#processVocalSeparation').checked = false;
+            if (dialog.querySelector('#processTrimSilence')) dialog.querySelector('#processTrimSilence').checked = false;
+            if (dialog.querySelector('#processMultiVoice')) dialog.querySelector('#processMultiVoice').checked = false;
+            if (dialog.querySelector('#processOutroCtaEnabled')) dialog.querySelector('#processOutroCtaEnabled').checked = false;
+            set('processSecondaryVoice', 'Nam Minh');
+            set('processBgmMood', '');
+            set('processOutroCtaText', '');
             set('processEraseMode', 'blur');
             set('processGlossary', '');
             set('processBlurPreset', '');
@@ -2196,6 +2202,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             'processBlurWidth', 'processBlurHeight',
             'processSecondarySubX', 'processSecondarySubY', 'processSecondarySubWidth', 'processSecondarySubHeight',
             'processSecondarySubStyle', 'processSecondarySubFontSize', 'processEraseMode', 'processGlossary',
+            'processSecondaryVoice', 'processBgmMood', 'processOutroCtaText',
         ];
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
@@ -2205,6 +2212,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
             anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
             vocal_separation: !!dialog.querySelector('#processVocalSeparation')?.checked,
+            trim_silence: !!dialog.querySelector('#processTrimSilence')?.checked,
+            multi_voice: !!dialog.querySelector('#processMultiVoice')?.checked,
+            outro_cta_enabled: !!dialog.querySelector('#processOutroCtaEnabled')?.checked,
             secondary_sub_blur: dialog.querySelector('#processSecondarySubBlur')?.checked !== false,
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
@@ -2288,6 +2298,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     if (el) el.checked = !!value;
                 } else if (id === 'vocal_separation') {
                     const el = dialog.querySelector('#processVocalSeparation');
+                    if (el) el.checked = !!value;
+                } else if (id === 'trim_silence') {
+                    const el = dialog.querySelector('#processTrimSilence');
+                    if (el) el.checked = !!value;
+                } else if (id === 'multi_voice') {
+                    const el = dialog.querySelector('#processMultiVoice');
+                    if (el) el.checked = !!value;
+                } else if (id === 'outro_cta_enabled') {
+                    const el = dialog.querySelector('#processOutroCtaEnabled');
                     if (el) el.checked = !!value;
                 } else if (id === 'source_subtitle_mode') {
                     const el = dialog.querySelector('#processSourceNoSub');
@@ -3372,6 +3391,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
             anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
             vocal_separation: !!dialog.querySelector('#processVocalSeparation')?.checked,
+            trim_silence: !!dialog.querySelector('#processTrimSilence')?.checked,
+            multi_voice: !!dialog.querySelector('#processMultiVoice')?.checked,
+            secondary_voice: value('processSecondaryVoice') || 'Nam Minh',
+            bgm_mood: value('processBgmMood') || null,
+            outro_cta_enabled: !!dialog.querySelector('#processOutroCtaEnabled')?.checked,
+            outro_cta_text: value('processOutroCtaText')?.trim() || null,
             blur_mode: value('processEraseMode') || 'blur',
             glossary: value('processGlossary')?.trim() || null,
             source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',

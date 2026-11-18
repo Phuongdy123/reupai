@@ -326,6 +326,9 @@ ANTI_REUSE_SPEED = 1.03
 ANTI_REUSE_MIRROR = False
 ANTI_REUSE_COLOR = False
 BLUR_MODE = "blur"
+OUTRO_CTA_ENABLED = False
+OUTRO_CTA_TEXT = "Đăng ký kênh để xem tập tiếp theo!"
+OUTRO_CTA_START = None
 
 
 
@@ -6417,6 +6420,17 @@ def build_video_filter(
     parts.append(
         f"[{current}]subtitles=filename='{ass}'[{subtitle_label}]"
     )
+    if OUTRO_CTA_ENABLED and OUTRO_CTA_START is not None:
+        cta_raw = str(OUTRO_CTA_TEXT or "Đăng ký kênh để xem tập tiếp theo!").strip() or "Đăng ký kênh để xem tập tiếp theo!"
+        cta_esc = cta_raw.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        cta_start = max(0.0, float(OUTRO_CTA_START))
+        font_esc = ffmpeg_filter_path(r"C:\Windows\Fonts\arialbd.ttf") if Path(r"C:\Windows\Fonts\arialbd.ttf").is_file() else ""
+        font_arg = f"fontfile='{font_esc}':" if font_esc else ""
+        parts.append(
+            f"[{subtitle_label}]drawbox=x=iw*0.14:y=ih-96:w=iw*0.72:h=54:color=0x0f172a@0.82:t=fill:enable='gte(t,{cta_start:.2f})',"
+            f"drawtext={font_arg}text='{cta_esc}':fontcolor=0xfde047:fontsize=24:x=(w-text_w)/2:y=h-80:enable='gte(t,{cta_start:.2f})'[with_cta]"
+        )
+        subtitle_label = "with_cta"
 
     needs_output_resize = (
         target_width

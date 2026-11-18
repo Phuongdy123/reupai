@@ -9107,13 +9107,17 @@ function ensureBatchAutoPublishDialog() {
                     <section class="batch-ap-section">
                         <h3>2. Prompt Series &amp; Đánh số Tập tự động</h3>
                         <label class="batch-ap-field">
-                            <span>Chủ đề / Prompt chung cho AI (tự tăng Tập 1, 2, 3… hoặc dùng <code>{ep}</code>)</span>
+                            <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                                <span>Chủ đề / Prompt chung cho AI (tự tăng Tập 1, 2, 3… hoặc dùng <code>{ep}</code>)</span>
+                                <button type="button" class="btn secondary" id="batchApSeoBtn" style="padding:3px 8px;font-size:11px;white-space:nowrap;" title="Quét từ khóa & hashtag đang lên xu hướng trên YouTube cho chủ đề này">Soi Trend SEO YouTube</button>
+                            </span>
                             <input
                                 type="text"
                                 id="batchApBasePrompt"
                                 placeholder="Ví dụ: Xuyên không dị giới tập 1 (hoặc Xuyên không làm thần)"
                                 maxlength="300"
                             >
+                            <small id="batchApSeoResult" style="display:none;margin-top:4px;color:#93c5fd;white-space:pre-wrap;"></small>
                         </label>
                         <div class="batch-ap-grid-ep">
                             <label class="batch-ap-field">
@@ -9781,6 +9785,37 @@ async function openBatchAutoPublishDialog() {
     const checkBatchCopyrightBtn = dialog.querySelector('#batchApCheckCopyrightBtn');
     const autoThumbBtn = dialog.querySelector('#batchApAutoThumbBtn');
     const mergeSeriesBtn = dialog.querySelector('#batchApMergeBtn');
+    const seoTrendBtn = dialog.querySelector('#batchApSeoBtn');
+    const seoResultEl = dialog.querySelector('#batchApSeoResult');
+    if (seoTrendBtn) {
+        seoTrendBtn.onclick = async () => {
+            const q = basePromptInput.value.trim() || episodeVideos[0]?.title || 'review phim';
+            seoTrendBtn.disabled = true;
+            seoTrendBtn.textContent = 'Đang soi…';
+            try {
+                const res = await window.reupEngineClient.json('/api/youtube/seo-trends', {
+                    method: 'POST',
+                    body: JSON.stringify({ query: q }),
+                });
+                const kws = Array.isArray(res?.keywords) ? res.keywords.slice(0, 6).join(', ') : '';
+                const tags = Array.isArray(res?.hashtags) ? res.hashtags.join(' ') : '';
+                if (seoResultEl) {
+                    seoResultEl.style.display = 'block';
+                    seoResultEl.textContent = kws
+                        ? `Từ khóa Trend: ${kws}${tags ? `\nHashtags: ${tags}` : ''}`
+                        : 'Đã quét xong xu hướng YouTube.';
+                }
+            } catch (err) {
+                if (seoResultEl) {
+                    seoResultEl.style.display = 'block';
+                    seoResultEl.textContent = err?.message || 'Chưa soi được trend YouTube.';
+                }
+            } finally {
+                seoTrendBtn.disabled = false;
+                seoTrendBtn.textContent = 'Soi Trend SEO YouTube';
+            }
+        };
+    }
 
     if (autoThumbBtn) {
         autoThumbBtn.onclick = async () => {

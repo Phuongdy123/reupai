@@ -926,6 +926,29 @@ def music_pixabay_search(payload: dict, _: bool = Depends(require_token)):
         raise HTTPException(status_code=502, detail=f"Lỗi kết nối Pixabay: {err}") from err
 
 
+@app.get("/api/music/presets")
+def music_presets(_: bool = Depends(require_token)):
+    from services.bgm_library import list_bgm_presets
+    return {"ok": True, "presets": list_bgm_presets()}
+
+
+@app.get("/api/music/preset/{mood}")
+def music_preset_audio(mood: str, _: bool = Depends(require_token)):
+    from services.bgm_library import get_or_generate_bgm_preset
+    cache_dir = job_dir_for("default", "placeholder").parent / "_bgm_cache"
+    wav_path = get_or_generate_bgm_preset(mood, cache_dir)
+    return FileResponse(str(wav_path), media_type="audio/wav", filename=wav_path.name)
+
+
+@app.post("/api/youtube/seo-trends")
+def youtube_seo_trends(payload: dict, owner: str = Depends(youtube_owner)):
+    from services.youtube_seo import analyze_youtube_seo_trends
+    try:
+        return analyze_youtube_seo_trends(str(payload.get("query") or ""), owner=owner)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
 @app.post("/api/gemini/oauth/start")
 def gemini_oauth_start(payload: dict[str, str] | None = None, _: bool = Depends(require_token)):
     from services.gemini_oauth import start_authorization

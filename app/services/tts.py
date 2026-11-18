@@ -249,6 +249,7 @@ VOICE = normalize_voice_name(
 
 # Edge fallback only. VieNeu remains primary.
 EDGE_VOICE = "vi-VN-NamMinhNeural"
+SECONDARY_VOICE = None
 EDGE_RATE = "+0%"
 EDGE_PITCH = "+0Hz"
 
@@ -668,14 +669,16 @@ def generate_vieneu_tts(
 
 async def _generate_edge_mp3_once(
     text,
-    output_path
+    output_path,
+    voice_override=None,
 ):
     if edge_tts is None:
         raise RuntimeError(
             "edge-tts chua duoc cai."
         )
 
-    profile = EDGE_VOICE_PROFILES.get(VOICE)
+    target_key = normalize_voice_name(voice_override) if voice_override else VOICE
+    profile = EDGE_VOICE_PROFILES.get(target_key)
     edge_voice, edge_pitch, edge_rate = profile or (EDGE_VOICE, EDGE_PITCH, EDGE_RATE)
     communicate = (
         edge_tts.Communicate(
@@ -693,7 +696,8 @@ async def _generate_edge_mp3_once(
 
 def generate_edge_fallback(
     text,
-    output_wav
+    output_wav,
+    voice_override=None,
 ):
     output_wav = str(
         output_wav
@@ -709,6 +713,7 @@ def generate_edge_fallback(
             _generate_edge_mp3_once(
                 text,
                 temp_mp3,
+                voice_override=voice_override,
             )
         )
 
@@ -1151,6 +1156,30 @@ def create_tts_clips(
     voice_slug = (
         _safe_voice_slug()
     )
+
+    # Optional 2-voice dialogue alternation when SECONDARY_VOICE is enabled
+    sec_voice = normalize_voice_name(SECONDARY_VOICE) if SECONDARY_VOICE else None
+    use_multi_voice = bool(sec_voice and sec_voice != VOICE and len(subtitles) > 1 and edge_tts is not None)
+    if use_multi_voice:
+        sec_pending = []
+        primary_indices = []
+        turn = 0
+        for idx, subtitle in enumerate(subtitles):
+            txt = str(subtitle.get("text") or "").strip()
+            if idx > 0 and (txt.startswith(("-", "—", "[")) or idx % 2 == 1):
+                turn = 1 - turn if txt.startswith(("-", "—")) else 1
+            else:
+                turn = 0
+            if turn == 1:
+                raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
+                if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+                    sec_pending.append((txt.lstrip("-— ").strip() or txt, raw_wav))
+            else:
+                primary_indices.append(idx)
+        if sec_pending:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(4, len(sec_pending))) as pool:
+                list(pool.map(lambda item: generate_edge_fallback(item[0], item[1], voice_override=sec_voice), sec_pending))
 
     # Auto mode enables two workers only when the CPU and free-memory budget
     # can support them; REUP_TTS_ONNX_WORKERS=1 keeps a low-memory fallback.
