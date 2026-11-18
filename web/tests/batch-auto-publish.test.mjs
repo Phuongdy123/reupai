@@ -8,6 +8,8 @@ import {
     normalizeEpisodeMetadata,
     sortFilesForEpisodes,
     mapFilesToEpisodeSlots,
+    reorderEpisodeVideos,
+    replaceEpisodeVideoAt,
     generateAndPublishEpisode,
 } from '../src/lib/batch-auto-publish.js';
 import { buildProcessPayloadFromSavedPreset } from '../src/lib/process-config-store.js';
@@ -166,4 +168,24 @@ test('buildProcessPayloadFromSavedPreset converts saved preset/lastConfig for ba
     assert.equal(payload.logo_x, 40);
     assert.equal(payload.logo_y, 36);
     assert.equal(payload.logo_data, 'data:image/png;base64,LOGO');
+});
+
+test('reorderEpisodeVideos and replaceEpisodeVideoAt swap or replace episode videos cleanly on drag and drop', () => {
+    const epVideos = [
+        { video_id: 'v1', title: 'Video 1' },
+        { video_id: 'v2', title: 'Video 2' },
+        { video_id: 'v3', title: 'Video 3' },
+    ];
+
+    // Drag Tập 3 onto Tập 1 -> swap v1 and v3
+    const swapped = reorderEpisodeVideos(epVideos, 2, 0, { mode: 'swap' });
+    assert.deepEqual(swapped.map((v) => v.video_id), ['v3', 'v2', 'v1']);
+
+    // Drag a new source video v99 onto Tập 2 (index 1) -> replaces v2 with v99
+    const replaced = replaceEpisodeVideoAt(swapped, 1, { video_id: 'v99', title: 'Video 99' });
+    assert.deepEqual(replaced.map((v) => v.video_id), ['v3', 'v99', 'v1']);
+
+    // Drag an already-present video v1 onto Tập 1 (index 0) -> swaps v3 and v1 without duplicating
+    const dedupSwapped = replaceEpisodeVideoAt(replaced, 0, { video_id: 'v1', title: 'Video 1' });
+    assert.deepEqual(dedupSwapped.map((v) => v.video_id), ['v1', 'v99', 'v3']);
 });

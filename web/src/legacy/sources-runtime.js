@@ -12,6 +12,8 @@ import {
 import {
   formatEpisodeTopic,
   mapFilesToEpisodeSlots,
+  reorderEpisodeVideos,
+  replaceEpisodeVideoAt,
   fileToThumbnailDataUrl,
   readSavedSocialTarget,
   readBatchAutoPublishPrefs,
@@ -8639,15 +8641,26 @@ function ensureBatchAutoPublishDialog() {
                     <div class="batch-ap-episodes-header">
                         <div>
                             <h3>4. Danh sách tập &amp; Ảnh bìa từng tập (<span id="batchApEpCount">0</span> tập)</h3>
-                            <p>Chọn 1 lần nhiều ảnh (ví dụ 6 ảnh cho Tập 1 → 6) hoặc bấm vào từng tập để đổi ảnh riêng.</p>
+                            <p>Kéo thả <code>⋮⋮</code> giữa các dòng để đổi/thay thế Tập, hoặc kéo video từ kho nguồn thả vào Tập bất kỳ.</p>
                         </div>
                         <div class="batch-ap-thumb-actions">
+                            <button type="button" class="btn secondary" id="batchApToggleSourcePoolBtn" title="Mở kho video nguồn để kéo thả thay thế cho bất kỳ tập nào">
+                                🔄 Kho video nguồn
+                            </button>
                             <label class="btn secondary batch-ap-multi-upload">
                                 📁 Chọn nhiều ảnh bìa (Tập 1 → N)
                                 <input type="file" id="batchApMultiThumbInput" accept="image/jpeg,image/png,image/webp" multiple hidden>
                             </label>
                             <button type="button" class="btn secondary" id="batchApClearThumbsBtn">Xóa ảnh</button>
                         </div>
+                    </div>
+
+                    <div id="batchApSourcePoolWrap" class="batch-ap-source-pool-wrap" hidden>
+                        <div class="batch-ap-source-pool-head">
+                            <span>Kéo một video bên dưới và thả đè vào dòng <strong>Tập 1, Tập 2…</strong> để thay thế tập đó:</span>
+                            <button type="button" class="batch-ap-pool-close" id="batchApClosePoolBtn">Ẩn kho nguồn</button>
+                        </div>
+                        <div id="batchApSourcePoolList" class="batch-ap-source-pool-list"></div>
                     </div>
 
                     <div id="batchApOverallStatus" class="batch-ap-overall-status" hidden></div>
@@ -8771,18 +8784,84 @@ async function openBatchAutoPublishDialog() {
         }
     })();
 
-    // Danh sách ảnh bìa và trạng thái từng tập
-    let thumbnailSlots = Array.from({ length: rawVideos.length }, () => null);
-    let thumbnailDataUrls = Array.from({ length: rawVideos.length }, () => null);
-    const episodeStates = new Map();
+    // Danh sách video của từng tập (cho phép kéo thả đổi chỗ hoặc kéo video khác vào thay thế)
+    let episodeVideos = [...rawVideos];
+    if (orderSelect.value === 'reverse') {
+        episodeVideos.reverse();
+    }
+    let lastAppliedOrder = orderSelect.value;
 
-    const getOrderedVideos = () => {
-        const list = [...rawVideos];
-        if (orderSelect.value === 'reverse') {
-            list.reverse();
-        }
-        return list;
+    let thumbnailSlots = Array.from({ length: episodeVideos.length }, () => null);
+    let thumbnailDataUrls = Array.from({ length: episodeVideos.length }, () => null);
+    const episodeStates = new Map();
+    let draggedEpisodeIndex = null;
+
+    const togglePoolBtn = dialog.querySelector('#batchApToggleSourcePoolBtn');
+    const closePoolBtn = dialog.querySelector('#batchApClosePoolBtn');
+    const poolWrapEl = dialog.querySelector('#batchApSourcePoolWrap');
+    const poolListEl = dialog.querySelector('#batchApSourcePoolList');
+
+    const getOrderedVideos = () => episodeVideos;
+
+    const resolveVideoCoverSrc = (video) => {
+        const cardImg = document.querySelector(
+            `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"] img.cover`,
+        );
+        return (cardImg?.complete && cardImg?.naturalWidth > 0 && cardImg?.currentSrc)
+            ? cardImg.currentSrc
+            : (video.thumbnail || '');
     };
+
+    const renderSourcePool = () => {
+        if (!poolListEl) return;
+        poolListEl.innerHTML = '';
+        const assignedIds = new Set(episodeVideos.map((v) => String(v.video_id)));
+        const candidates = currentVideos.length ? currentVideos : rawVideos;
+        candidates.forEach((srcVideo) => {
+            const inUseIdx = episodeVideos.findIndex((v) => String(v.video_id) === String(srcVideo.video_id));
+            const startEp = Math.max(1, Number(startEpInput.value || 1));
+            const cover = resolveVideoCoverSrc(srcVideo);
+            const item = document.createElement('div');
+            item.className = `batch-ap-pool-item ${assignedIds.has(String(srcVideo.video_id)) ? 'is-assigned' : ''}`;
+            item.draggable = !batchRunning;
+            item.dataset.sourceVideoId = String(srcVideo.video_id);
+            item.title = 'Kéo thả video này xuống Tập bất kỳ bên dưới để thay thế';
+            item.innerHTML = `
+                <div class="batch-ap-pool-thumb">
+                    ${cover ? `<img src="${escapeHtml(cover)}" alt="">` : '<span>🎬</span>'}
+                    ${inUseIdx !== -1 ? `<em class="batch-ap-pool-tag">Đang ở Tập ${startEp + inUseIdx}</em>` : '<em class="batch-ap-pool-tag is-free">Kéo để thay</em>'}
+                </div>
+                <span class="batch-ap-pool-title">${escapeHtml(srcVideo.title || srcVideo.video_id)}</span>
+            `;
+            item.ondragstart = (ev) => {
+                if (batchRunning) {
+                    ev.preventDefault();
+                    return;
+                }
+                draggedEpisodeIndex = null;
+                ev.dataTransfer.effectAllowed = 'copyMove';
+                ev.dataTransfer.setData('text/x-reup-source-video-id', String(srcVideo.video_id));
+                item.classList.add('is-dragging');
+            };
+            item.ondragend = () => {
+                item.classList.remove('is-dragging');
+            };
+            poolListEl.appendChild(item);
+        });
+    };
+
+    if (togglePoolBtn && poolWrapEl) {
+        poolWrapEl.hidden = true;
+        togglePoolBtn.onclick = () => {
+            poolWrapEl.hidden = !poolWrapEl.hidden;
+            if (!poolWrapEl.hidden) renderSourcePool();
+        };
+    }
+    if (closePoolBtn && poolWrapEl) {
+        closePoolBtn.onclick = () => {
+            poolWrapEl.hidden = true;
+        };
+    }
 
     const persistCurrentPrefs = () => {
         writeBatchAutoPublishPrefs(localStorage, {
@@ -8808,12 +8887,7 @@ async function openBatchAutoPublishDialog() {
         ordered.forEach((video, idx) => {
             const epNum = startEp + idx;
             const expectedTopic = formatEpisodeTopic(basePrompt, epNum, video.title || video.video_id);
-            const cardImg = document.querySelector(
-                `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"] img.cover`,
-            );
-            const fallbackCover = (cardImg?.complete && cardImg?.naturalWidth > 0 && cardImg?.currentSrc)
-                ? cardImg.currentSrc
-                : (video.thumbnail || '');
+            const fallbackCover = resolveVideoCoverSrc(video);
             const thumbUrl = thumbnailDataUrls[idx] || fallbackCover || '';
             const hasCustomThumb = Boolean(thumbnailDataUrls[idx]);
             const stateInfo = episodeStates.get(video.video_id) || {
@@ -8825,6 +8899,8 @@ async function openBatchAutoPublishDialog() {
             const row = document.createElement('div');
             row.className = `batch-ap-ep-row is-${stateInfo.status}`;
             row.dataset.videoId = video.video_id;
+            row.dataset.epIndex = String(idx);
+            row.draggable = !batchRunning;
 
             const linksHtml = Array.isArray(stateInfo.links) && stateInfo.links.length
                 ? `<div class="batch-ap-ep-links">${stateInfo.links
@@ -8833,7 +8909,10 @@ async function openBatchAutoPublishDialog() {
                 : '';
 
             row.innerHTML = `
-                <div class="batch-ap-ep-badge">Tập ${epNum}</div>
+                <div class="batch-ap-ep-left">
+                    <span class="batch-ap-drag-handle" title="Kéo thả dòng này sang tập khác để đổi/thay thế Tập">⋮⋮</span>
+                    <div class="batch-ap-ep-badge">Tập ${epNum}</div>
+                </div>
                 <label class="batch-ap-ep-thumb-wrap ${thumbUrl ? 'has-thumb' : 'is-empty'}" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
                     ${thumbUrl
                         ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb"><span class="batch-ap-ep-thumb-btn">${hasCustomThumb ? 'Đổi ảnh' : '+ Ảnh bìa'}</span>`
@@ -8842,13 +8921,17 @@ async function openBatchAutoPublishDialog() {
                 </label>
                 <div class="batch-ap-ep-info">
                     <strong class="batch-ap-ep-topic">${escapeHtml(expectedTopic)}</strong>
-                    <span class="batch-ap-ep-origin" title="${escapeHtml(video.title || video.video_id)}">Nguồn: ${escapeHtml(video.title || video.video_id)}</span>
+                    <span class="batch-ap-ep-origin" title="${escapeHtml(video.title || video.video_id)}">Video: ${escapeHtml(video.title || video.video_id)}</span>
                     ${hasCustomThumb && thumbnailSlots[idx]?.name
                         ? `<small class="batch-ap-ep-filename">Ảnh bìa riêng: ${escapeHtml(thumbnailSlots[idx].name)}</small>`
-                        : '<small class="batch-ap-ep-filename is-muted">Mặc định: khung hình video (hoặc bấm Chọn nhiều ảnh)</small>'}
+                        : '<small class="batch-ap-ep-filename is-muted">Kéo thả dòng để đổi tập · hoặc kéo video từ Kho nguồn thả vào đây</small>'}
                     ${linksHtml}
                 </div>
                 <div class="batch-ap-ep-status">
+                    <div class="batch-ap-ep-move-btns">
+                        <button type="button" class="batch-ap-move-btn" data-dir="-1" title="Đưa lên Tập ${epNum - 1}" ${idx === 0 || batchRunning ? 'disabled' : ''}>↑</button>
+                        <button type="button" class="batch-ap-move-btn" data-dir="1" title="Đưa xuống Tập ${epNum + 1}" ${idx === ordered.length - 1 || batchRunning ? 'disabled' : ''}>↓</button>
+                    </div>
                     <span class="batch-ap-status-pill is-${stateInfo.status}">${escapeHtml(stateInfo.text)}</span>
                 </div>
             `;
@@ -8864,6 +8947,91 @@ async function openBatchAutoPublishDialog() {
                 };
             }
 
+            row.querySelectorAll('.batch-ap-move-btn').forEach((btn) => {
+                btn.onclick = () => {
+                    if (batchRunning) return;
+                    const dir = Number(btn.dataset.dir || 0);
+                    const targetIdx = idx + dir;
+                    if (targetIdx < 0 || targetIdx >= episodeVideos.length) return;
+                    episodeVideos = reorderEpisodeVideos(episodeVideos, idx, targetIdx, { mode: 'swap' });
+                    renderEpisodeRows();
+                    if (!poolWrapEl?.hidden) renderSourcePool();
+                };
+            });
+
+            // Kéo thả đổi chỗ giữa các Tập hoặc nhận video từ Kho nguồn / nhận file ảnh bìa
+            row.ondragstart = (ev) => {
+                if (batchRunning) {
+                    ev.preventDefault();
+                    return;
+                }
+                draggedEpisodeIndex = idx;
+                ev.dataTransfer.effectAllowed = 'move';
+                ev.dataTransfer.setData('text/x-reup-episode-index', String(idx));
+                row.classList.add('is-dragging');
+            };
+            row.ondragend = () => {
+                draggedEpisodeIndex = null;
+                row.classList.remove('is-dragging');
+                epListEl.querySelectorAll('.batch-ap-ep-row.is-drop-target').forEach((el) => {
+                    el.classList.remove('is-drop-target');
+                });
+            };
+            row.ondragover = (ev) => {
+                if (batchRunning) return;
+                ev.preventDefault();
+                row.classList.add('is-drop-target');
+            };
+            row.ondragleave = () => {
+                row.classList.remove('is-drop-target');
+            };
+            row.ondrop = async (ev) => {
+                if (batchRunning) return;
+                ev.preventDefault();
+                row.classList.remove('is-drop-target');
+
+                // 1. Nếu kéo thả file ảnh từ máy tính vào dòng tập -> gán làm ảnh bìa tập đó
+                const droppedFiles = Array.from(ev.dataTransfer?.files || []);
+                const imageFile = droppedFiles.find((f) => /^image\//i.test(f.type));
+                if (imageFile) {
+                    thumbnailSlots[idx] = imageFile;
+                    thumbnailDataUrls[idx] = await fileToThumbnailDataUrl(imageFile);
+                    overallStatusEl.hidden = false;
+                    overallStatusEl.textContent = `✓ Đã cập nhật ảnh bìa cho Tập ${epNum} (${imageFile.name}).`;
+                    renderEpisodeRows();
+                    return;
+                }
+
+                // 2. Nếu kéo thả một video từ Kho video nguồn vào dòng tập -> thay thế video cho tập đó
+                const sourceVideoId = ev.dataTransfer?.getData('text/x-reup-source-video-id');
+                if (sourceVideoId) {
+                    const candidatePool = currentVideos.length ? currentVideos : rawVideos;
+                    const foundVideo = candidatePool.find((v) => String(v.video_id) === String(sourceVideoId));
+                    if (foundVideo) {
+                        episodeVideos = replaceEpisodeVideoAt(episodeVideos, idx, foundVideo);
+                        selectedVideoIds.clear();
+                        episodeVideos.forEach((v) => selectedVideoIds.add(String(v.video_id)));
+                        renderBatchBar();
+                        overallStatusEl.hidden = false;
+                        overallStatusEl.textContent = `✓ Đã thay thế Tập ${epNum} bằng video: ${foundVideo.title || foundVideo.video_id}`;
+                        renderEpisodeRows();
+                        if (!poolWrapEl?.hidden) renderSourcePool();
+                    }
+                    return;
+                }
+
+                // 3. Nếu kéo thả trực tiếp giữa các dòng Tập -> hoán đổi/thay thế Tập
+                const rawFrom = ev.dataTransfer?.getData('text/x-reup-episode-index');
+                const fromIdx = rawFrom !== '' && rawFrom != null ? Number(rawFrom) : draggedEpisodeIndex;
+                if (Number.isInteger(fromIdx) && fromIdx !== idx && fromIdx >= 0 && fromIdx < episodeVideos.length) {
+                    episodeVideos = reorderEpisodeVideos(episodeVideos, fromIdx, idx, { mode: 'swap' });
+                    overallStatusEl.hidden = false;
+                    overallStatusEl.textContent = `✓ Đã đổi video Tập ${startEp + fromIdx} ↔ Tập ${epNum}.`;
+                    renderEpisodeRows();
+                    if (!poolWrapEl?.hidden) renderSourcePool();
+                }
+            };
+
             epListEl.appendChild(row);
         });
     };
@@ -8875,10 +9043,16 @@ async function openBatchAutoPublishDialog() {
     startEpInput.oninput = () => {
         persistCurrentPrefs();
         renderEpisodeRows();
+        if (!poolWrapEl?.hidden) renderSourcePool();
     };
     orderSelect.onchange = () => {
+        if (orderSelect.value !== lastAppliedOrder) {
+            episodeVideos.reverse();
+            lastAppliedOrder = orderSelect.value;
+        }
         persistCurrentPrefs();
         renderEpisodeRows();
+        if (!poolWrapEl?.hidden) renderSourcePool();
     };
     modeSelect.onchange = persistCurrentPrefs;
     useAiInput.onchange = persistCurrentPrefs;

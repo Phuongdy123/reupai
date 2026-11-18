@@ -2815,6 +2815,101 @@ body.theme-xports #batchAutoPublishDialog .batch-ap-inline-select,
   font-size: 12px;
   font-weight: 600;
 }
+.batch-ap-source-pool-wrap {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(124, 58, 237, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.batch-ap-source-pool-wrap[hidden] {
+  display: none !important;
+}
+.batch-ap-source-pool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11.5px;
+  color: #e9d5ff;
+}
+.batch-ap-pool-close {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f5;
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.batch-ap-source-pool-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.batch-ap-pool-item {
+  flex: 0 0 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #141822;
+  cursor: grab;
+  user-select: none;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+.batch-ap-pool-item:hover {
+  border-color: #a78bfa;
+  transform: translateY(-1px);
+}
+.batch-ap-pool-item.is-dragging {
+  opacity: 0.5;
+}
+.batch-ap-pool-thumb {
+  position: relative;
+  width: 100%;
+  height: 58px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0b0e15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.batch-ap-pool-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.batch-ap-pool-tag {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.86);
+  color: #c4b5fd;
+}
+.batch-ap-pool-tag.is-free {
+  background: rgba(37, 99, 235, 0.88);
+  color: #ffffff;
+}
+.batch-ap-pool-title {
+  font-size: 10.5px;
+  color: #e4e4e7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .batch-ap-episode-list {
   display: flex;
   flex-direction: column;
@@ -2826,13 +2921,77 @@ body.theme-xports #batchAutoPublishDialog .batch-ap-inline-select,
 }
 .batch-ap-ep-row {
   display: grid;
-  grid-template-columns: 60px 96px minmax(0, 1fr) auto;
+  grid-template-columns: 78px 96px minmax(0, 1fr) auto;
   align-items: center;
   gap: 11px;
   padding: 8px 11px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.025);
+  cursor: grab;
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+.batch-ap-ep-row:active {
+  cursor: grabbing;
+}
+.batch-ap-ep-row.is-dragging {
+  opacity: 0.48;
+  border-style: dashed;
+}
+.batch-ap-ep-row.is-drop-target {
+  border-color: #a78bfa !important;
+  background: rgba(124, 58, 237, 0.18) !important;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.28);
+}
+.batch-ap-ep-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.batch-ap-drag-handle {
+  color: #71717a;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  cursor: grab;
+  user-select: none;
+}
+.batch-ap-ep-row:hover .batch-ap-drag-handle {
+  color: #d4d4d8;
+}
+.batch-ap-ep-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.batch-ap-ep-move-btns {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.batch-ap-move-btn {
+  width: 22px !important;
+  height: 18px !important;
+  min-width: 22px !important;
+  min-height: 18px !important;
+  padding: 0 !important;
+  border-radius: 4px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #d4d4d8 !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  cursor: pointer;
+}
+.batch-ap-move-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+}
+.batch-ap-move-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .batch-ap-ep-row.is-running {
   border-color: rgba(59, 130, 246, 0.55);

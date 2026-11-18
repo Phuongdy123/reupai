@@ -182,6 +182,57 @@ export function mapFilesToEpisodeSlots(files, slotCount, currentSlots = []) {
     return next;
 }
 
+/**
+ * Kéo thả đổi vị trí / thay thế tập trong danh sách episodeVideos.
+ * Khi mode === 'swap': hoán đổi trực tiếp video ở vị trí fromIndex và toIndex.
+ * Khi mode === 'move': chèn video từ fromIndex sang vị trí toIndex.
+ */
+export function reorderEpisodeVideos(videos, fromIndex, toIndex, { mode = 'swap' } = {}) {
+    const list = Array.isArray(videos) ? [...videos] : [];
+    const from = Number(fromIndex);
+    const to = Number(toIndex);
+    if (
+        !Number.isInteger(from)
+        || !Number.isInteger(to)
+        || from < 0
+        || to < 0
+        || from >= list.length
+        || to >= list.length
+        || from === to
+    ) {
+        return list;
+    }
+    if (mode === 'move') {
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        return list;
+    }
+    const temp = list[from];
+    list[from] = list[to];
+    list[to] = temp;
+    return list;
+}
+
+/**
+ * Thay thế video ở một tập (targetIndex) bằng một video nguồn khác (replacementVideo).
+ * Nếu replacementVideo đã nằm ở một tập khác trong danh sách, tự động hoán đổi 2 tập.
+ */
+export function replaceEpisodeVideoAt(videos, targetIndex, replacementVideo) {
+    const list = Array.isArray(videos) ? [...videos] : [];
+    const idx = Number(targetIndex);
+    if (!replacementVideo || !Number.isInteger(idx) || idx < 0 || idx >= list.length) {
+        return list;
+    }
+    const existingIdx = list.findIndex(
+        (item) => String(item?.video_id) === String(replacementVideo.video_id),
+    );
+    if (existingIdx !== -1 && existingIdx !== idx) {
+        return reorderEpisodeVideos(list, existingIdx, idx, { mode: 'swap' });
+    }
+    list[idx] = replacementVideo;
+    return list;
+}
+
 export async function fileToThumbnailDataUrl(file, {
     maxWidth = 1280,
     maxHeight = 720,
