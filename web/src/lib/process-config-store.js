@@ -24,9 +24,12 @@ export const PRESET_SECTION_FIELDS = {
     ],
     logo: [
         'processLogoMode',
+        'processLogoShape',
         'processLogoPath',
         'processLogoText',
         'processLogoSize',
+        'processLogoWidth',
+        'processLogoHeight',
         'processLogoX',
         'processLogoY',
         'logo_data',

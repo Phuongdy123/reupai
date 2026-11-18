@@ -542,6 +542,7 @@ class ProcessRequest(BaseModel):
     custom_blur_region: Optional[dict[str, float]] = None
     auto_brand_blur: bool = False
     logo_mode: str = "none"
+    logo_shape: Literal["rect", "circle"] = "rect"
     logo_text: Optional[str] = None
     logo_data: Optional[str] = None
     logo_filename: Optional[str] = None
@@ -552,6 +553,8 @@ class ProcessRequest(BaseModel):
     logo_path: Optional[str] = None
     aspect_ratio: Optional[str] = None
     logo_size: Optional[float] = None
+    logo_width: Optional[float] = None
+    logo_height: Optional[float] = None
     logo_x: Optional[float] = None
     logo_y: Optional[float] = None
     # A render revision reuses the already downloaded source, translated SRT

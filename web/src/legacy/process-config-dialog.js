@@ -72,6 +72,11 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <video id="processConfigPreview" controls preload="metadata"></video>
                     <canvas id="processPreviewCanvas"></canvas>
                     <div id="processBlurPreviewOverlay" class="process-blur-preview-overlay" hidden aria-hidden="true"></div>
+                    <div id="processStageLogoOverlay" class="process-stage-logo-overlay" data-shape="rect" hidden>
+                        <img id="processStageLogoImg" alt="" draggable="false" hidden>
+                        <span id="processStageLogoTextPreview" class="process-stage-logo-text" hidden></span>
+                        <span id="processStageLogoHandle" class="process-stage-logo-handle" title="Kéo để đổi kích thước logo" aria-hidden="true"></span>
+                    </div>
                 </div>
                 <div id="processConfigPreviewEmpty">
                     <span class="process-empty-icon" aria-hidden="true">${uiIcon('play', 22)}</span>
@@ -213,13 +218,19 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             </details>
 
             <details class="process-config-advanced">
-                <summary><strong>Logo, nhãn lên video</strong><small>Chèn logo hoặc tên kênh</small></summary>
+                <summary><strong>Logo, nhãn lên video</strong><small>Chèn logo chữ nhật/tròn hoặc tên kênh</small></summary>
                 <label>Kiểu logo
                     <select id="processLogoMode">
                         <option value="none">Không chèn logo</option>
                         <option value="default">Logo mặc định</option>
-                        <option value="custom">Logo mới (đường dẫn file)</option>
+                        <option value="custom">Logo ảnh (Chữ nhật / Vuông / PNG)</option>
                         <option value="text">Chèn chữ thay logo</option>
+                    </select>
+                </label>
+                <label id="processLogoShapeField">Hình dáng logo
+                    <select id="processLogoShape">
+                        <option value="rect">Giữ nguyên khung (Chữ nhật / Vuông)</option>
+                        <option value="circle">Cắt hình tròn</option>
                     </select>
                 </label>
                 <label id="processLogoPathField">Đường dẫn logo mới
@@ -228,12 +239,20 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <label id="processLogoFileField">Chọn tệp logo trên máy
                     <input id="processLogoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
                 </label>
-                <small id="processLogoSavedBadge" hidden></small>
+                <div id="processLogoInlinePreview" class="process-logo-inline-preview" hidden>
+                    <img id="processLogoThumbImg" alt="Logo xem trước">
+                    <div>
+                        <small id="processLogoSavedBadge"></small>
+                        <small>Mẹo: Kéo trực tiếp logo trên khung hình video hoặc chọn tab Logo → Kéo chọn vùng.</small>
+                    </div>
+                </div>
                 <label id="processLogoTextField">Nội dung chữ
                     <input id="processLogoText" placeholder="Tên kênh / thương hiệu">
                 </label>
                 <div class="process-blur-grid process-logo-grid">
-                    <label>Cỡ logo (px) <input id="processLogoSize" type="number" min="1" max="4000" placeholder="Mặc định"></label>
+                    <label>Rộng (px) <input id="processLogoWidth" type="number" min="1" max="4000" placeholder="Tự động"></label>
+                    <label>Cao (px) <input id="processLogoHeight" type="number" min="1" max="4000" placeholder="Tự động"></label>
+                    <label>Cỡ (px) <input id="processLogoSize" type="number" min="1" max="4000" placeholder="Mặc định"></label>
                     <label>Vị trí X <input id="processLogoX" type="number" min="0" placeholder="Mặc định"></label>
                     <label>Vị trí Y <input id="processLogoY" type="number" min="0" placeholder="Mặc định"></label>
                 </div>

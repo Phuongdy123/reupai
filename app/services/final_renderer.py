@@ -304,9 +304,12 @@ SUBTITLE_STYLE = "minimal"
 
 OUTPUT_ASPECT_RATIO = None
 LOGO_SIZE_OVERRIDE = None
+LOGO_WIDTH_OVERRIDE = None
+LOGO_HEIGHT_OVERRIDE = None
 LOGO_X_OVERRIDE = None
 LOGO_Y_OVERRIDE = None
 LOGO_MODE = "none"
+LOGO_SHAPE = "rect"
 LOGO_TEXT = None
 LOGO_PATH_OVERRIDE = None
 BLUR_INTERVALS = []
@@ -1175,10 +1178,7 @@ def get_bilibili_text_blur_boxes(width, height):
 
 def get_bilibili_logo_path():
 
-    if LOGO_MODE == "none":
-        return None
-
-    if detect_source_platform() != "bilibili":
+    if LOGO_MODE in {"none", "text"}:
         return None
 
     path = Path(
@@ -1205,16 +1205,75 @@ def get_bilibili_logo_path():
     return Path.cwd() / path
 
 
-def get_bilibili_logo_layout(width, height):
+def _probe_logo_dimensions(logo_path):
+    if not logo_path:
+        return None
+    try:
+        from PIL import Image
+        with Image.open(logo_path) as img:
+            if img.width > 0 and img.height > 0:
+                return int(img.width), int(img.height)
+    except Exception:
+        pass
+    return None
 
+
+def get_bilibili_logo_layout(width, height, logo_path=None):
+    shape = str(LOGO_SHAPE or "rect").strip().lower()
+    if shape not in {"rect", "circle"}:
+        shape = "rect"
     short_side = min(width, height)
-    if LOGO_SIZE_OVERRIDE:
-        # Khi người dùng chọn cỡ logo, tôn trọng đúng giá trị đó.
-        size = int(round(float(LOGO_SIZE_OVERRIDE)))
-        size = int(clamp(size, 1, max(1, min(width, height))))
+
+    if shape == "circle":
+        if LOGO_SIZE_OVERRIDE:
+            size = int(round(float(LOGO_SIZE_OVERRIDE)))
+            size = int(clamp(size, 1, max(1, short_side)))
+        elif LOGO_WIDTH_OVERRIDE and LOGO_HEIGHT_OVERRIDE:
+            size = int(round(min(float(LOGO_WIDTH_OVERRIDE), float(LOGO_HEIGHT_OVERRIDE))))
+            size = int(clamp(size, 1, max(1, short_side)))
+        else:
+            size = int(round(short_side * BILIBILI_LOGO_SIZE_RATIO))
+            size = int(clamp(size, BILIBILI_LOGO_MIN_SIZE, BILIBILI_LOGO_MAX_SIZE))
+        logo_w = size
+        logo_h = size
     else:
-        size = int(round(short_side * BILIBILI_LOGO_SIZE_RATIO))
-        size = int(clamp(size, BILIBILI_LOGO_MIN_SIZE, BILIBILI_LOGO_MAX_SIZE))
+        dims = _probe_logo_dimensions(logo_path)
+        aspect = (dims[0] / dims[1]) if dims else 1.0
+        if LOGO_WIDTH_OVERRIDE and LOGO_HEIGHT_OVERRIDE:
+            box_w = float(LOGO_WIDTH_OVERRIDE)
+            box_h = float(LOGO_HEIGHT_OVERRIDE)
+            if dims:
+                scale = min(box_w / dims[0], box_h / dims[1])
+                logo_w = max(1, int(round(dims[0] * scale)))
+                logo_h = max(1, int(round(dims[1] * scale)))
+            else:
+                logo_w = max(1, int(round(box_w)))
+                logo_h = max(1, int(round(box_h)))
+        elif LOGO_WIDTH_OVERRIDE:
+            logo_w = max(1, int(round(float(LOGO_WIDTH_OVERRIDE))))
+            logo_h = max(1, int(round(logo_w / aspect)))
+        elif LOGO_SIZE_OVERRIDE:
+            target = float(LOGO_SIZE_OVERRIDE)
+            if aspect >= 1.0:
+                logo_w = max(1, int(round(target)))
+                logo_h = max(1, int(round(target / aspect)))
+            else:
+                logo_h = max(1, int(round(target)))
+                logo_w = max(1, int(round(target * aspect)))
+        else:
+            default_w = clamp(int(round(short_side * BILIBILI_LOGO_SIZE_RATIO * (1.5 if aspect > 1.25 else 1.0))), BILIBILI_LOGO_MIN_SIZE, max(BILIBILI_LOGO_MIN_SIZE, int(width * 0.38)))
+            logo_w = max(1, int(default_w))
+            logo_h = max(1, int(round(logo_w / aspect)))
+
+        if logo_w > width:
+            scale = width / logo_w
+            logo_w = max(1, int(width))
+            logo_h = max(1, int(round(logo_h * scale)))
+        if logo_h > height:
+            scale = height / logo_h
+            logo_h = max(1, int(height))
+            logo_w = max(1, int(round(logo_w * scale)))
+        size = max(logo_w, logo_h)
 
     x = (
         int(round(float(LOGO_X_OVERRIDE)))
@@ -1227,13 +1286,16 @@ def get_bilibili_logo_layout(width, height):
         else int(round(height * BILIBILI_LOGO_Y_RATIO))
     )
 
-    x = int(clamp(x, 0, max(0, width - size)))
-    y = int(clamp(y, 0, max(0, height - size)))
+    x = int(clamp(x, 0, max(0, width - logo_w)))
+    y = int(clamp(y, 0, max(0, height - logo_h)))
 
     return {
         "x": x,
         "y": y,
         "size": size,
+        "width": logo_w,
+        "height": logo_h,
+        "shape": shape,
     }
 
 
@@ -6091,9 +6153,11 @@ def build_video_filter(
         video_height,
     )
 
+    resolved_logo_path = get_bilibili_logo_path()
     logo_layout = get_bilibili_logo_layout(
         video_width,
         video_height,
+        logo_path=resolved_logo_path,
     )
 
     parts = []
@@ -6166,17 +6230,20 @@ def build_video_filter(
         ])
         current = out_label
 
-    # 3) Chen logo kenh dang tron
-    if logo_input_index is not None and platform == "bilibili":
+    # 3) Chen logo kenh (hinh chu nhat / vuong / tron tuy chon)
+    if logo_input_index is not None:
         lx = int(logo_layout["x"])
         ly = int(logo_layout["y"])
         logo_size = int(logo_layout["size"])
+        logo_w = int(logo_layout["width"])
+        logo_h = int(logo_layout["height"])
+        logo_shape = logo_layout.get("shape", "rect")
 
         if logo_is_prepared:
             parts.append(
                 f"[{logo_input_index}:v]format=rgba[channel_logo]"
             )
-        else:
+        elif logo_shape == "circle":
             parts.append(
                 f"[{logo_input_index}:v]"
                 f"scale={logo_size}:{logo_size}:force_original_aspect_ratio=increase,"
@@ -6187,6 +6254,12 @@ def build_video_filter(
                 f"b='b(X,Y)':"
                 f"a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(W/2)*(W/2)),255,0)'"
                 f"[channel_logo]"
+            )
+        else:
+            parts.append(
+                f"[{logo_input_index}:v]"
+                f"scale={logo_w}:{logo_h}:force_original_aspect_ratio=decrease,"
+                f"format=rgba[channel_logo]"
             )
 
         parts.append(
@@ -6260,23 +6333,26 @@ def build_video_filter(
     if brand_blur_boxes:
         print(f"Watermark  : {len(brand_blur_boxes)} vung blur")
 
-    if logo_input_index is not None and platform == "bilibili":
-        print(f"Logo       : {BILIBILI_LOGO_PATH}")
+    if logo_input_index is not None:
+        print(f"Logo       : {LOGO_PATH_OVERRIDE or BILIBILI_LOGO_PATH}")
         print(
-            f"Logo pos   : x={logo_layout['x']} "
-            f"y={logo_layout['y']} size={logo_layout['size']}"
+            f"Logo pos   : x={logo_layout['x']} y={logo_layout['y']} "
+            f"{logo_layout['width']}x{logo_layout['height']} ({logo_layout.get('shape', 'rect')})"
         )
 
     print("==================================")
     return ";".join(parts)
 
 
-def prepare_round_logo(source_path, output_dir, size):
-    """Resize and mask a logo once instead of running geq for every video frame."""
+def prepare_round_logo(source_path, output_dir, size, *, width=None, height=None, shape="rect"):
+    """Resize (and optionally circle-mask) a logo once instead of running geq per frame."""
     from PIL import Image, ImageChops, ImageDraw, ImageOps
 
     source = Path(source_path)
-    target = Path(output_dir) / f".reupai_round_logo_{int(size)}.png"
+    normalized_shape = "circle" if str(shape or "rect").strip().lower() == "circle" else "rect"
+    target_w = max(1, int(width or size))
+    target_h = max(1, int(height or size))
+    target = Path(output_dir) / f".reupai_logo_{normalized_shape}_{target_w}x{target_h}.png"
     if (
         target.exists()
         and target.stat().st_size > 0
@@ -6286,19 +6362,27 @@ def prepare_round_logo(source_path, output_dir, size):
 
     with Image.open(source) as image:
         rgba = image.convert("RGBA")
-        fitted = ImageOps.fit(
-            rgba,
-            (int(size), int(size)),
-            method=Image.Resampling.LANCZOS,
-            centering=(0.5, 0.5),
-        )
-        circle = Image.new("L", fitted.size, 0)
-        ImageDraw.Draw(circle).ellipse(
-            (0, 0, fitted.width - 1, fitted.height - 1),
-            fill=255,
-        )
-        circle = ImageChops.multiply(fitted.getchannel("A"), circle)
-        fitted.putalpha(circle)
+        if normalized_shape == "circle":
+            circle_size = max(1, int(size or min(target_w, target_h)))
+            fitted = ImageOps.fit(
+                rgba,
+                (circle_size, circle_size),
+                method=Image.Resampling.LANCZOS,
+                centering=(0.5, 0.5),
+            )
+            circle = Image.new("L", fitted.size, 0)
+            ImageDraw.Draw(circle).ellipse(
+                (0, 0, fitted.width - 1, fitted.height - 1),
+                fill=255,
+            )
+            circle = ImageChops.multiply(fitted.getchannel("A"), circle)
+            fitted.putalpha(circle)
+        else:
+            fitted = ImageOps.contain(
+                rgba,
+                (target_w, target_h),
+                method=Image.Resampling.LANCZOS,
+            )
         fitted.save(target, "PNG", optimize=True)
     return target
 
@@ -7042,6 +7126,12 @@ def _render_checkpoint_signature(region, mode: str, use_voice: bool, use_music: 
         "blur_intervals": BLUR_INTERVALS or [],
         "auto_brand": bool(AUTO_BRAND_BLUR_ENABLED),
         "logo_mode": LOGO_MODE,
+        "logo_shape": LOGO_SHAPE,
+        "logo_size": LOGO_SIZE_OVERRIDE,
+        "logo_width": LOGO_WIDTH_OVERRIDE,
+        "logo_height": LOGO_HEIGHT_OVERRIDE,
+        "logo_x": LOGO_X_OVERRIDE,
+        "logo_y": LOGO_Y_OVERRIDE,
         "logo_text": LOGO_TEXT,
         "use_logo": bool(use_logo),
     }
@@ -7487,8 +7577,7 @@ def render_final(region):
     logo_path = get_bilibili_logo_path()
 
     use_logo = (
-        detect_source_platform() == "bilibili"
-        and logo_path is not None
+        logo_path is not None
         and file_ok(logo_path)
     )
 
@@ -7500,15 +7589,19 @@ def render_final(region):
             logo_layout = get_bilibili_logo_layout(
                 int(video_layout["width"]),
                 int(video_layout["height"]),
+                logo_path=logo_path,
             )
             logo_path = prepare_round_logo(
                 logo_path,
                 output_path.parent,
                 int(logo_layout["size"]),
+                width=int(logo_layout["width"]),
+                height=int(logo_layout["height"]),
+                shape=logo_layout.get("shape", "rect"),
             )
             logo_is_prepared = True
         except Exception as exc:
-            print(f"[WARN] Khong cache duoc logo tron, dung filter cu: {exc}")
+            print(f"[WARN] Khong cache duoc logo, dung filter cu: {exc}")
 
     use_music = bool(MUSIC_PATH and file_ok(MUSIC_PATH))
 

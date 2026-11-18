@@ -2618,13 +2618,14 @@ def render_voiceover(
     aspect_ratio=None,
 
     logo_size=None,
-
+    logo_width=None,
+    logo_height=None,
     logo_x=None,
 
     logo_y=None,
 
     logo_mode="none",
-
+    logo_shape="rect",
     logo_text=None,
 
     logo_path=None,
@@ -2687,9 +2688,12 @@ def render_voiceover(
     renderer.SUBTITLE_STYLE = subtitle_style
     renderer.OUTPUT_ASPECT_RATIO = aspect_ratio
     renderer.LOGO_SIZE_OVERRIDE = logo_size
+    renderer.LOGO_WIDTH_OVERRIDE = logo_width
+    renderer.LOGO_HEIGHT_OVERRIDE = logo_height
     renderer.LOGO_X_OVERRIDE = logo_x
     renderer.LOGO_Y_OVERRIDE = logo_y
     renderer.LOGO_MODE = logo_mode or "none"
+    renderer.LOGO_SHAPE = logo_shape or "rect"
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
@@ -2765,13 +2769,14 @@ def render_subtitle_only(
     aspect_ratio=None,
 
     logo_size=None,
-
+    logo_width=None,
+    logo_height=None,
     logo_x=None,
 
     logo_y=None,
 
     logo_mode="none",
-
+    logo_shape="rect",
     logo_text=None,
 
     logo_path=None,
@@ -2826,9 +2831,12 @@ def render_subtitle_only(
     renderer.SUBTITLE_STYLE = subtitle_style
     renderer.OUTPUT_ASPECT_RATIO = aspect_ratio
     renderer.LOGO_SIZE_OVERRIDE = logo_size
+    renderer.LOGO_WIDTH_OVERRIDE = logo_width
+    renderer.LOGO_HEIGHT_OVERRIDE = logo_height
     renderer.LOGO_X_OVERRIDE = logo_x
     renderer.LOGO_Y_OVERRIDE = logo_y
     renderer.LOGO_MODE = logo_mode or "none"
+    renderer.LOGO_SHAPE = logo_shape or "rect"
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
@@ -4279,12 +4287,14 @@ def pipeline(
                 aspect_ratio=config.get("aspect_ratio"),
 
                 logo_size=config.get("logo_size"),
-
+                logo_width=config.get("logo_width"),
+                logo_height=config.get("logo_height"),
                 logo_x=config.get("logo_x"),
 
                 logo_y=config.get("logo_y"),
 
                 logo_mode=config.get("logo_mode", "none"),
+                logo_shape=config.get("logo_shape", "rect"),
 
                 logo_text=config.get("logo_text"),
 
@@ -4326,12 +4336,14 @@ def pipeline(
                 aspect_ratio=config.get("aspect_ratio"),
 
                 logo_size=config.get("logo_size"),
-
+                logo_width=config.get("logo_width"),
+                logo_height=config.get("logo_height"),
                 logo_x=config.get("logo_x"),
 
                 logo_y=config.get("logo_y"),
 
                 logo_mode=config.get("logo_mode", "none"),
+                logo_shape=config.get("logo_shape", "rect"),
 
                 logo_text=config.get("logo_text"),
 
