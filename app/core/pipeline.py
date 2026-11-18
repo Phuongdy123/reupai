@@ -4374,6 +4374,7 @@ def pipeline(
                         video_width=vw,
                         video_height=vh,
                         text_aware=False,
+                        preview_seconds=preview_seconds,
                     )
                 else:
                     effective_blur_mode = "delogo"
