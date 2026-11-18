@@ -313,6 +313,9 @@ LOGO_SHAPE = "rect"
 LOGO_TEXT = None
 LOGO_PATH_OVERRIDE = None
 BLUR_INTERVALS = []
+SECONDARY_SUB_REGION = None
+SECONDARY_SUB_BLUR = True
+SECONDARY_SUBTITLES = []
 MUSIC_PATH = None
 MUSIC_VOLUME = 0.25
 
@@ -5599,6 +5602,10 @@ Style: Brand,{FONT_NAME},{brand_font_size},&H00FFFFFF,&H000000FF,&H00202020,&H00
 
 
 
+Style: SecondarySub,{FONT_NAME},{max(16, int(font_size * 0.85))},&H00FFFFFF,&H000000FF,&H00121214,&HB8000000,-1,0,0,0,100,100,0,0,3,6,0,5,16,16,10,1
+
+
+
 
 
 
@@ -5965,11 +5972,41 @@ Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
             )
             events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{override}{text}")
 
+    if SECONDARY_SUBTITLES:
+        sec_reg = SECONDARY_SUB_REGION if isinstance(SECONDARY_SUB_REGION, dict) else {}
+        sec_w = float(sec_reg.get("width") or 0)
+        sec_h = float(sec_reg.get("height") or 0)
+        sec_x = float(sec_reg.get("x") or 0)
+        sec_y = float(sec_reg.get("y") or 0)
+        if 0 < sec_w <= 1.0 and 0 < sec_h <= 1.0 and sec_x <= 1.0 and sec_y <= 1.0:
+            sec_x *= width
+            sec_y *= height
+            sec_w *= width
+            sec_h *= height
+        if sec_w > 0 and sec_h > 0:
+            sec_cx = int(clamp(round(sec_x + sec_w / 2.0), 40, max(40, width - 40)))
+            sec_cy = int(clamp(round(sec_y + sec_h / 2.0), 28, max(28, height - 28)))
+        else:
+            sec_cx = width // 2
+            sec_cy = max(36, int(round(height * 0.14)))
 
-
-
-
-
+        for sec_item in SECONDARY_SUBTITLES:
+            if not isinstance(sec_item, dict):
+                continue
+            sec_text = str(sec_item.get("translated_text") or sec_item.get("text") or "").strip()
+            if not sec_text:
+                continue
+            try:
+                sec_start = max(0.0, float(sec_item.get("start") or 0.0))
+                sec_end = float(sec_item.get("end") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            if sec_end <= sec_start:
+                continue
+            events.append(
+                f"Dialogue: 1,{ass_time(sec_start)},{ass_time(sec_end)},SecondarySub,,0,0,0,,"
+                f"{{\\pos({sec_cx},{sec_cy})}}{escape_ass_text(sec_text)}"
+            )
 
     ass_path = Path(
 

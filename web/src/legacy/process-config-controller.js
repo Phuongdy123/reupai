@@ -117,6 +117,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.dataset.videoId = video.video_id;
     dialog.dataset.cardId = card.dataset.videoId || '';
     let manualOcrRows = [];
+    let secondarySubRows = [];
     let recognitionComplete = false;
     let translatingReview = false;
     const deletedTranscriptIds = new Set();
@@ -1325,7 +1326,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             ? 'processLogo'
             : pickMode === 'custom'
                 ? 'processCustomBlur'
-                : 'processBlur';
+                : pickMode === 'sub_novoice'
+                    ? 'processSecondarySub'
+                    : 'processBlur';
         const read = suffix => Number(value(`${prefix}${suffix}`));
         if (pickMode === 'logo') {
             if (preview.videoWidth > 0 && preview.videoHeight > 0 && (value('processLogoWidth') || value('processLogoSize'))) {
@@ -1371,8 +1374,20 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!blurOverlay.hidden) positionBlurOverlay();
         syncLogoOverlay();
         if (!selectedRect) return;
-        context.fillStyle = pickMode === 'logo' ? 'rgba(124,108,255,.22)' : pickMode === 'custom' ? 'rgba(251,191,36,.22)' : 'rgba(45,212,191,.22)';
-        context.strokeStyle = pickMode === 'logo' ? '#9b91ff' : pickMode === 'custom' ? '#fbbf24' : '#2dd4bf';
+        context.fillStyle = pickMode === 'logo'
+            ? 'rgba(124,108,255,.22)'
+            : pickMode === 'custom'
+                ? 'rgba(251,191,36,.22)'
+                : pickMode === 'sub_novoice'
+                    ? 'rgba(56,189,248,.22)'
+                    : 'rgba(45,212,191,.22)';
+        context.strokeStyle = pickMode === 'logo'
+            ? '#9b91ff'
+            : pickMode === 'custom'
+                ? '#fbbf24'
+                : pickMode === 'sub_novoice'
+                    ? '#38bdf8'
+                    : '#2dd4bf';
         context.lineWidth = Math.max(3, canvas.width / 420);
         context.fillRect(selectedRect.x, selectedRect.y, selectedRect.width, selectedRect.height);
         context.strokeRect(selectedRect.x, selectedRect.y, selectedRect.width, selectedRect.height);
@@ -1432,6 +1447,13 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processCustomBlurY', Math.round(rect.y));
             set('processCustomBlurWidth', Math.round(rect.width));
             set('processCustomBlurHeight', Math.round(rect.height));
+        } else if (pickMode === 'sub_novoice') {
+            set('processSecondarySubX', Math.round(rect.x));
+            set('processSecondarySubY', Math.round(rect.y));
+            set('processSecondarySubWidth', Math.round(rect.width));
+            set('processSecondarySubHeight', Math.round(rect.height));
+            secondarySubRows = [];
+            renderSecondarySubPreview();
         } else if (pickMode === 'ocr') {
             selectedRect = { ...rect };
         } else {
@@ -2583,6 +2605,209 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
     };
 
+    const secondarySubStatus = dialog.querySelector('#processSecondarySubStatus');
+    const secondarySubPreviewList = dialog.querySelector('#processSecondarySubPreviewList');
+    const autoSecondarySubBtn = dialog.querySelector('#processAutoSecondarySubBtn');
+    const scanSecondarySubBtn = dialog.querySelector('#processScanSecondarySubBtn');
+    const clearSecondarySubBtn = dialog.querySelector('#processClearSecondarySubBtn');
+
+    const readSecondarySubRegion = () => {
+        const read = suffix => Number(dialog.querySelector(`#processSecondarySub${suffix}`)?.value || '');
+        const raw = ['X', 'Y', 'Width', 'Height'].map(read);
+        if (!raw.every(Number.isFinite) || raw[2] <= 0 || raw[3] <= 0) return null;
+        return { x: Math.max(0, raw[0]), y: Math.max(0, raw[1]), width: raw[2], height: raw[3] };
+    };
+
+    const renderSecondarySubPreview = () => {
+        if (!secondarySubPreviewList) return;
+        if (!secondarySubRows.length) {
+            secondarySubPreviewList.hidden = true;
+            secondarySubPreviewList.replaceChildren();
+            return;
+        }
+        secondarySubPreviewList.hidden = false;
+        secondarySubPreviewList.replaceChildren(
+            ...secondarySubRows.slice(0, 20).map((row, idx) => {
+                const item = document.createElement('div');
+                item.className = 'process-secondary-sub-row';
+                const time = document.createElement('small');
+                time.textContent = `${Number(row.start || 0).toFixed(1)}s–${Number(row.end || 0).toFixed(1)}s`;
+                const textInput = document.createElement('input');
+                textInput.type = 'text';
+                textInput.value = String(row.translated_text || row.text || '');
+                textInput.setAttribute('aria-label', `Chữ phụ ${idx + 1}`);
+                textInput.oninput = () => {
+                    secondarySubRows[idx].translated_text = textInput.value;
+                };
+                item.append(time, textInput);
+                return item;
+            }),
+        );
+    };
+
+    const scanSecondarySubRegion = async () => {
+        const secRegion = readSecondarySubRegion();
+        const { w: vidW, h: vidH } = resolveVideoPixelSpace();
+        if (!secRegion || !vidW || !vidH) {
+            if (secondarySubStatus) secondarySubStatus.textContent = 'Hãy kéo chọn vùng chữ phụ (No Voice) hoặc bấm AI dò vùng chữ phụ trước.';
+            return [];
+        }
+        if (!video.downloaded) {
+            if (secondarySubStatus) secondarySubStatus.textContent = 'Hãy bấm "Tải video để xem trước" trước khi quét chữ phụ.';
+            return [];
+        }
+        if (scanSecondarySubBtn) {
+            scanSecondarySubBtn.disabled = true;
+            scanSecondarySubBtn.textContent = 'Đang quét & dịch…';
+        }
+        if (secondarySubStatus) secondarySubStatus.textContent = 'Đang đọc chữ phụ trong vùng đã chọn (chỉ tạo chữ dịch, không đọc Voice)…';
+        try {
+            const ocrRes = await requestJson(`/api/preview/subtitles/${encodeURIComponent(video.video_id)}`, {
+                method: 'POST',
+                timeoutMs: 15 * 60 * 1000,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    channel: video.channel || 'default',
+                    region: {
+                        x: Math.min(1, Math.max(0, secRegion.x / vidW)),
+                        y: Math.min(1, Math.max(0, secRegion.y / vidH)),
+                        width: Math.min(1, Math.max(0.02, secRegion.width / vidW)),
+                        height: Math.min(1, Math.max(0.02, secRegion.height / vidH)),
+                    },
+                    language: dialog.querySelector('#processOcrLanguage')?.value || 'auto',
+                    fps: Number(dialog.querySelector('#processOcrFps')?.value || 2),
+                    min_confidence: Number(dialog.querySelector('#processOcrConfidence')?.value || 0.45),
+                    parallelism: Number(dialog.querySelector('#processOcrParallelism')?.value || 2),
+                    use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
+                }),
+            });
+            const lines = Array.isArray(ocrRes?.lines) ? ocrRes.lines.filter(l => l && String(l.text || '').trim()) : [];
+            if (!lines.length) {
+                secondarySubRows = [];
+                renderSecondarySubPreview();
+                if (secondarySubStatus) secondarySubStatus.textContent = 'Không thấy chữ nào trong vùng đã chọn.';
+                return [];
+            }
+            const sourceLanguage = dialog.querySelector('#processOcrLanguage')?.value || 'auto';
+            const targetLanguage = dialog.querySelector('#processTargetLanguage')?.value || 'vi';
+            const translatedRows = [];
+            for (let offset = 0; offset < lines.length; offset += 16) {
+                const batch = lines.slice(offset, offset + 16);
+                const transRes = (sourceLanguage !== 'auto' && sourceLanguage === targetLanguage)
+                    ? { translations: batch.map(l => ({ id: l.id, text: l.text })) }
+                    : await requestJson('/api/preview/subtitle-translation', {
+                        method: 'POST',
+                        timeoutMs: 180000,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            source_language: sourceLanguage,
+                            target_language: targetLanguage,
+                            translation_model: dialog.querySelector('#processTranslationModel')?.value || 'gemini-3.1-flash-lite',
+                            lines: batch.map(l => ({ id: l.id, text: l.text })),
+                        }),
+                    });
+                const map = new Map((transRes?.translations || []).map(item => [String(item.id), String(item.text || '').trim()]));
+                batch.forEach(line => {
+                    translatedRows.push({
+                        start: Number(line.start || 0),
+                        end: Number(line.end || 0),
+                        text: String(line.text || '').trim(),
+                        translated_text: map.get(String(line.id)) || String(line.text || '').trim(),
+                    });
+                });
+            }
+            secondarySubRows = translatedRows;
+            renderSecondarySubPreview();
+            if (secondarySubStatus) {
+                secondarySubStatus.textContent = `Đã dịch ${translatedRows.length} câu chữ phụ (chỉ hiện chữ, không đọc Voice).`;
+            }
+            return translatedRows;
+        } catch (err) {
+            if (secondarySubStatus) secondarySubStatus.textContent = err?.message || 'Chưa quét được vùng chữ phụ.';
+            return [];
+        } finally {
+            if (scanSecondarySubBtn) {
+                scanSecondarySubBtn.disabled = false;
+                scanSecondarySubBtn.innerHTML = `${uiIcon('captions', 15)} Quét &amp; dịch thử`;
+            }
+        }
+    };
+
+    if (autoSecondarySubBtn) {
+        autoSecondarySubBtn.onclick = async () => {
+            if (!preview.videoWidth || !video.downloaded) {
+                if (secondarySubStatus) secondarySubStatus.textContent = 'Hãy tải video về máy trước khi AI dò vùng chữ phụ.';
+                return;
+            }
+            const frameData = captureCopyrightPreviewFrame();
+            if (!frameData) {
+                if (secondarySubStatus) secondarySubStatus.textContent = 'Chưa chụp được khung hình. Hãy phát video tới đoạn có chữ phụ rồi thử lại.';
+                return;
+            }
+            autoSecondarySubBtn.disabled = true;
+            autoSecondarySubBtn.textContent = 'AI đang dò chữ phụ…';
+            if (secondarySubStatus) secondarySubStatus.textContent = 'Đang nhờ Gemini Vision tìm vị trí chữ phụ / chữ bay trên khung hình…';
+            try {
+                const res = await requestJson('/api/assistant', {
+                    method: 'POST',
+                    timeoutMs: 45000,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'Tìm vùng chữ phụ / chú thích / thoại bay trên khung hình (KHÔNG phải phụ đề chính ở đáy màn hình). Trả về đúng 4 số phần trăm theo thứ tự: x%, y%, width%, height% (ví dụ: 10, 8, 80, 14). Nếu không thấy chữ phụ nào khác phụ đề đáy, trả lời "khong_co".',
+                        kind: 'question',
+                        mode: 'subtitle',
+                        image_data: frameData,
+                        video_context: {
+                            title: video.title || video.video_id,
+                            width: preview.videoWidth,
+                            height: preview.videoHeight,
+                        },
+                    }),
+                });
+                const answer = String(res?.answer || '');
+                const nums = answer.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+                if (nums.length >= 4 && !/khong_co|không có/i.test(answer)) {
+                    const [xp, yp, wp, hp] = nums;
+                    const rx = Math.round((Math.max(0, Math.min(95, xp)) / 100) * preview.videoWidth);
+                    const ry = Math.round((Math.max(0, Math.min(95, yp)) / 100) * preview.videoHeight);
+                    const rw = Math.round((Math.max(5, Math.min(100 - xp, wp)) / 100) * preview.videoWidth);
+                    const rh = Math.round((Math.max(4, Math.min(100 - yp, hp)) / 100) * preview.videoHeight);
+                    set('processSecondarySubX', rx);
+                    set('processSecondarySubY', ry);
+                    set('processSecondarySubWidth', rw);
+                    set('processSecondarySubHeight', rh);
+                    pickMode = 'sub_novoice';
+                    syncPickButtons();
+                    syncSelectionFromFields();
+                    if (secondarySubStatus) secondarySubStatus.textContent = `AI đã chọn vùng chữ phụ (${rx}, ${ry}, ${rw}×${rh}). Bấm "Quét & dịch thử" hoặc chỉnh lại khung xanh dương.`;
+                } else {
+                    if (secondarySubStatus) secondarySubStatus.textContent = 'AI chưa thấy chữ phụ ở khung hình hiện tại. Bạn có thể tua tới đoạn có chữ bay rồi thử lại hoặc tự kéo vùng.';
+                }
+            } catch (err) {
+                if (secondarySubStatus) secondarySubStatus.textContent = err?.message || 'Chưa kết nối Gemini để AI tự dò vùng.';
+            } finally {
+                autoSecondarySubBtn.disabled = false;
+                autoSecondarySubBtn.innerHTML = `${uiIcon('sparkles', 15)} AI dò vùng chữ phụ`;
+            }
+        };
+    }
+
+    if (scanSecondarySubBtn) {
+        scanSecondarySubBtn.onclick = () => { void scanSecondarySubRegion(); };
+    }
+    if (clearSecondarySubBtn) {
+        clearSecondarySubBtn.onclick = () => {
+            ['X', 'Y', 'Width', 'Height'].forEach(s => set(`processSecondarySub${s}`, ''));
+            secondarySubRows = [];
+            renderSecondarySubPreview();
+            if (pickMode === 'sub_novoice') {
+                selectedRect = null;
+                drawSelection();
+            }
+            if (secondarySubStatus) secondarySubStatus.textContent = 'Đã xóa vùng chữ phụ.';
+        };
+    }
+
     if (copyrightScanBtn) {
         copyrightScanBtn.onclick = async () => {
             if (!isCurrent()) return;
@@ -2838,6 +3063,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             text: manualOcrRows[Number(row.dataset.index)]?.text || '',
             translated_text: row.querySelector('.ocr-line-translation')?.value.trim() || '',
         })).filter(line => line.text && line.translated_text && Number.isFinite(line.start) && Number.isFinite(line.end) && line.end > line.start) : [];
+        const secSubRegion = readSecondarySubRegion();
+        let finalSecondarySubtitles = secondarySubRows.filter(line => line && (line.translated_text || line.text));
+        if (secSubRegion && !finalSecondarySubtitles.length && video.downloaded && (value('processOutputFormat') || 'video') !== 'srt') {
+            finalSecondarySubtitles = await scanSecondarySubRegion();
+        }
         const config = {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
@@ -2886,6 +3116,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     height: Number(value('processCustomBlurHeight')),
                 }
                 : null,
+            secondary_sub_region: secSubRegion,
+            secondary_sub_blur: !!dialog.querySelector('#processSecondarySubBlur')?.checked,
+            secondary_subtitles: finalSecondarySubtitles.length ? finalSecondarySubtitles : null,
             blur_intervals,
             logo_mode: value('processLogoMode') || 'none',
             logo_shape: value('processLogoShape') || 'rect',

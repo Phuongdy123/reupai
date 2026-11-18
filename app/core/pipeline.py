@@ -2636,6 +2636,9 @@ def render_voiceover(
 
     music_volume=0.25,
     auto_brand_blur=False,
+    secondary_sub_region=None,
+    secondary_sub_blur=True,
+    secondary_subtitles=None,
     on_render_progress=None,
 
 
@@ -2697,6 +2700,9 @@ def render_voiceover(
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
+    renderer.SECONDARY_SUB_REGION = secondary_sub_region
+    renderer.SECONDARY_SUB_BLUR = bool(secondary_sub_blur)
+    renderer.SECONDARY_SUBTITLES = secondary_subtitles or []
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
@@ -2787,6 +2793,9 @@ def render_subtitle_only(
 
     music_volume=0.25,
     auto_brand_blur=False,
+    secondary_sub_region=None,
+    secondary_sub_blur=True,
+    secondary_subtitles=None,
     on_render_progress=None,
 
     force=False,
@@ -2840,6 +2849,9 @@ def render_subtitle_only(
     renderer.LOGO_TEXT = logo_text
     renderer.LOGO_PATH_OVERRIDE = logo_path
     renderer.BLUR_INTERVALS = blur_intervals or []
+    renderer.SECONDARY_SUB_REGION = secondary_sub_region
+    renderer.SECONDARY_SUB_BLUR = bool(secondary_sub_blur)
+    renderer.SECONDARY_SUBTITLES = secondary_subtitles or []
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
@@ -4306,6 +4318,9 @@ def pipeline(
 
                 music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
+                secondary_sub_region=config.get("secondary_sub_region"),
+                secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
+                secondary_subtitles=config.get("secondary_subtitles") or [],
                 on_render_progress=on_render_progress,
 
                 force=render_force,
@@ -4355,6 +4370,9 @@ def pipeline(
 
                 music_volume=float(config.get("music_volume", 0.25)),
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
+                secondary_sub_region=config.get("secondary_sub_region"),
+                secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
+                secondary_subtitles=config.get("secondary_subtitles") or [],
                 on_render_progress=on_render_progress,
 
                 force=render_force,

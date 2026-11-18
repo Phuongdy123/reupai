@@ -339,3 +339,8 @@ body.theme-xports #processConfigDialog .process-logo-inline-preview img { max-wi
 body.theme-xports #processConfigDialog .process-logo-inline-preview > div { display: grid; gap: 2px; min-width: 0; }
 body.theme-xports #processConfigDialog .process-logo-inline-preview small { color: #a7a7a7; font-size: 10.5px; line-height: 1.4; }
 body.theme-xports #processConfigDialog .process-logo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+body.theme-xports #processConfigDialog .process-secondary-sub-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; padding: 6px; border: 1px solid #2c2c31; border-radius: 7px; background: #141417; }
+body.theme-xports #processConfigDialog .process-secondary-sub-list[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-secondary-sub-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; gap: 6px; }
+body.theme-xports #processConfigDialog .process-secondary-sub-row small { font-size: 10.5px; color: #8e8e96; font-variant-numeric: tabular-nums; }
+body.theme-xports #processConfigDialog .process-secondary-sub-row input { height: 26px !important; min-height: 26px !important; padding: 0 8px !important; font-size: 11.5px !important; border-radius: 5px !important; }

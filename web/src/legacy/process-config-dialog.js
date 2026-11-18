@@ -117,6 +117,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             <div class="process-preview-tools">
                 <div class="process-region-tabs" role="group" aria-label="Loại vùng chỉnh sửa">
                     <button type="button" class="btn secondary process-pick-btn active" data-pick-mode="sub" aria-pressed="true">${uiIcon('blur', 16)} Phụ đề</button>
+                    <button type="button" class="btn secondary process-pick-btn" data-pick-mode="sub_novoice" aria-pressed="false" title="Khoanh vùng chữ bay / thoại phụ bất kỳ trên màn hình để dịch thành chữ (không lồng tiếng)">${uiIcon('captions', 15)} Chữ phụ (No Voice)</button>
                     <button type="button" class="btn secondary process-pick-btn" data-pick-mode="custom" aria-pressed="false">${uiIcon('blur', 16)} Vùng mờ</button>
                     <button type="button" class="btn secondary process-pick-btn" data-pick-mode="logo" aria-pressed="false">${uiIcon('sparkles', 16)} Logo</button>
                 </div>
@@ -267,6 +268,28 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <div id="blurIntervals" class="blur-intervals"></div>
                 <small>Ví dụ: 1–12 giây và 14–26 giây.</small>
                 <button type="button" class="btn secondary process-section-save" id="saveCustomSelection">${uiIcon('save', 16)} Lưu vùng mờ tùy chỉnh</button>
+            </details>
+
+            <details class="process-config-advanced" id="processSecondarySubPanel">
+                <summary><strong>Vùng dịch chữ phụ (Không lồng tiếng)</strong><small>Chữ bay / chú thích vị trí bất kỳ — chỉ dịch chữ, không đọc Voice</small></summary>
+                <p>Dùng cho video có thoại phụ/chữ bay ở góc trên, bảng hiệu hoặc chú thích nhân vật. Có thể bấm <strong>AI dò vùng</strong> hoặc chọn tab <strong>Chữ phụ (No Voice)</strong> để kéo vùng.</p>
+                <div class="process-interval-head" style="margin-bottom:8px;">
+                    <button type="button" class="btn secondary" id="processAutoSecondarySubBtn">${uiIcon('sparkles', 15)} AI dò vùng chữ phụ</button>
+                    <button type="button" class="btn secondary" id="processScanSecondarySubBtn">${uiIcon('captions', 15)} Quét &amp; dịch thử</button>
+                    <button type="button" class="btn secondary" id="processClearSecondarySubBtn">Xóa vùng</button>
+                </div>
+                <div class="process-blur-grid">
+                    <label>X <input id="processSecondarySubX" type="number" min="0" placeholder="Trống"></label>
+                    <label>Y <input id="processSecondarySubY" type="number" min="0" placeholder="Trống"></label>
+                    <label>Rộng <input id="processSecondarySubWidth" type="number" min="0" placeholder="Trống"></label>
+                    <label>Cao <input id="processSecondarySubHeight" type="number" min="0" placeholder="Trống"></label>
+                </div>
+                <label class="process-check-option" style="margin-top:8px;">
+                    <input id="processSecondarySubBlur" type="checkbox" checked>
+                    Làm mờ chữ gốc trong vùng trước khi chèn chữ dịch
+                </label>
+                <small id="processSecondarySubStatus" role="status"></small>
+                <div id="processSecondarySubPreviewList" class="process-secondary-sub-list" hidden></div>
             </details>
 
             <details class="process-config-advanced">

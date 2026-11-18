@@ -540,6 +540,9 @@ class ProcessRequest(BaseModel):
     disable_main_blur: bool = False
     blur_intervals: list[dict[str, Any]] = []
     custom_blur_region: Optional[dict[str, float]] = None
+    secondary_sub_region: Optional[dict[str, float]] = None
+    secondary_sub_blur: bool = True
+    secondary_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     auto_brand_blur: bool = False
     logo_mode: str = "none"
     logo_shape: Literal["rect", "circle"] = "rect"
