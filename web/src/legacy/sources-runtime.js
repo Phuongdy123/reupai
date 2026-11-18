@@ -8594,6 +8594,27 @@ function ensureCopyrightReportDialog() {
                     <h4>Khuyến nghị xử lý để né Bản quyền YouTube</h4>
                     <ul id="crRecommendationsList"></ul>
                 </div>
+                <div id="crApiKeysPanel" class="cr-api-keys-panel" hidden>
+                    <label>
+                        <span>AudD API Token</span>
+                        <input type="password" id="crKeyAudd" placeholder="Tùy chọn (audd.io)">
+                    </label>
+                    <label>
+                        <span>ACRCloud Host</span>
+                        <input type="text" id="crKeyAcrHost" placeholder="identify-ap-southeast-1.acrcloud.com">
+                    </label>
+                    <label>
+                        <span>ACRCloud Access Key</span>
+                        <input type="text" id="crKeyAcrAccess" placeholder="Access Key">
+                    </label>
+                    <label>
+                        <span>ACRCloud Access Secret</span>
+                        <input type="password" id="crKeyAcrSecret" placeholder="Access Secret">
+                    </label>
+                    <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;gap:8px;margin-top:4px;">
+                        <button type="button" class="btn primary" id="crSaveApiKeysBtn" style="padding:5px 12px;font-size:12px;">Lưu API Keys</button>
+                    </div>
+                </div>
             </div>
             <footer class="batch-ap-footer">
                 <span id="crFooterStatus">Phân tích dựa trên metadata, cấu hình âm thanh và AI kiểm tra mẫu nhạc/hình.</span>
@@ -8630,23 +8651,35 @@ async function openCopyrightReportDialog(video, card) {
     const apiKeysBtn = dialog.querySelector('#crApiKeysBtn');
     const openSafeBtn = dialog.querySelector('#crOpenSafeConfigBtn');
     const closeBtn = dialog.querySelector('#crDialogCloseBtn');
-    if (apiKeysBtn) {
+    const apiKeysPanel = dialog.querySelector('#crApiKeysPanel');
+    const saveApiKeysBtn = dialog.querySelector('#crSaveApiKeysBtn');
+    if (apiKeysBtn && apiKeysPanel) {
         apiKeysBtn.onclick = () => {
             const cur = readSavedApiKeys();
-            const audd = window.prompt('Nhập AudD API Token (để trống nếu không dùng):', cur.audd_api_token || '');
-            if (audd === null) return;
-            const acrHost = window.prompt('ACRCloud Host (vd: identify-ap-southeast-1.acrcloud.com):', cur.acrcloud_host || '');
-            const acrKey = acrHost ? window.prompt('ACRCloud Access Key:', cur.acrcloud_access_key || '') : cur.acrcloud_access_key;
-            const acrSecret = acrHost ? window.prompt('ACRCloud Access Secret:', cur.acrcloud_access_secret || '') : cur.acrcloud_access_secret;
+            const auddEl = dialog.querySelector('#crKeyAudd');
+            const hostEl = dialog.querySelector('#crKeyAcrHost');
+            const accEl = dialog.querySelector('#crKeyAcrAccess');
+            const secEl = dialog.querySelector('#crKeyAcrSecret');
+            if (auddEl) auddEl.value = cur.audd_api_token || '';
+            if (hostEl) hostEl.value = cur.acrcloud_host || '';
+            if (accEl) accEl.value = cur.acrcloud_access_key || '';
+            if (secEl) secEl.value = cur.acrcloud_access_secret || '';
+            apiKeysPanel.hidden = !apiKeysPanel.hidden;
+        };
+    }
+    if (saveApiKeysBtn && apiKeysPanel) {
+        saveApiKeysBtn.onclick = () => {
+            const cur = readSavedApiKeys();
             try {
                 localStorage.setItem('reupai:api-keys', JSON.stringify({
                     ...cur,
-                    audd_api_token: audd.trim(),
-                    acrcloud_host: (acrHost || '').trim(),
-                    acrcloud_access_key: (acrKey || '').trim(),
-                    acrcloud_access_secret: (acrSecret || '').trim(),
+                    audd_api_token: (dialog.querySelector('#crKeyAudd')?.value || '').trim(),
+                    acrcloud_host: (dialog.querySelector('#crKeyAcrHost')?.value || '').trim(),
+                    acrcloud_access_key: (dialog.querySelector('#crKeyAcrAccess')?.value || '').trim(),
+                    acrcloud_access_secret: (dialog.querySelector('#crKeyAcrSecret')?.value || '').trim(),
                 }));
-                footerStatus.textContent = 'Đã lưu API Keys quét nhạc (chỉ lưu cục bộ trên trình duyệt của bạn).';
+                apiKeysPanel.hidden = true;
+                footerStatus.textContent = '✓ Đã lưu API Keys quét nhạc (lưu cục bộ trên trình duyệt).';
             } catch {}
         };
     }
@@ -8893,18 +8926,34 @@ async function openShortsHighlightDialog(video, card) {
         }
         clips.forEach((clip, idx) => {
             const row = document.createElement('div');
-            row.style.cssText = 'padding:12px;border-radius:10px;border:1px solid rgba(148,163,184,0.2);background:rgba(15,23,42,0.55);display:flex;justify-content:space-between;align-items:center;gap:12px;';
+            row.className = 'shorts-clip-card';
             const start = Number(clip.start || 0).toFixed(1);
             const end = Number(clip.end || 30).toFixed(1);
             const dur = Math.max(1, Math.round(Number(end) - Number(start)));
             row.innerHTML = `
                 <div style="flex:1;min-width:0;">
-                    <div style="font-weight:600;font-size:14px;color:#f8fafc;">#${idx + 1} · ${escapeHtml(clip.hook_title || 'Đoạn cao trào')}</div>
-                    <div style="font-size:12px;color:#94a3b8;margin-top:3px;">${start}s → ${end}s (${dur}s) · Điểm viral: ${Number(clip.score || 85)}/100</div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="font-weight:600;font-size:14px;color:#f8fafc;">#${idx + 1} · ${escapeHtml(clip.hook_title || 'Đoạn cao trào')}</span>
+                        <span class="shorts-score-badge">Viral ${Number(clip.score || 85)}/100</span>
+                    </div>
+                    <div style="font-size:12px;color:#94a3b8;margin-top:4px;">⏱ ${start}s → ${end}s (${dur}s)</div>
                     <div style="font-size:12px;color:#cbd5e1;margin-top:4px;">${escapeHtml(clip.reason || '')}</div>
                 </div>
-                <button type="button" class="btn primary shorts-cut-btn" style="white-space:nowrap;">Cắt 9:16 &amp; Tải về</button>
+                <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+                    <button type="button" class="btn primary shorts-cut-btn" style="white-space:nowrap;">Cắt 9:16 &amp; Tải về</button>
+                    <button type="button" class="btn secondary shorts-copy-hook-btn" style="white-space:nowrap;font-size:11.5px;padding:4px 8px;">Copy Hook</button>
+                </div>
             `;
+            const copyHookBtn = row.querySelector('.shorts-copy-hook-btn');
+            if (copyHookBtn) {
+                copyHookBtn.onclick = async () => {
+                    try {
+                        await navigator.clipboard.writeText(String(clip.hook_title || ''));
+                        copyHookBtn.textContent = '✓ Đã copy';
+                        setTimeout(() => { copyHookBtn.textContent = 'Copy Hook'; }, 1500);
+                    } catch {}
+                };
+            }
             const cutBtn = row.querySelector('.shorts-cut-btn');
             cutBtn.onclick = async () => {
                 cutBtn.disabled = true;
@@ -9044,13 +9093,13 @@ function ensureBatchAutoPublishDialog() {
                             <span>Bỏ qua bước render nếu tập đó đã có sẵn thành phẩm tương ứng</span>
                         </label>
                         <div class="batch-ap-field" style="margin-top:8px;">
-                            <span>Xuất đa ngôn ngữ (tùy chọn thêm tiếng nước ngoài tự động)</span>
-                            <div id="batchApMultiLangWrap" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;font-size:12px;">
-                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="vi" checked> Tiếng Việt</label>
-                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="en"> English</label>
-                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="ja"> 日本語</label>
-                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="ko"> 한국어</label>
-                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="es"> Español</label>
+                            <span>Xuất đa ngôn ngữ (tự dịch &amp; lồng tiếng nhiều thứ tiếng)</span>
+                            <div id="batchApMultiLangWrap" class="batch-ap-lang-chips">
+                                <label class="batch-ap-lang-chip"><input type="checkbox" name="batchApLang" value="vi" checked> Tiếng Việt</label>
+                                <label class="batch-ap-lang-chip"><input type="checkbox" name="batchApLang" value="en"> English</label>
+                                <label class="batch-ap-lang-chip"><input type="checkbox" name="batchApLang" value="ja"> 日本語</label>
+                                <label class="batch-ap-lang-chip"><input type="checkbox" name="batchApLang" value="ko"> 한국어</label>
+                                <label class="batch-ap-lang-chip"><input type="checkbox" name="batchApLang" value="es"> Español</label>
                             </div>
                         </div>
                     </section>
@@ -9101,7 +9150,7 @@ function ensureBatchAutoPublishDialog() {
                                         <option value="private">Riêng tư</option>
                                     </select>
                                 </div>
-                                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.08);font-size:12px;">
+                                <div class="batch-ap-schedule-box">
                                     <label class="batch-ap-checkbox" style="margin:0;">
                                         <input type="checkbox" id="batchApScheduleEnabled">
                                         <span>Hẹn giờ vàng</span>

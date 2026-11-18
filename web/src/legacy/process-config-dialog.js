@@ -402,43 +402,45 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <option value="tiktok">TikTok · 9:16</option>
                     </select>
                 </label>
-                <label class="process-check-option">
-                    <input id="processAutoBrandBlur" type="checkbox">
-                    Tự động làm mờ watermark
-                    <small>Che ID hoặc chữ ở góc trên video.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processBoostGpu" type="checkbox">
-                    Boost GPU
-                    <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAntiReuse" type="checkbox">
-                    Gói chống Reused Content (YouTube)
-                    <small>Zoom nhẹ 1.04x + tốc độ 1.03x để né quét nội dung trùng lặp.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAntiReuseMirror" type="checkbox">
-                    Lật gương video (Mirror)
-                    <small>Lật ngang khung hình gốc (giữ nguyên chữ phụ đề đúng chiều).</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processAntiReuseColor" type="checkbox">
-                    Chỉnh màu nhẹ (Contrast/Sat)
-                    <small>Tăng nhẹ tương phản &amp; bão hòa để đổi chữ ký khung hình.</small>
-                </label>
-                <label class="process-check-option">
-                    <input id="processVocalSeparation" type="checkbox">
-                    Tách giọng gốc giữ SFX/Nhạc
-                    <small>Xóa riêng tiếng nói gốc, giữ lại hiệu ứng âm thanh &amp; nhạc nền.</small>
-                </label>
-                <label>
+                <div class="process-subsection-title">Xóa chữ, Logo &amp; Chống Reused Content</div>
+                <label style="grid-column:1 / -1;">
                     Chế độ xóa chữ/logo gốc (Song song)
                     <select id="processEraseMode">
                         <option value="blur">Làm mờ gốc (Boxblur — mặc định)</option>
                         <option value="delogo">Xóa nội suy viền (Delogo — không làm mờ)</option>
                         <option value="inpaint">Xóa sạch thông minh (Text-Aware Inpaint)</option>
                     </select>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAutoBrandBlur" type="checkbox">
+                    Tự động xóa/làm mờ watermark
+                    <small>Che ID hoặc chữ ở góc trên video.</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuse" type="checkbox">
+                    Gói chống Reused Content (YouTube)
+                    <small>Zoom nhẹ 1.04x + tốc độ 1.03x để né quét trùng lặp.</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuseMirror" type="checkbox">
+                    Lật gương video (Mirror)
+                    <small>Lật ngang khung hình gốc (giữ nguyên phụ đề đúng chiều).</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuseColor" type="checkbox">
+                    Chỉnh màu nhẹ (Contrast/Sat)
+                    <small>Tăng nhẹ tương phản &amp; bão hòa để đổi chữ ký khung hình.</small>
+                </label>
+                <div class="process-subsection-title">Hiệu năng, Âm thanh &amp; Thuật ngữ Series</div>
+                <label class="process-check-option">
+                    <input id="processBoostGpu" type="checkbox">
+                    Boost GPU
+                    <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processVocalSeparation" type="checkbox">
+                    Tách giọng gốc giữ SFX/Nhạc
+                    <small>Xóa riêng tiếng nói gốc, giữ lại hiệu ứng âm thanh &amp; nhạc nền.</small>
                 </label>
                 <label style="grid-column:1 / -1;">
                     Từ điển nhân vật / thuật ngữ Series (tùy chọn, 1 dòng/từ)
