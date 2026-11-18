@@ -2604,7 +2604,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     if (copyrightFixBtn) {
         copyrightFixBtn.onclick = () => {
             mode = 'voiceover';
-            syncMode('voiceover');
+            dialog.dataset.mode = 'voiceover';
+            const modeBadge = dialog.querySelector('#processConfigMode');
+            if (modeBadge) modeBadge.textContent = 'Voice + Vietsub';
+            const voiceField = dialog.querySelector('#processVoiceField');
+            if (voiceField) voiceField.style.display = '';
             set('processOriginalVolume', 0.05);
             dialog.querySelector('#processOriginalVolume')?.dispatchEvent(new Event('input', { bubbles: true }));
             dialog.querySelector('#processOriginalVolume')?.dispatchEvent(new Event('change', { bubbles: true }));
@@ -2616,7 +2620,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 brandBlur.checked = true;
                 brandBlur.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            outputSummary.refresh?.();
             refreshCopyrightEvaluation();
+            if (copyrightMusicNote) {
+                copyrightMusicNote.textContent = '· Đã áp dụng cấu hình Né Bản Quyền (Voice + Vietsub · Âm gốc 5% · Làm mờ logo).';
+            }
             dialog._scheduleSaveLastConfig?.();
         };
     }
