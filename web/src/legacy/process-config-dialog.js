@@ -141,6 +141,14 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     </div>
                 </div>
                 <div class="process-showcase-subbar-row">
+                    <span class="process-showcase-subbar-label">${uiIcon('blur', 14)} Kiểu xóa chữ/logo gốc</span>
+                    <div class="process-sub-style-chips" id="processShowcaseEraseChips" role="group" aria-label="Chọn kiểu xóa chữ hoặc logo gốc">
+                        <button type="button" class="is-active" data-erase-mode="blur">Làm mờ (Boxblur)</button>
+                        <button type="button" data-erase-mode="delogo">Xóa không mờ (Delogo)</button>
+                        <button type="button" data-erase-mode="inpaint">Xóa sạch AI (Inpaint)</button>
+                    </div>
+                </div>
+                <div class="process-showcase-subbar-row">
                     <span class="process-showcase-subbar-label">${uiIcon('captions', 14)} Kiểu Chữ phụ (No Voice)</span>
                     <div class="process-sub-style-chips" id="processShowcaseSecStyleChips" role="group" aria-label="Chọn kiểu chữ phụ không lồng tiếng">
                         <button type="button" data-sec-sub-style="minimal">Minimal Clean</button>

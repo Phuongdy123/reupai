@@ -211,6 +211,31 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const showcaseBar = dialog.querySelector('#processShowcaseSubBar');
         const showcaseChipsRoot = dialog.querySelector('#processShowcaseStyleChips');
         const showcaseSecChipsRoot = dialog.querySelector('#processShowcaseSecStyleChips');
+        const showcaseEraseChipsRoot = dialog.querySelector('#processShowcaseEraseChips');
+        const eraseModeSelect = dialog.querySelector('#processEraseMode');
+        const syncEraseChips = (modeVal) => {
+            const current = modeVal || eraseModeSelect?.value || 'blur';
+            showcaseEraseChipsRoot?.querySelectorAll('button[data-erase-mode]').forEach(btn => {
+                const active = btn.dataset.eraseMode === current;
+                btn.classList.toggle('is-active', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        };
+        dialog._syncEraseChips = syncEraseChips;
+        showcaseEraseChipsRoot?.querySelectorAll('button[data-erase-mode]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const nextMode = btn.dataset.eraseMode || 'blur';
+                if (eraseModeSelect) {
+                    eraseModeSelect.value = nextMode;
+                    eraseModeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                syncEraseChips(nextMode);
+                outputSummary.refresh?.();
+                dialog._scheduleSaveLastConfig?.();
+            }, { signal });
+        });
+        eraseModeSelect?.addEventListener('change', e => syncEraseChips(e.target.value), { signal });
+        syncEraseChips();
         const showcaseSampleRoot = dialog.querySelector('#processShowcaseSampleChips');
         const toggleStageBtn = dialog.querySelector('#processToggleStageSubBtn');
         const toggleSecStageBtn = dialog.querySelector('#processToggleStageSecSubBtn');
