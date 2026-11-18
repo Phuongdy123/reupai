@@ -1750,6 +1750,7 @@ def translate_srt(
 
     translation_model="gemini-3.1-flash-lite",
     target_language="vi",
+    glossary=None,
 
 ):
 
@@ -1839,6 +1840,15 @@ def translate_srt(
         pass
     translator.SOURCE_LANGUAGE = source_language
     translator.TARGET_LANGUAGE = target_language
+    if isinstance(glossary, list):
+        glossary_lines = [
+            f"{item.get('source', '').strip()} => {item.get('target', '').strip()}"
+            for item in glossary
+            if isinstance(item, dict) and item.get("source") and item.get("target")
+        ]
+        translator.GLOSSARY_TEXT = "\n".join(glossary_lines)
+    else:
+        translator.GLOSSARY_TEXT = str(glossary or "").strip()
 
 
 
@@ -2646,6 +2656,7 @@ def render_voiceover(
     anti_reuse_speed=1.03,
     anti_reuse_mirror=False,
     anti_reuse_color=False,
+    blur_mode="blur",
     on_render_progress=None,
 
 
@@ -2720,6 +2731,7 @@ def render_voiceover(
     renderer.ANTI_REUSE_SPEED = float(anti_reuse_speed or 1.03)
     renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
     renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
+    renderer.BLUR_MODE = str(blur_mode or "blur").strip().lower() or "blur"
 
     renderer.PREVIEW_SECONDS = preview_seconds
 
@@ -2817,6 +2829,7 @@ def render_subtitle_only(
     anti_reuse_speed=1.03,
     anti_reuse_mirror=False,
     anti_reuse_color=False,
+    blur_mode="blur",
     on_render_progress=None,
 
     force=False,
@@ -2883,6 +2896,7 @@ def render_subtitle_only(
     renderer.ANTI_REUSE_SPEED = float(anti_reuse_speed or 1.03)
     renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
     renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
+    renderer.BLUR_MODE = str(blur_mode or "blur").strip().lower() or "blur"
 
     renderer.RENDER_MODE = "subtitle"
     renderer.RENDER_PROGRESS_CALLBACK = on_render_progress
@@ -3984,6 +3998,7 @@ def pipeline(
             source_language=config.get("source_language", "auto"),
             translation_model=config.get("translation_model", "gemini-3.1-flash-lite"),
             target_language=target_language,
+            glossary=config.get("glossary"),
 
             )
             source_language_path.write_text(source_language, encoding="utf-8")
@@ -4297,11 +4312,63 @@ def pipeline(
                 mode=mode,
             )
 
+        render_source = source_video
+        effective_blur_mode = str(config.get("blur_mode") or "blur").strip().lower() or "blur"
+        if effective_blur_mode == "inpaint":
+            try:
+                from services.video_inpainter import inpaint_video_regions
+                inpaint_boxes = []
+                blur_rect = (region or {}).get("blur") if isinstance(region, dict) else None
+                if isinstance(blur_rect, dict) and (region or {}).get("blur_enabled", True):
+                    inpaint_boxes.append(blur_rect)
+                if isinstance(config.get("custom_blur_region"), dict):
+                    inpaint_boxes.append(config["custom_blur_region"])
+                if isinstance(config.get("secondary_sub_region"), dict) and config.get("secondary_sub_blur", True):
+                    inpaint_boxes.append(config["secondary_sub_region"])
+                vid_info = (region or {}).get("video") if isinstance(region, dict) else {}
+                vw = int((vid_info or {}).get("width") or 1280)
+                vh = int((vid_info or {}).get("height") or 720)
+                if inpaint_boxes:
+                    write_progress(
+                        job_dir,
+                        stage="render",
+                        percent=80,
+                        status="running",
+                        message="Đang xóa sạch chữ/logo gốc (Text-Aware Inpaint) không làm mờ…",
+                        mode=mode,
+                    )
+                    inpainted_out = job_dir / "inpainted_source.mp4"
+                    render_source = inpaint_video_regions(
+                        source_video,
+                        inpainted_out,
+                        inpaint_boxes,
+                        video_width=vw,
+                        video_height=vh,
+                        text_aware=True,
+                    )
+            except Exception as inpaint_err:
+                print(f"[INPAINT FALLBACK] {inpaint_err}")
+                effective_blur_mode = "delogo"
+
+        effective_original_volume = original_volume
+        effective_music_path = config.get("music_path")
+        effective_music_volume = float(config.get("music_volume", 0.25))
+        if bool(config.get("vocal_separation")) and mode == "voiceover" and not no_speech and not effective_music_path:
+            try:
+                from services.vocal_separator import separate_vocals_preserve_sfx
+                accomp = separate_vocals_preserve_sfx(source_video, job_dir)
+                if accomp and accomp.is_file():
+                    effective_music_path = str(accomp)
+                    effective_music_volume = max(0.35, float(original_volume or 0.35))
+                    effective_original_volume = 0.0
+            except Exception as sep_err:
+                print(f"[VOCAL SEPARATION FALLBACK] {sep_err}")
+
         if mode == "voiceover" and not no_speech:
 
             render_voiceover(
 
-                source_video,
+                render_source,
 
                 voice_path,
 
@@ -4317,7 +4384,7 @@ def pipeline(
 
                 preview_seconds=preview_seconds,
 
-                original_volume=original_volume,
+                original_volume=effective_original_volume,
 
                 voice_volume=voice_volume,
 
@@ -4342,9 +4409,9 @@ def pipeline(
 
                 blur_intervals=effective_blur_intervals,
 
-                music_path=config.get("music_path"),
+                music_path=effective_music_path,
 
-                music_volume=float(config.get("music_volume", 0.25)),
+                music_volume=effective_music_volume,
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
                 secondary_sub_region=config.get("secondary_sub_region"),
                 secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
@@ -4356,6 +4423,7 @@ def pipeline(
                 anti_reuse_speed=float(config.get("anti_reuse_speed") or 1.03),
                 anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
                 anti_reuse_color=bool(config.get("anti_reuse_color", False)),
+                blur_mode=effective_blur_mode,
                 on_render_progress=on_render_progress,
 
                 force=render_force,
@@ -4366,7 +4434,7 @@ def pipeline(
 
             render_subtitle_only(
 
-                source_video,
+                render_source,
 
                 vietnamese_srt,
 
@@ -4401,9 +4469,9 @@ def pipeline(
 
                 blur_intervals=effective_blur_intervals,
 
-                music_path=config.get("music_path"),
+                music_path=effective_music_path,
 
-                music_volume=float(config.get("music_volume", 0.25)),
+                music_volume=effective_music_volume,
                 auto_brand_blur=bool(config.get("auto_brand_blur", False)),
                 secondary_sub_region=config.get("secondary_sub_region"),
                 secondary_sub_blur=bool(config.get("secondary_sub_blur", True)),
@@ -4415,6 +4483,7 @@ def pipeline(
                 anti_reuse_speed=float(config.get("anti_reuse_speed") or 1.03),
                 anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
                 anti_reuse_color=bool(config.get("anti_reuse_color", False)),
+                blur_mode=effective_blur_mode,
                 on_render_progress=on_render_progress,
 
                 force=render_force,

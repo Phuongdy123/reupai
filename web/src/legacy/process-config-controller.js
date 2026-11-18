@@ -2110,6 +2110,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (dialog.querySelector('#processAntiReuse')) dialog.querySelector('#processAntiReuse').checked = false;
             if (dialog.querySelector('#processAntiReuseMirror')) dialog.querySelector('#processAntiReuseMirror').checked = false;
             if (dialog.querySelector('#processAntiReuseColor')) dialog.querySelector('#processAntiReuseColor').checked = false;
+            if (dialog.querySelector('#processVocalSeparation')) dialog.querySelector('#processVocalSeparation').checked = false;
+            set('processEraseMode', 'blur');
+            set('processGlossary', '');
             set('processBlurPreset', '');
             ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
                 'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
@@ -2167,7 +2170,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             'processCustomBlurHeight', 'processBlurX', 'processBlurY',
             'processBlurWidth', 'processBlurHeight',
             'processSecondarySubX', 'processSecondarySubY', 'processSecondarySubWidth', 'processSecondarySubHeight',
-            'processSecondarySubStyle', 'processSecondarySubFontSize',
+            'processSecondarySubStyle', 'processSecondarySubFontSize', 'processEraseMode', 'processGlossary',
         ];
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
@@ -2176,6 +2179,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             anti_reuse: !!dialog.querySelector('#processAntiReuse')?.checked,
             anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
             anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
+            vocal_separation: !!dialog.querySelector('#processVocalSeparation')?.checked,
             secondary_sub_blur: dialog.querySelector('#processSecondarySubBlur')?.checked !== false,
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
@@ -2256,6 +2260,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     if (el) el.checked = !!value;
                 } else if (id === 'anti_reuse_color') {
                     const el = dialog.querySelector('#processAntiReuseColor');
+                    if (el) el.checked = !!value;
+                } else if (id === 'vocal_separation') {
+                    const el = dialog.querySelector('#processVocalSeparation');
                     if (el) el.checked = !!value;
                 } else if (id === 'source_subtitle_mode') {
                     const el = dialog.querySelector('#processSourceNoSub');
@@ -3304,6 +3311,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             anti_reuse_speed: 1.03,
             anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
             anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
+            vocal_separation: !!dialog.querySelector('#processVocalSeparation')?.checked,
+            blur_mode: value('processEraseMode') || 'blur',
+            glossary: value('processGlossary')?.trim() || null,
             source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
             aspect_ratio: value('processAspectRatio') || null,
             blur_preset: value('processBlurPreset') || null,

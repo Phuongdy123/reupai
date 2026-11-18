@@ -73,6 +73,7 @@ if not os.getenv("GEMINI_API_KEY"):
 API_KEY = os.getenv("GEMINI_API_KEY")
 SOURCE_LANGUAGE = "auto"
 TARGET_LANGUAGE = "vi"
+GLOSSARY_TEXT = ""
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
 
 
@@ -680,7 +681,7 @@ QUY TẮC:
 11. Không Markdown.
 12. Không giải thích.
 13. Không đưa nhiều phương án.
-
+{f"\nTỪ ĐIỂN THUẬT NGỮ / TÊN NHÂN VẬT BẮT BUỘC (dịch thống nhất 100% theo bảng):\n{GLOSSARY_TEXT.strip()}\n" if GLOSSARY_TEXT and str(GLOSSARY_TEXT).strip() else ""}
 NGỮ CẢNH CÁC CÂU TRƯỚC:
 {context}
 

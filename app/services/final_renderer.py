@@ -325,6 +325,7 @@ ANTI_REUSE_ZOOM = 1.04
 ANTI_REUSE_SPEED = 1.03
 ANTI_REUSE_MIRROR = False
 ANTI_REUSE_COLOR = False
+BLUR_MODE = "blur"
 
 
 
@@ -6176,6 +6177,16 @@ def _safe_boxblur_filter(width, height, requested_radius, power=2):
     return f"boxblur={radius}:{blur_power}"
 
 
+def _delogo_expr(bx, by, bw, bh, video_width, video_height):
+    dx = max(1, min(int(bx), int(video_width) - 3))
+    dy = max(1, min(int(by), int(video_height) - 3))
+    dw = max(2, min(int(bw), int(video_width) - dx - 1))
+    dh = max(2, min(int(bh), int(video_height) - dy - 1))
+    if dw <= 2 or dh <= 2:
+        return None
+    return f"delogo=x={dx}:y={dy}:w={dw}:h={dh}"
+
+
 def _anti_reuse_speed_factor():
     if not ANTI_REUSE_ENABLED:
         return 1.0
@@ -6250,31 +6261,48 @@ def build_video_filter(
             parts.append(f"[0:v]{','.join(pre_ops)}[ar_in]")
             input_stream = "ar_in"
 
-    # 1) Blur subtitle Trung goc
+    erase_mode = str(BLUR_MODE or "blur").strip().lower()
+
+    # 1) Blur / Erase subtitle Trung goc
     if layout.get("blur_enabled", True) and width > 0 and height > 0:
-        parts.extend([
-            f"[{input_stream}]split=2[base][crop_src]",
-            f"[crop_src]crop={width}:{height}:{x}:{y},"
-            f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)},"
-            "format=yuv420p[blurred]",
-            # Force matching pixel formats before overlay. Some source codecs
-            # are decoded as 10-bit/4:2:2 while NVENC later requests yuv420p;
-            # implicit overlay negotiation can otherwise produce green blocks.
-            f"[base]format=yuv420p[base_420]",
-            f"[base_420][blurred]overlay={x}:{y}:format=yuv420[clean_sub]",
-        ])
-        current = "clean_sub"
+        if erase_mode == "inpaint":
+            # Pre-pass inpainter already removed subtitle strokes cleanly
+            parts.append(f"[{input_stream}]format=yuv420p[clean_sub]")
+            current = "clean_sub"
+        elif erase_mode == "delogo" and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
+            parts.append(f"[{input_stream}]format=yuv420p,{dl}[clean_sub]")
+            current = "clean_sub"
+        else:
+            parts.extend([
+                f"[{input_stream}]split=2[base][crop_src]",
+                f"[crop_src]crop={width}:{height}:{x}:{y},"
+                f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)},"
+                "format=yuv420p[blurred]",
+                # Force matching pixel formats before overlay. Some source codecs
+                # are decoded as 10-bit/4:2:2 while NVENC later requests yuv420p;
+                # implicit overlay negotiation can otherwise produce green blocks.
+                f"[base]format=yuv420p[base_420]",
+                f"[base_420][blurred]overlay={x}:{y}:format=yuv420[clean_sub]",
+            ])
+            current = "clean_sub"
     else:
         parts.append(f"[{input_stream}]null[clean_sub]")
         current = "clean_sub"
 
-    # 2) Blur watermark / UID / @username Bilibili
+    # 2) Blur / Erase watermark / UID / @username Bilibili
     if brand_blur_boxes:
         for index, box in enumerate(brand_blur_boxes, start=1):
             bx = int(box["x"])
             by = int(box["y"])
             bw = int(box["width"])
             bh = int(box["height"])
+            if erase_mode == "inpaint":
+                continue
+            if erase_mode == "delogo" and (dl := _delogo_expr(bx, by, bw, bh, video_width, video_height)):
+                out_label = f"wm_out_{index}"
+                parts.append(f"[{current}]{dl}[{out_label}]")
+                current = out_label
+                continue
 
             src_label = f"wm_src_{index}"
             crop_label = f"wm_crop_{index}"

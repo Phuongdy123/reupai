@@ -427,6 +427,23 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     Chỉnh màu nhẹ (Contrast/Sat)
                     <small>Tăng nhẹ tương phản &amp; bão hòa để đổi chữ ký khung hình.</small>
                 </label>
+                <label class="process-check-option">
+                    <input id="processVocalSeparation" type="checkbox">
+                    Tách giọng gốc giữ SFX/Nhạc
+                    <small>Xóa riêng tiếng nói gốc, giữ lại hiệu ứng âm thanh &amp; nhạc nền.</small>
+                </label>
+                <label>
+                    Chế độ xóa chữ/logo gốc (Song song)
+                    <select id="processEraseMode">
+                        <option value="blur">Làm mờ gốc (Boxblur — mặc định)</option>
+                        <option value="delogo">Xóa nội suy viền (Delogo — không làm mờ)</option>
+                        <option value="inpaint">Xóa sạch thông minh (Text-Aware Inpaint)</option>
+                    </select>
+                </label>
+                <label style="grid-column:1 / -1;">
+                    Từ điển nhân vật / thuật ngữ Series (tùy chọn, 1 dòng/từ)
+                    <textarea id="processGlossary" rows="2" placeholder="Ví dụ:&#10;萧炎 = Tiêu Viêm&#10;斗气 = Đấu Khí" style="width:100%;margin-top:4px;resize:vertical;"></textarea>
+                </label>
                 </div>
             </section>
 

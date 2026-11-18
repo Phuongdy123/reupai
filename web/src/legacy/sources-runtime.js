@@ -8598,6 +8598,9 @@ function ensureCopyrightReportDialog() {
             <footer class="batch-ap-footer">
                 <span id="crFooterStatus">Phân tích dựa trên metadata, cấu hình âm thanh và AI kiểm tra mẫu nhạc/hình.</span>
                 <div class="batch-ap-footer-btns">
+                    <button type="button" class="btn secondary" id="crApiKeysBtn" title="Nhập AudD / ACRCloud API key để nhận diện chính xác tên bài hát bản quyền">
+                        <span>API Quét Nhạc</span>
+                    </button>
                     <button type="button" class="btn secondary" id="crYoutubeCheckBtn" title="Đăng video thành phẩm lên YouTube ở chế độ Riêng tư để lấy kết quả kiểm tra Content ID thật">
                         ${copyrightIconSvg('shield', 14)}<span>Kiểm tra thật YouTube (Riêng tư)</span>
                     </button>
@@ -8624,27 +8627,63 @@ async function openCopyrightReportDialog(video, card) {
     const footerStatus = dialog.querySelector('#crFooterStatus');
     const deepScanBtn = dialog.querySelector('#crDeepScanBtn');
     const ytCheckBtn = dialog.querySelector('#crYoutubeCheckBtn');
+    const apiKeysBtn = dialog.querySelector('#crApiKeysBtn');
     const openSafeBtn = dialog.querySelector('#crOpenSafeConfigBtn');
     const closeBtn = dialog.querySelector('#crDialogCloseBtn');
+    if (apiKeysBtn) {
+        apiKeysBtn.onclick = () => {
+            const cur = readSavedApiKeys();
+            const audd = window.prompt('Nhập AudD API Token (để trống nếu không dùng):', cur.audd_api_token || '');
+            if (audd === null) return;
+            const acrHost = window.prompt('ACRCloud Host (vd: identify-ap-southeast-1.acrcloud.com):', cur.acrcloud_host || '');
+            const acrKey = acrHost ? window.prompt('ACRCloud Access Key:', cur.acrcloud_access_key || '') : cur.acrcloud_access_key;
+            const acrSecret = acrHost ? window.prompt('ACRCloud Access Secret:', cur.acrcloud_access_secret || '') : cur.acrcloud_access_secret;
+            try {
+                localStorage.setItem('reupai:api-keys', JSON.stringify({
+                    ...cur,
+                    audd_api_token: audd.trim(),
+                    acrcloud_host: (acrHost || '').trim(),
+                    acrcloud_access_key: (acrKey || '').trim(),
+                    acrcloud_access_secret: (acrSecret || '').trim(),
+                }));
+                footerStatus.textContent = 'Đã lưu API Keys quét nhạc (chỉ lưu cục bộ trên trình duyệt của bạn).';
+            } catch {}
+        };
+    }
 
     titleEl.textContent = video.title || video.video_id;
 
     const currentSavedCfg = resolveSavedBatchProcessConfig();
-    const buildPayload = () => ({
-        video_id: video.video_id,
-        channel: video.channel_key || 'default',
-        title: video.title || video.video_id || '',
-        description: video.description || '',
-        url: video.url || '',
-        track: video.track || video.music_title || '',
-        artist: video.artist || video.music_author || '',
-        license: video.license || '',
-        mode: 'voiceover',
-        original_volume: Number(currentSavedCfg.original_volume ?? 0.15),
-        music_url: currentSavedCfg.music_url || '',
-        auto_brand_blur: Boolean(currentSavedCfg.auto_brand_blur),
-        has_blur_region: Boolean(currentSavedCfg.blur_region),
-    });
+    const readSavedApiKeys = () => {
+        try {
+            const raw = localStorage.getItem('reupai:api-keys');
+            return raw ? JSON.parse(raw) : {};
+        } catch {
+            return {};
+        }
+    };
+    const buildPayload = () => {
+        const keys = readSavedApiKeys();
+        return {
+            video_id: video.video_id,
+            channel: video.channel_key || 'default',
+            title: video.title || video.video_id || '',
+            description: video.description || '',
+            url: video.url || '',
+            track: video.track || video.music_title || '',
+            artist: video.artist || video.music_author || '',
+            license: video.license || '',
+            mode: 'voiceover',
+            original_volume: Number(currentSavedCfg.original_volume ?? 0.15),
+            music_url: currentSavedCfg.music_url || '',
+            auto_brand_blur: Boolean(currentSavedCfg.auto_brand_blur),
+            has_blur_region: Boolean(currentSavedCfg.blur_region),
+            audd_api_token: keys.audd_api_token || '',
+            acrcloud_host: keys.acrcloud_host || '',
+            acrcloud_access_key: keys.acrcloud_access_key || '',
+            acrcloud_access_secret: keys.acrcloud_access_secret || '',
+        };
+    };
 
     const renderReport = (report) => {
         const riskVi = (level) => (level === 'high' ? 'Nguy cơ cao' : level === 'medium' ? 'Cần lưu ý' : 'An toàn');
@@ -9108,6 +9147,12 @@ function ensureBatchAutoPublishDialog() {
                             <p>Kéo thả <code>⋮⋮</code> giữa các dòng để đổi/thay thế Tập, hoặc kéo video từ kho nguồn thả vào Tập bất kỳ.</p>
                         </div>
                         <div class="batch-ap-thumb-actions">
+                            <button type="button" class="btn secondary" id="batchApAutoThumbBtn" title="Tự cắt khung hình nét + chèn chữ Hook tiếng Việt cho các tập chưa có ảnh bìa">
+                                <span>Tạo Thumb Hook AI</span>
+                            </button>
+                            <button type="button" class="btn secondary" id="batchApMergeBtn" title="Gộp các tập đã render thành 1 video Full Bộ kèm mốc YouTube Chapters">
+                                <span>Gộp Full Bộ + Chapters</span>
+                            </button>
                             <button type="button" class="btn secondary" id="batchApCheckCopyrightBtn" title="Kiểm tra bản quyền Video & Nhạc cho toàn bộ danh sách tập">
                                 ${copyrightIconSvg('shield', 14)}
                                 <span>Tra bản quyền</span>
@@ -9667,6 +9712,93 @@ async function openBatchAutoPublishDialog() {
     platTtInput.onchange = persistCurrentPrefs;
 
     const checkBatchCopyrightBtn = dialog.querySelector('#batchApCheckCopyrightBtn');
+    const autoThumbBtn = dialog.querySelector('#batchApAutoThumbBtn');
+    const mergeSeriesBtn = dialog.querySelector('#batchApMergeBtn');
+
+    if (autoThumbBtn) {
+        autoThumbBtn.onclick = async () => {
+            const ordered = getOrderedVideos();
+            if (!ordered.length) return;
+            autoThumbBtn.disabled = true;
+            autoThumbBtn.textContent = 'Đang tạo Thumb…';
+            overallStatusEl.hidden = false;
+            try {
+                const startEp = Math.max(1, Number(startEpInput.value || 1));
+                const base = basePromptInput.value.trim();
+                let created = 0;
+                for (let idx = 0; idx < ordered.length; idx += 1) {
+                    if (thumbnailDataUrls[idx]) continue;
+                    const v = ordered[idx];
+                    const hookText = formatEpisodeTopic(base, startEp + idx, v.title || v.video_id);
+                    try {
+                        const res = await window.reupEngineClient.json('/api/thumbnails/auto-hook', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                video_id: v.video_id,
+                                channel: v.channel_key || 'default',
+                                mode: modeSelect.value || 'voiceover',
+                                hook_text: hookText,
+                            }),
+                        });
+                        if (res?.thumbnail) {
+                            thumbnailDataUrls[idx] = res.thumbnail;
+                            created += 1;
+                        }
+                    } catch {}
+                }
+                renderEpisodeRows();
+                overallStatusEl.textContent = created
+                    ? `✓ Đã tạo tự động ${created} Thumbnail Hook tiếng Việt.`
+                    : 'Chưa tạo được thumbnail mới (hãy chắc chắn video đã tải/render trên máy).';
+            } finally {
+                autoThumbBtn.disabled = false;
+                autoThumbBtn.textContent = 'Tạo Thumb Hook AI';
+            }
+        };
+    }
+
+    if (mergeSeriesBtn) {
+        mergeSeriesBtn.onclick = async () => {
+            const ordered = getOrderedVideos();
+            if (ordered.length < 2) {
+                overallStatusEl.hidden = false;
+                overallStatusEl.textContent = 'Cần ít nhất 2 tập trong danh sách để gộp Full Bộ.';
+                return;
+            }
+            mergeSeriesBtn.disabled = true;
+            mergeSeriesBtn.textContent = 'Đang gộp Full Bộ…';
+            overallStatusEl.hidden = false;
+            overallStatusEl.textContent = 'Đang ghép các tập đã xử lý thành Video Full Bộ + tạo YouTube Chapters…';
+            try {
+                const startEp = Math.max(1, Number(startEpInput.value || 1));
+                const base = basePromptInput.value.trim() || 'Full Bộ';
+                const res = await window.reupEngineClient.json('/api/series/merge', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        mode: modeSelect.value || 'voiceover',
+                        series_name: base,
+                        items: ordered.map((v, idx) => ({
+                            video_id: v.video_id,
+                            channel: v.channel_key || 'default',
+                            title: formatEpisodeTopic(base, startEp + idx, v.title || v.video_id),
+                        })),
+                    }),
+                });
+                const dlUrl = res?.download_url && window.reupEngineClient?.mediaUrl
+                    ? await window.reupEngineClient.mediaUrl(res.download_url)
+                    : '';
+                overallStatusEl.innerHTML = `✓ Đã gộp ${res.episode_count} tập (${Math.round(res.total_duration || 0)}s)! ${dlUrl ? `<a href="${dlUrl}" download style="color:#60a5fa;text-decoration:underline;margin:0 8px;">Tải Video Full Bộ ↗</a>` : ''}<br><small style="white-space:pre-wrap;color:#cbd5e1;">YouTube Chapters:\n${escapeHtml(res.chapters_text || '')}</small>`;
+            } catch (err) {
+                overallStatusEl.textContent = err?.status === 404
+                    ? 'Cần cập nhật Local Engine mới để gộp Full Bộ tự động.'
+                    : (err?.message || 'Lỗi gộp Full Bộ.');
+            } finally {
+                mergeSeriesBtn.disabled = false;
+                mergeSeriesBtn.textContent = 'Gộp Full Bộ + Chapters';
+            }
+        };
+    }
+
     if (checkBatchCopyrightBtn) {
         checkBatchCopyrightBtn.onclick = async () => {
             const ordered = getOrderedVideos();

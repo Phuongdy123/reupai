@@ -841,6 +841,91 @@ def shorts_download(channel: str, video_id: str, filename: str, _: bool = Depend
     return FileResponse(str(target), filename=safe_name, media_type="video/mp4")
 
 
+@app.post("/api/series/merge")
+def series_merge(payload: dict, _: bool = Depends(require_token)):
+    from services.series_merger import merge_series_videos
+
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    mode = str(payload.get("mode") or "voiceover").strip() or "voiceover"
+    series_name = str(payload.get("series_name") or "full_bo").strip() or "full_bo"
+    video_paths: list[Path] = []
+    titles: list[str] = []
+    first_ch = "default"
+    for idx, item in enumerate(items, start=1):
+        if not isinstance(item, dict) or not item.get("video_id"):
+            continue
+        vid = validate_video_id(str(item["video_id"]))
+        ch = validate_channel(str(item.get("channel") or "default"))
+        if idx == 1:
+            first_ch = ch
+        found = find_result_file(ch, vid, mode)
+        if found and Path(found).is_file():
+            video_paths.append(Path(found))
+            titles.append(str(item.get("title") or f"Tập {idx}"))
+
+    if len(video_paths) < 2:
+        raise HTTPException(status_code=400, detail="Cần ít nhất 2 tập đã render thành phẩm để gộp Full Bộ.")
+
+    safe_slug = "".join(c if c.isalnum() or c in "-_" else "_" for c in series_name)[:48].strip("_") or "full_bo"
+    out_name = f"{safe_slug}_{mode}_full.mp4"
+    first_vid = validate_video_id(str(items[0]["video_id"]))
+    out_dir = job_dir_for(first_ch, first_vid).parent / "_series_merged"
+    out_path = out_dir / out_name
+    result = merge_series_videos(video_paths, titles, out_path)
+    result["download_url"] = f"/api/series/file/{first_ch}/{out_name}"
+    return {"ok": True, **result}
+
+
+@app.get("/api/series/file/{channel}/{filename}")
+def series_merged_download(channel: str, filename: str, _: bool = Depends(require_token)):
+    ch = validate_channel(channel)
+    safe_name = Path(filename).name
+    target = job_dir_for(ch, "placeholder").parent / "_series_merged" / safe_name
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Không tìm thấy file Full Bộ đã gộp.")
+    return FileResponse(str(target), filename=safe_name, media_type="video/mp4")
+
+
+@app.post("/api/thumbnails/auto-hook")
+def thumbnails_auto_hook(payload: dict, _: bool = Depends(require_token)):
+    from services.thumbnail_generator import generate_hook_thumbnail
+
+    raw_video_id = str(payload.get("video_id") or "").strip()
+    raw_channel = str(payload.get("channel") or "default").strip() or "default"
+    mode = str(payload.get("mode") or "voiceover").strip() or "voiceover"
+    hook_text = str(payload.get("hook_text") or payload.get("title") or "")
+    ts = float(payload.get("timestamp_seconds") or 12.0)
+    if not raw_video_id:
+        raise HTTPException(status_code=400, detail="Thiếu video_id.")
+    vid = validate_video_id(raw_video_id)
+    ch = validate_channel(raw_channel)
+    source = find_result_file(ch, vid, mode) or local_source_for_process(vid, ch)
+    if not source or not Path(source).is_file():
+        raise HTTPException(status_code=404, detail="Không tìm thấy file video để tạo thumbnail.")
+    data_url = generate_hook_thumbnail(Path(source), hook_text, timestamp_seconds=ts)
+    return {"ok": True, "thumbnail": data_url}
+
+
+@app.post("/api/music/pixabay")
+def music_pixabay_search(payload: dict, _: bool = Depends(require_token)):
+    import urllib.parse
+    import urllib.request
+
+    api_key = str(payload.get("api_key") or "").strip()
+    query = str(payload.get("query") or "epic cinematic").strip() or "epic cinematic"
+    if not api_key:
+        raise HTTPException(status_code=400, detail="Chưa cấu hình Pixabay API Key.")
+    url = f"https://pixabay.com/api/videos/?key={urllib.parse.quote(api_key)}&q={urllib.parse.quote(query)}&per_page=5"
+    # Note: Pixabay audio/music uses official partner endpoint or freesound; fallback cleanly
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ReupAI/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {"ok": True, "hits": data.get("hits", [])[:5]}
+    except Exception as err:
+        raise HTTPException(status_code=502, detail=f"Lỗi kết nối Pixabay: {err}") from err
+
+
 @app.post("/api/gemini/oauth/start")
 def gemini_oauth_start(payload: dict[str, str] | None = None, _: bool = Depends(require_token)):
     from services.gemini_oauth import start_authorization

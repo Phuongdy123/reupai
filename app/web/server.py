@@ -546,6 +546,9 @@ class ProcessRequest(BaseModel):
     secondary_sub_font_size: Optional[int] = None
     secondary_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     auto_brand_blur: bool = False
+    blur_mode: Literal["blur", "delogo", "inpaint"] = "blur"
+    glossary: Optional[Any] = None
+    vocal_separation: bool = False
     anti_reuse: bool = False
     anti_reuse_zoom: float = 1.04
     anti_reuse_speed: float = 1.03
