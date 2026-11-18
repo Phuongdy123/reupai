@@ -1065,11 +1065,13 @@ def build_ytdlp_command(
         "yt_dlp",
         "--continue",
         "--retries",
-        "30",
+        "4",
         "--fragment-retries",
-        "30",
+        "4",
+        "--retry-sleep",
+        "2",
         "--socket-timeout",
-        "45",
+        "30",
     )
 
     # Bilibili can advertise premium 1080p formats to anonymous users, then
