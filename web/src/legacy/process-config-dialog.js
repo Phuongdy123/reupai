@@ -93,6 +93,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </div>
                 <button type="button" class="btn secondary process-download-source" id="processDownloadSource">${uiIcon('download', 16)} Tải video để xem trước</button>
                 <div id="processStageSubtitlePreview" class="process-stage-subtitle-preview" data-style="minimal" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSubtitleText"></span></div>
+                <div id="processStageSecSubPreview" class="process-stage-sec-sub-preview" data-style="box" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSecSubText">Chữ phụ / Chú thích (Không Voice)</span></div>
             </div>
             <div class="process-expanded-logo-bar" id="processExpandedLogoBar" hidden>
                 <div class="process-expanded-logo-controls">
@@ -130,8 +131,8 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             </div>
             <div class="process-showcase-subbar" id="processShowcaseSubBar">
                 <div class="process-showcase-subbar-row">
-                    <span class="process-showcase-subbar-label">${uiIcon('captions', 14)} Kiểu phụ đề xem trên video</span>
-                    <div class="process-sub-style-chips" id="processShowcaseStyleChips" role="group" aria-label="Chọn kiểu phụ đề xem trên video">
+                    <span class="process-showcase-subbar-label">${uiIcon('captions', 14)} Kiểu Phụ đề chính</span>
+                    <div class="process-sub-style-chips" id="processShowcaseStyleChips" role="group" aria-label="Chọn kiểu phụ đề chính xem trên video">
                         <button type="button" class="is-active" data-sub-style="minimal">Minimal Clean</button>
                         <button type="button" data-sub-style="bold">Creator Bold</button>
                         <button type="button" data-sub-style="cinema">Cinema</button>
@@ -139,9 +140,22 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <button type="button" data-sub-style="box">Simple Box</button>
                     </div>
                 </div>
+                <div class="process-showcase-subbar-row">
+                    <span class="process-showcase-subbar-label">${uiIcon('captions', 14)} Kiểu Chữ phụ (No Voice)</span>
+                    <div class="process-sub-style-chips" id="processShowcaseSecStyleChips" role="group" aria-label="Chọn kiểu chữ phụ không lồng tiếng">
+                        <button type="button" data-sec-sub-style="minimal">Minimal Clean</button>
+                        <button type="button" data-sec-sub-style="bold">Creator Bold</button>
+                        <button type="button" data-sec-sub-style="cinema">Cinema</button>
+                        <button type="button" data-sec-sub-style="neon">Neon Pop</button>
+                        <button type="button" class="is-active" data-sec-sub-style="box">Simple Box</button>
+                    </div>
+                </div>
                 <div class="process-showcase-subbar-samples">
                     <div class="process-sub-sample-pills" id="processShowcaseSampleChips" role="group" aria-label="Xem thử từng câu mẫu"></div>
-                    <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSubBtn" aria-pressed="false">Xem sub trên video</button>
+                    <div style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSecSubBtn" aria-pressed="false">Xem chữ phụ trên video</button>
+                        <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSubBtn" aria-pressed="false">Xem sub trên video</button>
+                    </div>
                 </div>
             </div>
 

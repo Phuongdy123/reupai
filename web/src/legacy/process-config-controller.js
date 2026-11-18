@@ -210,10 +210,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const cardRoot = dialog.querySelector('#processSubtitleStylePreview');
         const showcaseBar = dialog.querySelector('#processShowcaseSubBar');
         const showcaseChipsRoot = dialog.querySelector('#processShowcaseStyleChips');
+        const showcaseSecChipsRoot = dialog.querySelector('#processShowcaseSecStyleChips');
         const showcaseSampleRoot = dialog.querySelector('#processShowcaseSampleChips');
         const toggleStageBtn = dialog.querySelector('#processToggleStageSubBtn');
+        const toggleSecStageBtn = dialog.querySelector('#processToggleStageSecSubBtn');
         const togglePickerBtn = dialog.querySelector('#toggleProcessPicker');
         const styleSelect = dialog.querySelector('#processSubtitleStyle');
+        const secStyleSelect = dialog.querySelector('#processSecondarySubStyle');
+        const secFontSizeSelect = dialog.querySelector('#processSecondarySubFontSize');
         const targetLangSelect = dialog.querySelector('#processTargetLanguage');
         const fontSizeSelect = dialog.querySelector('#processFontSize');
         const titleEl = dialog.querySelector('#processSubPreviewTitle');
@@ -222,6 +226,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const textEl = dialog.querySelector('#processSubPreviewText');
         const stageOverlay = dialog.querySelector('#processStageSubtitlePreview');
         const stageOverlayText = dialog.querySelector('#processStageSubtitleText');
+        const stageSecOverlay = dialog.querySelector('#processStageSecSubPreview');
+        const stageSecOverlayText = dialog.querySelector('#processStageSecSubText');
         const chipsRoot = dialog.querySelector('#processSubStyleChips');
         const sampleListRoot = dialog.querySelector('#processSubSampleList');
         const subPanel = dialog.querySelector('#processInspectorSubtitles');
@@ -230,6 +236,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         let activeSample = 0;
         let previewHovering = false;
         let showOnVideoStage = false;
+        let showSecOnVideoStage = false;
         let renderedSampleLang = null;
 
         const rebuildSampleButtons = lines => {
@@ -348,14 +355,60 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 stageOverlayText.textContent = sampleText;
                 stageOverlayText.style.fontSize = `${stageFontPx}px`;
             }
+
+            if (secStyleSelect) {
+                const secStyle = secStyleSelect.value || 'box';
+                showcaseSecChipsRoot?.querySelectorAll('[data-sec-sub-style]').forEach(btn => {
+                    const selected = btn.dataset.secSubStyle === secStyle;
+                    btn.classList.toggle('is-active', selected);
+                    btn.setAttribute('aria-pressed', String(selected));
+                });
+                if (toggleSecStageBtn) {
+                    toggleSecStageBtn.setAttribute('aria-pressed', String(showSecOnVideoStage));
+                    toggleSecStageBtn.textContent = showSecOnVideoStage ? 'Đang bật chữ phụ · Bấm để ẩn' : 'Xem chữ phụ trên video';
+                }
+                if (stageSecOverlay && stageSecOverlayText) {
+                    const secData = getSubtitlePreviewData(
+                        secStyle,
+                        secFontSizeSelect?.value,
+                        0,
+                        targetLang,
+                    );
+                    const showSecNow = showSecOnVideoStage && !isSrtOnly && !isPicking;
+                    stageSecOverlay.hidden = !showSecNow;
+                    stageSecOverlay.dataset.style = secData.spec.id;
+                    stageSecOverlayText.textContent = targetLang === 'en'
+                        ? 'Floating Note (No Voice)'
+                        : 'Chữ phụ / Chú thích (Không Voice)';
+                    stageSecOverlayText.style.fontSize = `${Math.max(12, Math.round(secData.stageFontPx * 0.88))}px`;
+                }
+            }
         };
 
         bindChipClicks(chipsRoot);
         bindChipClicks(showcaseChipsRoot);
 
+        showcaseSecChipsRoot?.querySelectorAll('[data-sec-sub-style]').forEach(btn => {
+            btn.onclick = () => {
+                const nextSecStyle = btn.dataset.secSubStyle || 'box';
+                showSecOnVideoStage = true;
+                if (secStyleSelect && secStyleSelect.value !== nextSecStyle) {
+                    secStyleSelect.value = nextSecStyle;
+                    secStyleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                renderSubtitlePreview();
+            };
+        });
+
         if (toggleStageBtn) {
             toggleStageBtn.onclick = () => {
                 showOnVideoStage = !showOnVideoStage;
+                renderSubtitlePreview();
+            };
+        }
+        if (toggleSecStageBtn) {
+            toggleSecStageBtn.onclick = () => {
+                showSecOnVideoStage = !showSecOnVideoStage;
                 renderSubtitlePreview();
             };
         }
@@ -366,8 +419,16 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             }
             renderSubtitlePreview();
         };
+        const onUserSecStyleChange = () => {
+            if (dialog.dataset.presetApplying !== '1') {
+                showSecOnVideoStage = true;
+            }
+            renderSubtitlePreview();
+        };
         styleSelect.addEventListener('change', onUserStyleChange, { signal });
         styleSelect.addEventListener('input', renderSubtitlePreview, { signal });
+        secStyleSelect?.addEventListener('change', onUserSecStyleChange, { signal });
+        secFontSizeSelect?.addEventListener('change', onUserSecStyleChange, { signal });
         fontSizeSelect?.addEventListener('change', onUserStyleChange, { signal });
         fontSizeSelect?.addEventListener('input', renderSubtitlePreview, { signal });
         targetLangSelect?.addEventListener('change', renderSubtitlePreview, { signal });

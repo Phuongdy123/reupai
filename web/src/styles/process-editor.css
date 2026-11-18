@@ -290,6 +290,8 @@ body.theme-xports #processConfigDialog[data-preview-state="ready"] .process-stag
 body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) .process-config-preview:has(.process-stage-subtitle-preview:not([hidden])) { padding-bottom: 66px; }
 body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) .process-config-preview:has(.process-stage-subtitle-preview:not([hidden])) .process-preview-poster { opacity: .44; filter: none; }
 body.theme-xports #processConfigDialog .process-stage-subtitle-preview[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-stage-sec-sub-preview { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); z-index: 4; width: min(92%, 520px); padding: 0 8px; pointer-events: none; text-align: center; }
+body.theme-xports #processConfigDialog .process-stage-sec-sub-preview[hidden] { display: none !important; }
 body.theme-xports #processConfigDialog .process-showcase-subbar { display: grid; gap: 9px; padding: 10px 13px; border-top: 1px solid #2d2d2d; background: #161616; }
 body.theme-xports #processConfigDialog .process-showcase-subbar[hidden] { display: none !important; }
 body.theme-xports #processConfigDialog .process-showcase-subbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
