@@ -6333,6 +6333,16 @@ def build_video_filter(
     else:
         target_width = target_height = None
 
+    # Upscale low-resolution sources (< 720p) before burning ASS subtitles
+    # so libass rasterizes Vietnamese diacritics at crisp HD resolution.
+    if not target_width and min(video_width, video_height) < 720:
+        hd_label = "hd_sub_base"
+        if video_width >= video_height:
+            parts.append(f"[{current}]scale=-2:720:flags=lanczos,setsar=1[{hd_label}]")
+        else:
+            parts.append(f"[{current}]scale=720:-2:flags=lanczos,setsar=1[{hd_label}]")
+        current = hd_label
+
     subtitle_label = "subtitled"
     parts.append(
         f"[{current}]subtitles=filename='{ass}'[{subtitle_label}]"
@@ -6492,7 +6502,7 @@ def _replace_video_encoder_with_cpu(command):
 
         "-crf",
 
-        "23",
+        "19",
 
 
 
@@ -7340,7 +7350,7 @@ def _render_segmented_long_video(
                     "-pix_fmt", "yuv420p",
                 ])
             else:
-                cmd.extend(["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p"])
+                cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p"])
                 if _is_stability_mode():
                     cmd.extend(["-threads", "4"])
 
