@@ -163,32 +163,13 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <span class="process-copyright-badge" id="processCopyrightBadge"><i class="cr-status-dot"></i><span>Đang đánh giá…</span></span>
                     </div>
                     <div class="process-copyright-actions">
-                        <button type="button" class="btn secondary process-copyright-scan-btn" id="processCopyrightScanBtn" title="Dò chính xác bài hát qua AudD/ACRCloud & phân tích khung hình AI">
+                        <button type="button" class="btn secondary process-copyright-scan-btn" id="processCopyrightScanBtn" title="Phân tích chuyên sâu cả Nhạc nền & Hình ảnh/Logo video miễn phí bằng AI">
                             ${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span>
-                        </button>
-                        <button type="button" class="btn secondary process-copyright-scan-btn" id="processCopyrightFpBtn" title="Nhập AudD API Token hoặc ACRCloud để nhận diện tên bài hát & hãng đĩa như Shazam">
-                            ${copyrightIconSvg('sliders', 13)}<span>API Dò nhạc</span>
                         </button>
                         <button type="button" class="btn secondary process-copyright-fix-btn" id="processCopyrightFixBtn" hidden title="Tự động hạ âm gốc xuống 5%, bật lồng tiếng AI và bật làm mờ logo để né Content ID">
                             ${copyrightIconSvg('bolt', 14)}<span>Áp dụng cấu hình Né Bản Quyền</span>
                         </button>
                     </div>
-                </div>
-                <div class="process-copyright-fp-panel" id="processCopyrightFpPanel" hidden>
-                    <div class="process-copyright-fp-row">
-                        <select id="processCopyrightFpProvider" aria-label="Nhà cung cấp nhận diện nhạc">
-                            <option value="audd">AudD (Chỉ cần 1 API Token)</option>
-                            <option value="acrcloud">ACRCloud (Host + Key + Secret)</option>
-                        </select>
-                        <input type="password" id="processCopyrightAuddToken" placeholder="Dán AudD API Token (audd.io)..." autocomplete="off">
-                        <button type="button" class="btn secondary" id="processCopyrightFpSaveBtn">Lưu key</button>
-                    </div>
-                    <div class="process-copyright-fp-acr" id="processCopyrightAcrFields" hidden>
-                        <input type="text" id="processCopyrightAcrHost" placeholder="identify-ap-southeast-1.acrcloud.com">
-                        <input type="text" id="processCopyrightAcrKey" placeholder="ACRCloud Access Key">
-                        <input type="password" id="processCopyrightAcrSecret" placeholder="ACRCloud Access Secret" autocomplete="off">
-                    </div>
-                    <small class="process-copyright-fp-hint" id="processCopyrightFpStatus">Dán AudD API Token (audd.io) để cắt đoạn âm thanh dò chính xác tên bài hát, ca sĩ &amp; hãng thu âm (Sony, UMG, Warner, TME…).</small>
                 </div>
                 <div class="process-copyright-metrics">
                     <span class="process-copyright-pill" id="processCopyrightMusicPill">${copyrightIconSvg('music', 13)}<span>Nhạc: Đang kiểm tra</span></span>

@@ -47,6 +47,63 @@ def _find_ffmpeg() -> str | None:
     return shutil.which("ffmpeg")
 
 
+def _probe_video_duration(video_path: Path) -> float:
+    executable = _find_ffmpeg()
+    ffprobe = str(Path(executable).with_name("ffprobe.exe")) if executable else shutil.which("ffprobe")
+    if not ffprobe or not video_path or not video_path.is_file():
+        return 0.0
+    try:
+        res = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return max(0.0, float((res.stdout or "0").strip()))
+    except Exception:
+        return 0.0
+
+
+def _recognize_music_free_shazam(audio_bytes: bytes) -> dict[str, Any] | None:
+    """Optional free Shazam recognition when shazamio is installed (no API key needed)."""
+    if not audio_bytes:
+        return None
+    try:
+        import asyncio
+        from shazamio import Shazam  # type: ignore
+
+        async def _run():
+            shazam = Shazam()
+            return await shazam.recognize(audio_bytes)
+
+        data = asyncio.run(_run())
+        track = data.get("track") if isinstance(data, dict) else None
+        if not isinstance(track, dict) or not track.get("title"):
+            return None
+        return {
+            "provider": "shazam",
+            "title": str(track.get("title") or "").strip(),
+            "artist": str(track.get("subtitle") or "").strip(),
+            "album": "",
+            "label": "",
+            "release_date": "",
+            "song_link": str(track.get("url") or "").strip(),
+            "isrc": str(track.get("isrc") or "").strip(),
+        }
+    except Exception:
+        return None
+
+
 def _extract_audio_sample_bytes(video_path: Path, start_sec: int = 5, duration_sec: int = 15) -> bytes | None:
     executable = _find_ffmpeg()
     if not executable or not video_path or not video_path.is_file():
@@ -405,7 +462,7 @@ def check_video_copyright(
     acr_secret = (acrcloud_access_secret or os.getenv("ACRCLOUD_ACCESS_SECRET") or "").strip()
 
     recognized = None
-    if video_path and video_path.is_file() and (audd_token or (acr_host and acr_key and acr_secret)):
+    if video_path and video_path.is_file():
         for start_s in (4, 22):
             clip_bytes = _extract_audio_sample_bytes(video_path, start_sec=start_s, duration_sec=12)
             if not clip_bytes:
@@ -420,6 +477,8 @@ def check_video_copyright(
                         access_key=acr_key,
                         access_secret=acr_secret,
                     )
+                if not recognized:
+                    recognized = _recognize_music_free_shazam(clip_bytes)
             except Exception:
                 recognized = None
             if recognized:
@@ -487,19 +546,25 @@ def check_video_copyright(
             audio_b64 = _extract_audio_sample_base64(video_path, start_sec=4, duration_sec=14)
             if audio_b64:
                 parts.append({"inlineData": {"mimeType": "audio/mp3", "data": audio_b64}})
-            frame_b64 = _extract_frame_base64(video_path, seconds=5)
-            if frame_b64:
-                parts.append({"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}})
+            duration_s = _probe_video_duration(video_path)
+            frame_marks = [3]
+            if duration_s >= 25:
+                frame_marks.extend([max(8, int(duration_s * 0.4)), max(15, int(duration_s * 0.75))])
+            for sec in frame_marks[:3]:
+                frame_b64 = _extract_frame_base64(video_path, seconds=sec)
+                if frame_b64:
+                    parts.append({"inlineData": {"mimeType": "image/jpeg", "data": frame_b64}})
 
         system_prompt = (
-            "Bạn là chuyên gia kiểm tra bản quyền YouTube Content ID (Video & Âm nhạc) cho hệ thống ReupAI. "
-            "Hãy phân tích mẫu âm thanh (nếu có), khung hình (nếu có), tiêu đề và cấu hình xử lý để đánh giá nguy cơ dính bản quyền trên YouTube. "
+            "Bạn là chuyên gia kiểm tra bản quyền YouTube Content ID (Video Hình ảnh & Âm nhạc) cho hệ thống ReupAI. "
+            "Hãy phân tích mẫu âm thanh (nếu có), các khung hình video ở nhiều mốc thời gian (nếu có), tiêu đề và cấu hình xử lý để đánh giá nguy cơ dính bản quyền trên YouTube. "
+            "Đặc biệt kiểm tra: (1) Nhạc nền, bài hát thương mại có lời/OST; (2) Hình ảnh phim truyền hình, anime, show TV, MV gốc, logo nhà đài/nền tảng (Tencent Video, iQIYI, Youku, MangoTV, Bilibili, Netflix, TVB, VTV...) hoặc watermark bản quyền. "
             "Trả về đúng JSON với các trường: "
             "music_risk ('low'|'medium'|'high'), "
             "visual_risk ('low'|'medium'|'high'), "
             "overall_risk ('low'|'medium'|'high'), "
-            "detected_music (chuỗi tiếng Việt ngắn mô tả bài hát/nhạc nền phát hiện được trong âm thanh hoặc tiêu đề, ví dụ: 'Phát hiện nhạc nền BGM thương mại rõ ở nền' hoặc 'Chỉ có lời thoại, không có nhạc thương mại'), "
-            "warnings (mảng tối đa 3 cảnh báo ngắn gọn bằng tiếng Việt nếu có nguy cơ), "
+            "detected_music (chuỗi tiếng Việt ngắn mô tả bài hát/nhạc nền phát hiện được), "
+            "warnings (mảng tối đa 3 cảnh báo ngắn gọn bằng tiếng Việt nêu rõ nguy cơ nhạc & hình ảnh nếu có), "
             "recommendations (mảng tối đa 3 cách khắc phục cụ thể bằng tiếng Việt)."
         )
 

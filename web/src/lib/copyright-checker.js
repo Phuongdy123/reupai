@@ -377,16 +377,16 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
     // 2) Gemini visual + context check via /api/assistant (available on Engine 0.2.55)
     try {
         const promptLines = [
-            'Hãy đánh giá nguy cơ bản quyền YouTube Content ID (Nhạc & Hình ảnh) cho video này và trả lời ngắn gọn bằng tiếng Việt:',
+            'Hãy kiểm tra chuyên sâu bản quyền YouTube Content ID cả ÂM NHẠC và HÌNH ẢNH VIDEO cho video này (trả lời ngắn gọn bằng tiếng Việt):',
             `- Tiêu đề: ${String(payload.title || '').slice(0, 180)}`,
-            recognizedTrack ? `- Bài hát vừa nhận diện được từ âm thanh: ${recognizedTrack.title} - ${recognizedTrack.artist} (Hãng: ${recognizedTrack.label || 'Chưa rõ'})` : '',
+            recognizedTrack ? `- Bài hát nhận diện từ âm thanh: ${recognizedTrack.title} - ${recognizedTrack.artist} (Hãng: ${recognizedTrack.label || 'Chưa rõ'})` : '',
             payload.track ? `- Nhạc/Track nguồn: ${String(payload.track).slice(0, 120)}` : '',
             payload.artist ? `- Nghệ sĩ: ${String(payload.artist).slice(0, 100)}` : '',
             payload.url ? `- Nguồn: ${String(payload.url).slice(0, 180)}` : '',
             `- Chế độ xử lý dự kiến: ${payload.mode === 'subtitle' ? 'Chỉ Phụ đề (giữ tiếng gốc)' : 'Voice + Phụ đề'}`,
             `- Âm lượng gốc: ${Math.round(Number(payload.original_volume ?? 0.15) * 100)}%`,
             `- Làm mờ watermark/logo: ${payload.auto_brand_blur || payload.has_blur_region ? 'Có' : 'Chưa bật'}`,
-            'Nêu rõ: 1) Nguy cơ nhạc nền/bài hát gốc, 2) Nguy cơ hình ảnh/logo nhà đài nếu thấy trên khung hình, 3) Cách xử lý an toàn nhất.',
+            'Hãy phân tích kỹ 3 phần: (1) Nguy cơ bản quyền Nhạc nền / OST; (2) Nguy cơ bản quyền Hình ảnh (nhận diện nếu khung hình là phim truyền hình, anime, show TV, MV gốc, hoặc có logo nhà đài Tencent, iQIYI, Youku, Bilibili, Netflix, TVB, VTV...); (3) Khuyến nghị xử lý an toàn nhất.',
         ].filter(Boolean).join('\n');
 
         const assistantRes = await requestJson('/api/assistant', {
