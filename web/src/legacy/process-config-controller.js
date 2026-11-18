@@ -198,6 +198,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processSubtitleStyle', defaults.subtitle_style || 'minimal');
     const bindSubtitleStylePreview = () => {
         const cardRoot = dialog.querySelector('#processSubtitleStylePreview');
+        const showcaseBar = dialog.querySelector('#processShowcaseSubBar');
+        const showcaseChipsRoot = dialog.querySelector('#processShowcaseStyleChips');
+        const showcaseSampleRoot = dialog.querySelector('#processShowcaseSampleChips');
+        const toggleStageBtn = dialog.querySelector('#processToggleStageSubBtn');
+        const togglePickerBtn = dialog.querySelector('#toggleProcessPicker');
         const styleSelect = dialog.querySelector('#processSubtitleStyle');
         const fontSizeSelect = dialog.querySelector('#processFontSize');
         const titleEl = dialog.querySelector('#processSubPreviewTitle');
@@ -209,10 +214,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const chipsRoot = dialog.querySelector('#processSubStyleChips');
         const sampleListRoot = dialog.querySelector('#processSubSampleList');
         const subPanel = dialog.querySelector('#processInspectorSubtitles');
-        if (!cardRoot || !styleSelect || !stageEl || !textEl) return;
+        if (!styleSelect) return;
 
         let activeSample = 0;
         let previewHovering = false;
+        let showOnVideoStage = true;
 
         if (sampleListRoot) {
             sampleListRoot.innerHTML = '';
@@ -235,63 +241,118 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             });
         }
 
+        if (showcaseSampleRoot) {
+            showcaseSampleRoot.innerHTML = '';
+            SUBTITLE_SAMPLE_LINES.forEach((line, index) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.dataset.subSample = String(index);
+                btn.textContent = `Câu ${index + 1}`;
+                btn.title = line;
+                btn.onclick = () => {
+                    activeSample = index;
+                    showOnVideoStage = true;
+                    renderSubtitlePreview();
+                };
+                showcaseSampleRoot.appendChild(btn);
+            });
+        }
+
+        const syncChipContainer = (root, selectedStyle) => {
+            root?.querySelectorAll('[data-sub-style]').forEach(btn => {
+                const selected = btn.dataset.subStyle === selectedStyle;
+                btn.classList.toggle('is-active', selected);
+                btn.setAttribute('aria-pressed', String(selected));
+            });
+        };
+
+        const bindChipClicks = root => {
+            root?.querySelectorAll('[data-sub-style]').forEach(btn => {
+                btn.onclick = () => {
+                    const nextStyle = btn.dataset.subStyle || 'minimal';
+                    showOnVideoStage = true;
+                    if (styleSelect.value !== nextStyle) {
+                        styleSelect.value = nextStyle;
+                        styleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    renderSubtitlePreview();
+                };
+            });
+        };
+
         const renderSubtitlePreview = () => {
             if (signal.aborted) return;
+            const isSrtOnly = outputFormat?.value === 'srt';
+            const isPicking = togglePickerBtn?.getAttribute('aria-pressed') === 'true';
             const { spec, sampleIndex, sampleText, previewFontPx, stageFontPx } = getSubtitlePreviewData(
                 styleSelect.value,
                 fontSizeSelect?.value,
                 activeSample,
             );
+
             if (titleEl) titleEl.textContent = spec.label;
             if (descEl) descEl.textContent = spec.description;
-            stageEl.dataset.style = spec.id;
-            textEl.textContent = sampleText;
-            textEl.style.fontSize = `${previewFontPx}px`;
+            if (stageEl && textEl) {
+                stageEl.dataset.style = spec.id;
+                textEl.textContent = sampleText;
+                textEl.style.fontSize = `${previewFontPx}px`;
+            }
 
-            chipsRoot?.querySelectorAll('[data-sub-style]').forEach(btn => {
-                const selected = btn.dataset.subStyle === spec.id;
-                btn.classList.toggle('is-active', selected);
-                btn.setAttribute('aria-pressed', String(selected));
+            syncChipContainer(chipsRoot, spec.id);
+            syncChipContainer(showcaseChipsRoot, spec.id);
+
+            [sampleListRoot, showcaseSampleRoot].forEach(root => {
+                root?.querySelectorAll('[data-sub-sample]').forEach(btn => {
+                    const selected = Number(btn.dataset.subSample) === sampleIndex;
+                    btn.classList.toggle('is-active', selected);
+                    btn.setAttribute('aria-selected', String(selected));
+                });
             });
 
-            sampleListRoot?.querySelectorAll('[data-sub-sample]').forEach(btn => {
-                const selected = Number(btn.dataset.subSample) === sampleIndex;
-                btn.classList.toggle('is-active', selected);
-                btn.setAttribute('aria-selected', String(selected));
-            });
+            if (showcaseBar) {
+                showcaseBar.hidden = isSrtOnly;
+            }
+            if (toggleStageBtn) {
+                toggleStageBtn.setAttribute('aria-pressed', String(showOnVideoStage));
+                toggleStageBtn.textContent = showOnVideoStage ? 'Đang bật trên video' : 'Đã ẩn trên video';
+            }
 
             if (stageOverlay && stageOverlayText) {
-                const showOnStage = Boolean(subPanel && !subPanel.hidden && dialog.dataset.previewState === 'ready');
-                stageOverlay.hidden = !showOnStage;
+                const showNow = showOnVideoStage && !isSrtOnly && !isPicking;
+                stageOverlay.hidden = !showNow;
                 stageOverlay.dataset.style = spec.id;
                 stageOverlayText.textContent = sampleText;
                 stageOverlayText.style.fontSize = `${stageFontPx}px`;
             }
         };
 
-        chipsRoot?.querySelectorAll('[data-sub-style]').forEach(btn => {
-            btn.onclick = () => {
-                const nextStyle = btn.dataset.subStyle || 'minimal';
-                if (styleSelect.value !== nextStyle) {
-                    styleSelect.value = nextStyle;
-                    styleSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                }
+        bindChipClicks(chipsRoot);
+        bindChipClicks(showcaseChipsRoot);
+
+        if (toggleStageBtn) {
+            toggleStageBtn.onclick = () => {
+                showOnVideoStage = !showOnVideoStage;
                 renderSubtitlePreview();
             };
-        });
+        }
 
         styleSelect.addEventListener('change', renderSubtitlePreview, { signal });
         styleSelect.addEventListener('input', renderSubtitlePreview, { signal });
         fontSizeSelect?.addEventListener('change', renderSubtitlePreview, { signal });
         fontSizeSelect?.addEventListener('input', renderSubtitlePreview, { signal });
+        outputFormat?.addEventListener('change', renderSubtitlePreview, { signal });
+        togglePickerBtn?.addEventListener('click', () => setTimeout(renderSubtitlePreview, 0), { signal });
         dialog.querySelectorAll('.process-inspector-tab').forEach(tab => {
             tab.addEventListener('click', () => setTimeout(renderSubtitlePreview, 0), { signal });
         });
-        cardRoot.addEventListener('mouseenter', () => { previewHovering = true; }, { signal });
-        cardRoot.addEventListener('mouseleave', () => { previewHovering = false; }, { signal });
+        [cardRoot, showcaseBar].forEach(el => {
+            el?.addEventListener('mouseenter', () => { previewHovering = true; }, { signal });
+            el?.addEventListener('mouseleave', () => { previewHovering = false; }, { signal });
+        });
 
         const cycleTimer = setInterval(() => {
-            if (!isCurrent() || previewHovering || !subPanel || subPanel.hidden) return;
+            const subTabOpen = Boolean(subPanel && !subPanel.hidden);
+            if (!isCurrent() || previewHovering || (!showOnVideoStage && !subTabOpen)) return;
             activeSample = (activeSample + 1) % SUBTITLE_SAMPLE_LINES.length;
             renderSubtitlePreview();
         }, 2600);
@@ -2208,6 +2269,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
     };
     outputSummary.refresh();
+    dialog._renderSubtitleStylePreview?.();
     dialog.showModal();
     resetScrollPositions();
 }

@@ -66,7 +66,6 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <video id="processConfigPreview" controls preload="metadata"></video>
                     <canvas id="processPreviewCanvas"></canvas>
                     <div id="processBlurPreviewOverlay" class="process-blur-preview-overlay" hidden aria-hidden="true"></div>
-                    <div id="processStageSubtitlePreview" class="process-stage-subtitle-preview" data-style="minimal" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSubtitleText"></span></div>
                 </div>
                 <div id="processConfigPreviewEmpty">
                     <span class="process-empty-icon" aria-hidden="true">${uiIcon('play', 22)}</span>
@@ -74,6 +73,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <p>Tải bản gốc để kiểm tra vùng mờ và vị trí logo.</p>
                 </div>
                 <button type="button" class="btn secondary process-download-source" id="processDownloadSource">${uiIcon('download', 16)} Tải video để xem trước</button>
+                <div id="processStageSubtitlePreview" class="process-stage-subtitle-preview" data-style="minimal" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSubtitleText"></span></div>
             </div>
             <div class="process-preview-tools">
                 <div class="process-region-tabs" role="group" aria-label="Loại vùng chỉnh sửa">
@@ -87,6 +87,22 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </div>
                 <small id="processPickerHint">Tải video để sử dụng công cụ chỉnh vùng.</small>
                 <small id="processAutoBlurStatus" role="status"></small>
+            </div>
+            <div class="process-showcase-subbar" id="processShowcaseSubBar">
+                <div class="process-showcase-subbar-row">
+                    <span class="process-showcase-subbar-label">${uiIcon('captions', 14)} Kiểu phụ đề xem trên video</span>
+                    <div class="process-sub-style-chips" id="processShowcaseStyleChips" role="group" aria-label="Chọn kiểu phụ đề xem trên video">
+                        <button type="button" class="is-active" data-sub-style="minimal">Minimal Clean</button>
+                        <button type="button" data-sub-style="bold">Creator Bold</button>
+                        <button type="button" data-sub-style="cinema">Cinema</button>
+                        <button type="button" data-sub-style="neon">Neon Pop</button>
+                        <button type="button" data-sub-style="box">Simple Box</button>
+                    </div>
+                </div>
+                <div class="process-showcase-subbar-samples">
+                    <div class="process-sub-sample-pills" id="processShowcaseSampleChips" role="group" aria-label="Xem thử từng câu mẫu"></div>
+                    <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSubBtn" aria-pressed="true">Đang bật trên video</button>
+                </div>
             </div>
 
             <aside class="process-video-info" aria-label="Thông tin video">

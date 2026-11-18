@@ -44,8 +44,8 @@ export function getSubtitlePreviewData(styleId, fontSizeValue, sampleIndex = 0) 
         ? Math.max(13, Math.min(21, Math.round(rawSize * 0.52)))
         : 16;
     const stageFontPx = Number.isFinite(rawSize) && rawSize > 0
-        ? Math.max(14, Math.min(24, Math.round(rawSize * 0.6)))
-        : 18;
+        ? Math.max(16, Math.min(26, Math.round(rawSize * 0.66)))
+        : 19;
     return {
         spec,
         sampleIndex: safeIndex,

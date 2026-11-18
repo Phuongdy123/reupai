@@ -285,5 +285,18 @@ body.theme-xports #processConfigDialog .process-sub-sample-item b { flex: 0 0 au
 body.theme-xports #processConfigDialog .process-sub-sample-item:hover { border-color: #464646; color: #e2e2e2; }
 body.theme-xports #processConfigDialog .process-sub-sample-item.is-active { border-color: #6a6a6a; background: #262626; color: #f1f1f1; }
 body.theme-xports #processConfigDialog .process-sub-sample-item.is-active b { color: #e7e7e7; }
-body.theme-xports #processConfigDialog .process-stage-subtitle-preview { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 3; width: min(92%, 520px); pointer-events: none; text-align: center; }
+body.theme-xports #processConfigDialog .process-stage-subtitle-preview { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; width: min(94%, 560px); padding: 0 8px; pointer-events: none; text-align: center; }
+body.theme-xports #processConfigDialog[data-preview-state="ready"] .process-stage-subtitle-preview { bottom: 54px; }
+body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) .process-config-preview:has(.process-stage-subtitle-preview:not([hidden])) { padding-bottom: 66px; }
+body.theme-xports #processConfigDialog:not([data-preview-state="ready"]) .process-config-preview:has(.process-stage-subtitle-preview:not([hidden])) .process-preview-poster { opacity: .44; filter: none; }
 body.theme-xports #processConfigDialog .process-stage-subtitle-preview[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-showcase-subbar { display: grid; gap: 9px; padding: 10px 13px; border-top: 1px solid #2d2d2d; background: #161616; }
+body.theme-xports #processConfigDialog .process-showcase-subbar[hidden] { display: none !important; }
+body.theme-xports #processConfigDialog .process-showcase-subbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+body.theme-xports #processConfigDialog .process-showcase-subbar-label { display: inline-flex; align-items: center; gap: 6px; color: #cfcfcf; font-size: 11px; font-weight: 600; white-space: nowrap; }
+body.theme-xports #processConfigDialog .process-showcase-subbar-samples { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+body.theme-xports #processConfigDialog .process-sub-sample-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+body.theme-xports #processConfigDialog .process-sub-sample-pills button { min-height: 26px; padding: 3px 9px; border: 1px solid #383838; border-radius: 999px; background: #202020; color: #b6b6b6; font-size: 10.5px; cursor: pointer; }
+body.theme-xports #processConfigDialog .process-sub-sample-pills button.is-active { border-color: #7d7d7d; background: #333333; color: #ffffff; font-weight: 600; }
+body.theme-xports #processConfigDialog .process-showcase-sub-toggle { min-height: 26px; padding: 3px 10px; border: 1px solid #3f3f3f; border-radius: 999px; background: #242424; color: #d8d8d8; font-size: 10.5px; cursor: pointer; }
+body.theme-xports #processConfigDialog .process-showcase-sub-toggle[aria-pressed="true"] { border-color: #5b8c6b; background: rgba(46, 125, 80, 0.22); color: #a7f3d0; }
