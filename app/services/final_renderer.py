@@ -320,6 +320,11 @@ SECONDARY_SUB_FONT_SIZE = None
 SECONDARY_SUBTITLES = []
 MUSIC_PATH = None
 MUSIC_VOLUME = 0.25
+ANTI_REUSE_ENABLED = False
+ANTI_REUSE_ZOOM = 1.04
+ANTI_REUSE_SPEED = 1.03
+ANTI_REUSE_MIRROR = False
+ANTI_REUSE_COLOR = False
 
 
 
@@ -6171,6 +6176,23 @@ def _safe_boxblur_filter(width, height, requested_radius, power=2):
     return f"boxblur={radius}:{blur_power}"
 
 
+def _anti_reuse_speed_factor():
+    if not ANTI_REUSE_ENABLED:
+        return 1.0
+    try:
+        speed = float(ANTI_REUSE_SPEED or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+    return max(0.8, min(1.25, speed))
+
+
+def _anti_reuse_atempo_filter():
+    speed = _anti_reuse_speed_factor()
+    if abs(speed - 1.0) <= 0.001:
+        return ""
+    return f"atempo={speed:.4f}"
+
+
 def build_video_filter(
     region,
     logo_input_index=None,
@@ -6205,11 +6227,33 @@ def build_video_filter(
     )
 
     parts = []
+    input_stream = "0:v"
+    if ANTI_REUSE_ENABLED:
+        pre_ops = []
+        try:
+            zoom = float(ANTI_REUSE_ZOOM or 1.0)
+        except (TypeError, ValueError):
+            zoom = 1.0
+        zoom = max(1.0, min(1.25, zoom))
+        if zoom > 1.001:
+            zw = max(2, int(round(video_width / zoom)) & ~1)
+            zh = max(2, int(round(video_height / zoom)) & ~1)
+            zx = max(0, (video_width - zw) // 2)
+            zy = max(0, (video_height - zh) // 2)
+            pre_ops.append(f"crop={zw}:{zh}:{zx}:{zy}")
+            pre_ops.append(f"scale={video_width}:{video_height}:flags=lanczos")
+        if ANTI_REUSE_MIRROR:
+            pre_ops.append("hflip")
+        if ANTI_REUSE_COLOR:
+            pre_ops.append("eq=contrast=1.03:saturation=1.06:brightness=0.01")
+        if pre_ops:
+            parts.append(f"[0:v]{','.join(pre_ops)}[ar_in]")
+            input_stream = "ar_in"
 
     # 1) Blur subtitle Trung goc
     if layout.get("blur_enabled", True) and width > 0 and height > 0:
         parts.extend([
-            "[0:v]split=2[base][crop_src]",
+            f"[{input_stream}]split=2[base][crop_src]",
             f"[crop_src]crop={width}:{height}:{x}:{y},"
             f"{_safe_boxblur_filter(width, height, BLUR_RADIUS, BLUR_POWER)},"
             "format=yuv420p[blurred]",
@@ -6221,7 +6265,7 @@ def build_video_filter(
         ])
         current = "clean_sub"
     else:
-        parts.append("[0:v]null[clean_sub]")
+        parts.append(f"[{input_stream}]null[clean_sub]")
         current = "clean_sub"
 
     # 2) Blur watermark / UID / @username Bilibili
@@ -6370,12 +6414,18 @@ def build_video_filter(
             crop_height = int(video_width / target_ratio)
             crop_x = 0
             crop_y = max(0, (video_height - crop_height) // 2)
+        speed = _anti_reuse_speed_factor()
+        speed_suffix = f",setpts=PTS/{speed:.4f}" if abs(speed - 1.0) > 0.001 else ""
         parts.append(
             f"[{subtitle_label}]crop={crop_width}:{crop_height}:{crop_x}:{crop_y},"
-            f"scale={target_width}:{target_height}[vout]"
+            f"scale={target_width}:{target_height}{speed_suffix}[vout]"
         )
     else:
-        parts.append(f"[{subtitle_label}]null[vout]")
+        speed = _anti_reuse_speed_factor()
+        if abs(speed - 1.0) > 0.001:
+            parts.append(f"[{subtitle_label}]setpts=PTS/{speed:.4f}[vout]")
+        else:
+            parts.append(f"[{subtitle_label}]null[vout]")
 
     print()
     print("==================================")
@@ -7307,13 +7357,15 @@ def _render_segmented_long_video(
                 cmd.extend(["-loop", "1", "-i", str(logo_path)])
 
             seg_use_voice = use_voice
+            atempo = _anti_reuse_atempo_filter()
+            atempo_suffix = f",{atempo}" if atempo else ""
             if seg_use_voice:
                 music_index = 2
                 music_filter = (
                     f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-                    "[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                    f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
                     if use_music
-                    else "[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                    else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
                 )
                 audio_part = (
                     f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
@@ -7324,9 +7376,9 @@ def _render_segmented_long_video(
             elif use_music:
                 music_filter = (
                     f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
-                    "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+                    f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
                     if source_has_audio
-                    else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97[aout]"
+                    else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
                 )
                 filter_complex = f"{seg_video_filter};{music_filter}"
                 seg_use_voice = True
@@ -7338,6 +7390,8 @@ def _render_segmented_long_video(
                 cmd.extend(["-map", "[aout]"])
             elif source_has_audio:
                 cmd.extend(["-map", "0:a?"])
+                if atempo:
+                    cmd.extend(["-af", atempo])
 
             if ffmpeg_has_nvenc():
                 cmd.extend([
@@ -7865,12 +7919,14 @@ def render_final(region):
 
 
 
+        atempo = _anti_reuse_atempo_filter()
+        atempo_suffix = f",{atempo}" if atempo else ""
         music_index = 2 if use_voice else 1
         music_filter = (
             f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-            "[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+            f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
             if use_music
-            else "[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+            else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
         )
         filter_complex = (
 
@@ -7964,12 +8020,14 @@ def render_final(region):
 
 
 
+    atempo = _anti_reuse_atempo_filter()
+    atempo_suffix = f",{atempo}" if atempo else ""
     if use_music and not use_voice:
         filter_complex = (
             video_filter
             + ";[1:a]volume="
             + str(float(MUSIC_VOLUME))
-            + "[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]"
+            + f"[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
         )
         use_voice = True
 
@@ -8054,6 +8112,8 @@ def render_final(region):
 
 
         ])
+        if atempo:
+            command.extend(["-af", atempo])
 
 
 

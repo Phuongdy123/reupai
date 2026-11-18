@@ -546,6 +546,11 @@ class ProcessRequest(BaseModel):
     secondary_sub_font_size: Optional[int] = None
     secondary_subtitles: Optional[list[ManualTranscriptLine]] = Field(default=None, max_length=100000)
     auto_brand_blur: bool = False
+    anti_reuse: bool = False
+    anti_reuse_zoom: float = 1.04
+    anti_reuse_speed: float = 1.03
+    anti_reuse_mirror: bool = False
+    anti_reuse_color: bool = False
     logo_mode: str = "none"
     logo_shape: Literal["rect", "circle"] = "rect"
     logo_text: Optional[str] = None

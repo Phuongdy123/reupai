@@ -2107,6 +2107,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             dialog.querySelector('#processMusicFile').value = '';
             dialog.querySelector('#processAutoBrandBlur').checked = false;
             dialog.querySelector('#processSourceNoSub').checked = false;
+            if (dialog.querySelector('#processAntiReuse')) dialog.querySelector('#processAntiReuse').checked = false;
+            if (dialog.querySelector('#processAntiReuseMirror')) dialog.querySelector('#processAntiReuseMirror').checked = false;
+            if (dialog.querySelector('#processAntiReuseColor')) dialog.querySelector('#processAntiReuseColor').checked = false;
             set('processBlurPreset', '');
             ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
                 'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
@@ -2170,6 +2173,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
             boost_gpu: !!dialog.querySelector('#processBoostGpu')?.checked,
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            anti_reuse: !!dialog.querySelector('#processAntiReuse')?.checked,
+            anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
+            anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
             secondary_sub_blur: dialog.querySelector('#processSecondarySubBlur')?.checked !== false,
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
@@ -2241,6 +2247,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     if (el) el.checked = !!value;
                 } else if (id === 'ocr_merge_similar') {
                     const el = dialog.querySelector('#processOcrMergeSimilar');
+                    if (el) el.checked = !!value;
+                } else if (id === 'anti_reuse') {
+                    const el = dialog.querySelector('#processAntiReuse');
+                    if (el) el.checked = !!value;
+                } else if (id === 'anti_reuse_mirror') {
+                    const el = dialog.querySelector('#processAntiReuseMirror');
+                    if (el) el.checked = !!value;
+                } else if (id === 'anti_reuse_color') {
+                    const el = dialog.querySelector('#processAntiReuseColor');
                     if (el) el.checked = !!value;
                 } else if (id === 'source_subtitle_mode') {
                     const el = dialog.querySelector('#processSourceNoSub');
@@ -3284,6 +3299,11 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 return Number.isFinite(selected) ? Math.min(2, Math.max(0, selected)) : 0.25;
             })(),
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
+            anti_reuse: !!dialog.querySelector('#processAntiReuse')?.checked,
+            anti_reuse_zoom: 1.04,
+            anti_reuse_speed: 1.03,
+            anti_reuse_mirror: !!dialog.querySelector('#processAntiReuseMirror')?.checked,
+            anti_reuse_color: !!dialog.querySelector('#processAntiReuseColor')?.checked,
             source_subtitle_mode: dialog.querySelector('#processSourceNoSub')?.checked ? 'none' : 'auto',
             aspect_ratio: value('processAspectRatio') || null,
             blur_preset: value('processBlurPreset') || null,

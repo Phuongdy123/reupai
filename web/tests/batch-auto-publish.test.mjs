@@ -11,6 +11,8 @@ import {
     reorderEpisodeVideos,
     replaceEpisodeVideoAt,
     generateAndPublishEpisode,
+    computeEpisodeScheduleIso,
+    resolveBatchTargetLanguages,
 } from '../src/lib/batch-auto-publish.js';
 import { buildProcessPayloadFromSavedPreset } from '../src/lib/process-config-store.js';
 
@@ -241,4 +243,43 @@ test('generateAndPublishEpisode automatically grabs a frame from the video when 
     assert.equal(resolvedPreview, 'data:image/jpeg;base64,FRAME_2');
     const ytCall = calls.find((c) => c.path === 'uploads');
     assert.equal(ytCall.body.thumbnail, 'data:image/jpeg;base64,FRAME_2');
+});
+
+test('computeEpisodeScheduleIso spaces episodes by intervalHours and resolveBatchTargetLanguages deduplicates', () => {
+    const ep0 = computeEpisodeScheduleIso('2026-11-20T12:00:00Z', 24, 0);
+    const ep2 = computeEpisodeScheduleIso('2026-11-20T12:00:00Z', 24, 2);
+    assert.equal(ep0, '2026-11-20T12:00:00.000Z');
+    assert.equal(ep2, '2026-11-22T12:00:00.000Z');
+    assert.equal(computeEpisodeScheduleIso('', 24, 0), null);
+
+    assert.deepEqual(resolveBatchTargetLanguages(['vi', 'en', 'en', 'xx', 'ja']), ['vi', 'en', 'ja']);
+    assert.deepEqual(resolveBatchTargetLanguages([], 'ko'), ['ko']);
+});
+
+test('generateAndPublishEpisode sends publish_at and forces private privacy when publishAt is set', async () => {
+    const uploads = [];
+    const youtubeApi = async (path, opts) => {
+        if (path === 'uploads') {
+            const body = JSON.parse(opts.body);
+            uploads.push(body);
+            return { id: 'up1', state: 'completed', youtube_video_id: 'YT1' };
+        }
+        return {};
+    };
+    await generateAndPublishEpisode({
+        youtubeApi,
+        accountId: 'acc',
+        video: { video_id: 'BV1', title: 'Ep1' },
+        channel: 'default',
+        mode: 'voiceover',
+        episodeNumber: 1,
+        totalEpisodes: 1,
+        basePrompt: 'Test',
+        useAiPrompt: false,
+        thumbnailDataUrl: 'data:image/png;base64,AAA',
+        platforms: { youtube: true },
+        youtubeConfig: { channelId: 'UC1', privacy: 'public', publishAt: '2026-11-20T12:00:00.000Z' },
+    });
+    assert.equal(uploads[0].privacy, 'private');
+    assert.equal(uploads[0].publish_at, '2026-11-20T12:00:00.000Z');
 });

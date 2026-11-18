@@ -713,6 +713,12 @@ def youtube_upload_status(job_id: str, owner: str = Depends(youtube_owner)):
     return _youtube_call(upload_status, owner, job_id)
 
 
+@app.get("/api/youtube/videos/{youtube_video_id}/status")
+def youtube_video_copyright_status(youtube_video_id: str, owner: str = Depends(youtube_owner)):
+    from services.youtube_publishing import check_video_copyright_status
+    return _youtube_call(check_video_copyright_status, owner, youtube_video_id)
+
+
 @app.post("/api/assistant")
 def workspace_assistant(payload: dict, _: bool = Depends(require_token)):
     from services.assistant_service import ask_assistant
@@ -769,6 +775,70 @@ def copyright_check(payload: dict, _: bool = Depends(require_token)):
         acrcloud_access_key=str(payload.get("acrcloud_access_key") or ""),
         acrcloud_access_secret=str(payload.get("acrcloud_access_secret") or ""),
     )
+
+
+@app.post("/api/shorts/highlights")
+def shorts_highlights(payload: dict, _: bool = Depends(require_token)):
+    from services.shorts_highlighter import cut_short_highlight_clip, suggest_viral_highlights
+
+    raw_video_id = str(payload.get("video_id") or "").strip()
+    raw_channel = str(payload.get("channel") or "default").strip() or "default"
+    mode = str(payload.get("mode") or "voiceover").strip() or "voiceover"
+    title = str(payload.get("title") or "")
+    duration_seconds = float(payload.get("duration_seconds") or 0.0)
+    cut = bool(payload.get("cut"))
+    clip_index = payload.get("clip_index")
+
+    if not raw_video_id:
+        raise HTTPException(status_code=400, detail="Thiếu video_id.")
+    vid = validate_video_id(raw_video_id)
+    ch = validate_channel(raw_channel)
+    jdir = job_dir_for(ch, vid)
+    srt_path = next(
+        (p for p in (jdir / "vietnamese.srt", jdir / "chinese.srt") if p.is_file()),
+        None,
+    )
+    clips = payload.get("clips") if isinstance(payload.get("clips"), list) else None
+    if not clips:
+        clips = suggest_viral_highlights(
+            srt_path=srt_path,
+            title=title,
+            duration_seconds=duration_seconds,
+            max_clips=int(payload.get("max_clips") or 4),
+        )
+
+    if cut:
+        source_video = find_result_file(ch, vid, mode) or local_source_for_process(vid, ch)
+        if not source_video or not Path(source_video).is_file():
+            raise HTTPException(status_code=404, detail="Không tìm thấy file video nguồn hoặc thành phẩm để cắt Shorts.")
+        shorts_dir = jdir / "shorts"
+        shorts_dir.mkdir(parents=True, exist_ok=True)
+        for idx, clip in enumerate(clips):
+            if clip_index is not None and idx != int(clip_index):
+                continue
+            out_name = f"{vid}_short_{idx + 1}.mp4"
+            out_path = shorts_dir / out_name
+            cut_short_highlight_clip(
+                source_video=Path(source_video),
+                output_path=out_path,
+                start=float(clip.get("start") or 0.0),
+                end=float(clip.get("end") or 30.0),
+            )
+            clip["file_path"] = str(out_path)
+            clip["download_url"] = f"/api/shorts/file/{ch}/{vid}/{out_name}"
+
+    return {"ok": True, "video_id": vid, "channel": ch, "clips": clips}
+
+
+@app.get("/api/shorts/file/{channel}/{video_id}/{filename}")
+def shorts_download(channel: str, video_id: str, filename: str, _: bool = Depends(require_token)):
+    ch = validate_channel(channel)
+    vid = validate_video_id(video_id)
+    safe_name = Path(filename).name
+    target = job_dir_for(ch, vid) / "shorts" / safe_name
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="Không tìm thấy file Short.")
+    return FileResponse(str(target), filename=safe_name, media_type="video/mp4")
 
 
 @app.post("/api/gemini/oauth/start")

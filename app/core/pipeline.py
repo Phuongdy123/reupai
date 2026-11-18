@@ -2641,6 +2641,11 @@ def render_voiceover(
     secondary_sub_style="box",
     secondary_sub_font_size=None,
     secondary_subtitles=None,
+    anti_reuse=False,
+    anti_reuse_zoom=1.04,
+    anti_reuse_speed=1.03,
+    anti_reuse_mirror=False,
+    anti_reuse_color=False,
     on_render_progress=None,
 
 
@@ -2710,6 +2715,11 @@ def render_voiceover(
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
+    renderer.ANTI_REUSE_ENABLED = bool(anti_reuse)
+    renderer.ANTI_REUSE_ZOOM = float(anti_reuse_zoom or 1.04)
+    renderer.ANTI_REUSE_SPEED = float(anti_reuse_speed or 1.03)
+    renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
+    renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
 
     renderer.PREVIEW_SECONDS = preview_seconds
 
@@ -2802,6 +2812,11 @@ def render_subtitle_only(
     secondary_sub_style="box",
     secondary_sub_font_size=None,
     secondary_subtitles=None,
+    anti_reuse=False,
+    anti_reuse_zoom=1.04,
+    anti_reuse_speed=1.03,
+    anti_reuse_mirror=False,
+    anti_reuse_color=False,
     on_render_progress=None,
 
     force=False,
@@ -2863,6 +2878,11 @@ def render_subtitle_only(
     renderer.MUSIC_PATH = music_path
     renderer.MUSIC_VOLUME = normalize_music_volume(music_volume)
     renderer.AUTO_BRAND_BLUR_ENABLED = bool(auto_brand_blur)
+    renderer.ANTI_REUSE_ENABLED = bool(anti_reuse)
+    renderer.ANTI_REUSE_ZOOM = float(anti_reuse_zoom or 1.04)
+    renderer.ANTI_REUSE_SPEED = float(anti_reuse_speed or 1.03)
+    renderer.ANTI_REUSE_MIRROR = bool(anti_reuse_mirror)
+    renderer.ANTI_REUSE_COLOR = bool(anti_reuse_color)
 
     renderer.RENDER_MODE = "subtitle"
     renderer.RENDER_PROGRESS_CALLBACK = on_render_progress
@@ -4331,6 +4351,11 @@ def pipeline(
                 secondary_sub_style=config.get("secondary_sub_style", "box"),
                 secondary_sub_font_size=config.get("secondary_sub_font_size"),
                 secondary_subtitles=config.get("secondary_subtitles") or [],
+                anti_reuse=bool(config.get("anti_reuse", False)),
+                anti_reuse_zoom=float(config.get("anti_reuse_zoom") or 1.04),
+                anti_reuse_speed=float(config.get("anti_reuse_speed") or 1.03),
+                anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
+                anti_reuse_color=bool(config.get("anti_reuse_color", False)),
                 on_render_progress=on_render_progress,
 
                 force=render_force,
@@ -4385,6 +4410,11 @@ def pipeline(
                 secondary_sub_style=config.get("secondary_sub_style", "box"),
                 secondary_sub_font_size=config.get("secondary_sub_font_size"),
                 secondary_subtitles=config.get("secondary_subtitles") or [],
+                anti_reuse=bool(config.get("anti_reuse", False)),
+                anti_reuse_zoom=float(config.get("anti_reuse_zoom") or 1.04),
+                anti_reuse_speed=float(config.get("anti_reuse_speed") or 1.03),
+                anti_reuse_mirror=bool(config.get("anti_reuse_mirror", False)),
+                anti_reuse_color=bool(config.get("anti_reuse_color", False)),
                 on_render_progress=on_render_progress,
 
                 force=render_force,

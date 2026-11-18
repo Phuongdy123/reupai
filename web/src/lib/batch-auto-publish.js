@@ -450,6 +450,7 @@ export async function generateAndPublishEpisode({
             try {
                 if (onStage) onStage(`Đang gửi Tập ${episodeNumber} lên YouTube…`);
                 const requestId = crypto.randomUUID();
+                const scheduleIso = youtubeConfig.publishAt ? String(youtubeConfig.publishAt) : null;
                 const initialJob = await youtubeApi('uploads', {
                     method: 'POST',
                     body: JSON.stringify({
@@ -460,10 +461,10 @@ export async function generateAndPublishEpisode({
                         description: metadata.description,
                         tags: metadata.tags,
                         thumbnail: resolvedThumbnail || null,
-                        privacy: youtubeConfig.privacy || 'public',
+                        privacy: scheduleIso ? 'private' : (youtubeConfig.privacy || 'public'),
                         made_for_kids: Boolean(youtubeConfig.madeForKids),
                         confirmed: true,
-                        publish_at: null,
+                        publish_at: scheduleIso,
                     }),
                 });
                 const finalJob = initialJob?.state === 'completed'
@@ -551,4 +552,35 @@ export async function generateAndPublishEpisode({
         results,
         errors,
     };
+}
+
+/**
+ * Tính thời điểm lên lịch (ISO UTC) cho Tập thứ `episodeIndex` (0-based).
+ */
+export function computeEpisodeScheduleIso(startLocalValue, intervalHours, episodeIndex = 0) {
+    const raw = String(startLocalValue || '').trim();
+    if (!raw) return null;
+    const baseMs = Date.parse(raw);
+    if (!Number.isFinite(baseMs)) return null;
+    const hours = Math.max(0, Number(intervalHours) || 0);
+    const idx = Math.max(0, Number(episodeIndex) || 0);
+    const targetMs = baseMs + idx * hours * 3600 * 1000;
+    return new Date(targetMs).toISOString();
+}
+
+/**
+ * Chuẩn hóa danh sách ngôn ngữ đích cho batch export đa ngôn ngữ.
+ */
+export function resolveBatchTargetLanguages(selectedLangs, fallbackLang = 'vi') {
+    const supported = ['vi', 'en', 'ja', 'ko', 'es', 'th', 'id'];
+    const cleaned = [];
+    for (const raw of Array.isArray(selectedLangs) ? selectedLangs : []) {
+        const code = String(raw || '').trim().toLowerCase();
+        if (supported.includes(code) && !cleaned.includes(code)) {
+            cleaned.push(code);
+        }
+    }
+    if (cleaned.length) return cleaned;
+    const fb = String(fallbackLang || 'vi').trim().toLowerCase();
+    return [supported.includes(fb) ? fb : 'vi'];
 }

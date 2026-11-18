@@ -19,7 +19,10 @@ import {
   readBatchAutoPublishPrefs,
   writeBatchAutoPublishPrefs,
   generateAndPublishEpisode,
+  computeEpisodeScheduleIso,
+  resolveBatchTargetLanguages,
 } from "../lib/batch-auto-publish.js";
+import { defaultVoiceForLanguage } from "../lib/tts-voices.js";
 import { youtubeRequest, getSignedInAccountId } from "../lib/youtube-client.js";
 import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine, copyrightIconSvg } from "../lib/copyright-checker.js";
 
@@ -1854,6 +1857,10 @@ function buildCard(
                                 ${copyrightIconSvg('shield', 15)}
                                 <span>Tra bản quyền Video &amp; Nhạc</span>
                             </button>
+                            <button type="button" class="menu-action shorts-highlight-btn">
+                                ${copyrightIconSvg('bolt', 15)}
+                                <span>Cắt Shorts AI (9:16)</span>
+                            </button>
                             <div class="menu-section">
                                 <div class="menu-section-title">Lưu vào Collections</div>
                                 <div class="collection-inline">
@@ -2044,6 +2051,14 @@ function buildCard(
         copyrightCheckBtn.onclick = () => {
             card.querySelector('.more-menu')?.removeAttribute('open');
             openCopyrightReportDialog(video, card);
+        };
+    }
+
+    const shortsHighlightBtn = card.querySelector('.shorts-highlight-btn');
+    if (shortsHighlightBtn) {
+        shortsHighlightBtn.onclick = () => {
+            card.querySelector('.more-menu')?.removeAttribute('open');
+            openShortsHighlightDialog(video, card);
         };
     }
 
@@ -8583,6 +8598,9 @@ function ensureCopyrightReportDialog() {
             <footer class="batch-ap-footer">
                 <span id="crFooterStatus">Phân tích dựa trên metadata, cấu hình âm thanh và AI kiểm tra mẫu nhạc/hình.</span>
                 <div class="batch-ap-footer-btns">
+                    <button type="button" class="btn secondary" id="crYoutubeCheckBtn" title="Đăng video thành phẩm lên YouTube ở chế độ Riêng tư để lấy kết quả kiểm tra Content ID thật">
+                        ${copyrightIconSvg('shield', 14)}<span>Kiểm tra thật YouTube (Riêng tư)</span>
+                    </button>
                     <button type="button" class="btn secondary" id="crDeepScanBtn">${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span></button>
                     <button type="button" class="btn primary" id="crOpenSafeConfigBtn">${copyrightIconSvg('bolt', 14)}<span>Mở thiết lập Né Bản Quyền</span></button>
                 </div>
@@ -8605,6 +8623,7 @@ async function openCopyrightReportDialog(video, card) {
     const recsList = dialog.querySelector('#crRecommendationsList');
     const footerStatus = dialog.querySelector('#crFooterStatus');
     const deepScanBtn = dialog.querySelector('#crDeepScanBtn');
+    const ytCheckBtn = dialog.querySelector('#crYoutubeCheckBtn');
     const openSafeBtn = dialog.querySelector('#crOpenSafeConfigBtn');
     const closeBtn = dialog.querySelector('#crDialogCloseBtn');
 
@@ -8707,7 +8726,232 @@ async function openCopyrightReportDialog(video, card) {
         }
     };
 
+    if (ytCheckBtn) {
+        ytCheckBtn.onclick = async () => {
+            const renderMode = video.has_voice_result ? 'voiceover' : (video.has_subtitle_result ? 'subtitle' : '');
+            if (!renderMode) {
+                footerStatus.textContent = 'Cần xử lý/render thành phẩm trước khi đăng nháp Riêng tư lên YouTube để kiểm tra.';
+                return;
+            }
+            ytCheckBtn.disabled = true;
+            ytCheckBtn.innerHTML = `${copyrightIconSvg('shield', 14)}<span>Đang đăng Riêng tư…</span>`;
+            footerStatus.textContent = 'Đang kiểm tra kết nối kênh YouTube…';
+            try {
+                const conn = await youtubeRequest(window.reupEngineClient, 'connection');
+                if (!conn?.connected || !conn?.channel?.id) {
+                    footerStatus.textContent = 'Bạn chưa kết nối kênh YouTube. Hãy mở "Đăng MXH" để kết nối kênh trước.';
+                    return;
+                }
+                const requestId = crypto.randomUUID();
+                footerStatus.textContent = 'Đang upload video thành phẩm ở chế độ Riêng tư lên YouTube…';
+                const uploadInit = await youtubeRequest(window.reupEngineClient, 'uploads', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        channel: video.channel_key || 'default',
+                        video_id: video.video_id,
+                        mode: renderMode,
+                        channel_id: conn.channel.id,
+                        request_id: requestId,
+                        title: `[Draft Check] ${String(video.title || video.video_id).slice(0, 80)}`,
+                        description: 'Private copyright pre-check via ReupAI',
+                        tags: ['reupai', 'check'],
+                        privacy: 'private',
+                        made_for_kids: false,
+                        confirmed: true,
+                    }),
+                });
+                let job = uploadInit;
+                for (let attempt = 0; attempt < 40; attempt += 1) {
+                    if (job?.state === 'completed' || job?.state === 'failed') break;
+                    await new Promise(r => setTimeout(r, 2500));
+                    job = await youtubeRequest(
+                        window.reupEngineClient,
+                        `uploads/${encodeURIComponent(job?.id || requestId)}`,
+                    );
+                }
+                if (job?.state !== 'completed' || !job?.youtube_video_id) {
+                    footerStatus.textContent = job?.error || 'Upload kiểm tra YouTube chưa hoàn tất.';
+                    return;
+                }
+                const ytId = job.youtube_video_id;
+                const studioUrl = `https://studio.youtube.com/video/${encodeURIComponent(ytId)}/copyright`;
+                let statusNote = 'Đã tải lên Riêng tư thành công.';
+                try {
+                    await new Promise(r => setTimeout(r, 3000));
+                    const st = await youtubeRequest(
+                        window.reupEngineClient,
+                        `videos/${encodeURIComponent(ytId)}/status`,
+                    );
+                    if (st?.processing_status) {
+                        statusNote = `Xử lý YouTube: ${st.processing_status}${st.has_copyright_restriction ? ' · CÓ CẢNH BÁO BẢN QUYỀN' : ' · Chưa thấy chặn bản quyền'}.`;
+                    }
+                } catch {}
+                footerStatus.innerHTML = `${escapeHtml(statusNote)} <a href="${studioUrl}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;margin-left:6px;">Mở YouTube Studio (Copyright Checks) ↗</a>`;
+            } catch (err) {
+                footerStatus.textContent = err?.message || 'Lỗi kiểm tra YouTube.';
+            } finally {
+                ytCheckBtn.disabled = false;
+                ytCheckBtn.innerHTML = `${copyrightIconSvg('shield', 14)}<span>Kiểm tra thật YouTube (Riêng tư)</span>`;
+            }
+        };
+    }
+
     if (!dialog.open) dialog.showModal();
+}
+
+function ensureShortsHighlightDialog() {
+    let dialog = document.getElementById('shortsHighlightDialog');
+    if (dialog) return dialog;
+    dialog = document.createElement('dialog');
+    dialog.id = 'shortsHighlightDialog';
+    dialog.className = 'batch-ap-dialog';
+    dialog.style.maxWidth = '680px';
+    dialog.innerHTML = `
+        <div class="batch-ap-shell" style="padding:20px;">
+            <header class="batch-ap-header" style="margin-bottom:14px;">
+                <div class="batch-ap-header-copy">
+                    <small class="batch-ap-eyebrow">AI VIRAL SHORTS CUTTER (9:16)</small>
+                    <h2 id="shortsDialogTitle" style="margin:4px 0;">Gợi ý đoạn Highlight &amp; Cắt Shorts 9:16</h2>
+                    <p style="margin:0;opacity:0.78;font-size:13px;">AI tự chọn các đoạn cao trào 15–55 giây từ lời thoại và xuất video dọc 1080×1920.</p>
+                </div>
+                <button type="button" class="batch-ap-close-btn" id="shortsCloseBtn" aria-label="Đóng">×</button>
+            </header>
+            <div id="shortsStatusLine" style="font-size:13px;margin-bottom:12px;color:#93c5fd;">Đang phân tích nội dung…</div>
+            <div id="shortsListContainer" style="display:flex;flex-direction:column;gap:10px;max-height:55vh;overflow-y:auto;"></div>
+            <footer class="batch-ap-footer" style="margin-top:16px;">
+                <span style="font-size:12px;opacity:0.75;">Video Shorts cắt ra được lưu trong thư mục <code>shorts/</code> của job.</span>
+                <div class="batch-ap-footer-btns">
+                    <button type="button" class="btn secondary" id="shortsRefreshBtn">Gợi ý lại (AI)</button>
+                    <button type="button" class="btn primary" id="shortsDoneBtn">Đóng</button>
+                </div>
+            </footer>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    return dialog;
+}
+
+async function openShortsHighlightDialog(video, card) {
+    if (!video) return;
+    const dialog = ensureShortsHighlightDialog();
+    const titleEl = dialog.querySelector('#shortsDialogTitle');
+    const statusEl = dialog.querySelector('#shortsStatusLine');
+    const listEl = dialog.querySelector('#shortsListContainer');
+    const refreshBtn = dialog.querySelector('#shortsRefreshBtn');
+    const closeBtn = dialog.querySelector('#shortsCloseBtn');
+    const doneBtn = dialog.querySelector('#shortsDoneBtn');
+
+    titleEl.textContent = `Shorts 9:16 · ${video.title || video.video_id}`;
+    closeBtn.onclick = () => dialog.close();
+    doneBtn.onclick = () => dialog.close();
+    dialog.onclick = (ev) => { if (ev.target === dialog) dialog.close(); };
+
+    const renderClips = (clips) => {
+        listEl.replaceChildren();
+        if (!Array.isArray(clips) || !clips.length) {
+            listEl.innerHTML = '<div style="padding:16px;text-align:center;opacity:0.75;">Chưa có đoạn highlight gợi ý. Hãy xử lý video trước để có phụ đề SRT.</div>';
+            return;
+        }
+        clips.forEach((clip, idx) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding:12px;border-radius:10px;border:1px solid rgba(148,163,184,0.2);background:rgba(15,23,42,0.55);display:flex;justify-content:space-between;align-items:center;gap:12px;';
+            const start = Number(clip.start || 0).toFixed(1);
+            const end = Number(clip.end || 30).toFixed(1);
+            const dur = Math.max(1, Math.round(Number(end) - Number(start)));
+            row.innerHTML = `
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:600;font-size:14px;color:#f8fafc;">#${idx + 1} · ${escapeHtml(clip.hook_title || 'Đoạn cao trào')}</div>
+                    <div style="font-size:12px;color:#94a3b8;margin-top:3px;">${start}s → ${end}s (${dur}s) · Điểm viral: ${Number(clip.score || 85)}/100</div>
+                    <div style="font-size:12px;color:#cbd5e1;margin-top:4px;">${escapeHtml(clip.reason || '')}</div>
+                </div>
+                <button type="button" class="btn primary shorts-cut-btn" style="white-space:nowrap;">Cắt 9:16 &amp; Tải về</button>
+            `;
+            const cutBtn = row.querySelector('.shorts-cut-btn');
+            cutBtn.onclick = async () => {
+                cutBtn.disabled = true;
+                cutBtn.textContent = 'Đang cắt 9:16…';
+                try {
+                    const res = await window.reupEngineClient.json('/api/shorts/highlights', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            video_id: video.video_id,
+                            channel: video.channel_key || 'default',
+                            mode: video.has_voice_result ? 'voiceover' : 'subtitle',
+                            clips: [clip],
+                            cut: true,
+                            clip_index: 0,
+                        }),
+                    });
+                    const dl = res?.clips?.[0]?.download_url;
+                    if (dl && window.reupEngineClient?.mediaUrl) {
+                        const url = await window.reupEngineClient.mediaUrl(dl);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${video.video_id}_short_${idx + 1}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        cutBtn.textContent = '✓ Đã tải 9:16';
+                    } else {
+                        cutBtn.textContent = '✓ Đã cắt xong';
+                    }
+                } catch (err) {
+                    statusEl.textContent = err?.status === 404
+                        ? 'Cần cập nhật Local Engine mới để cắt MP4 9:16 tự động (gợi ý AI vẫn hoạt động).'
+                        : (err?.message || 'Lỗi cắt Shorts.');
+                    cutBtn.textContent = 'Thử lại';
+                    cutBtn.disabled = false;
+                }
+            };
+            listEl.appendChild(row);
+        });
+    };
+
+    const loadHighlights = async () => {
+        statusEl.textContent = 'Đang dùng AI phân tích các đoạn có khả năng viral cao nhất…';
+        refreshBtn.disabled = true;
+        listEl.replaceChildren();
+        try {
+            const data = await window.reupEngineClient.json('/api/shorts/highlights', {
+                method: 'POST',
+                body: JSON.stringify({
+                    video_id: video.video_id,
+                    channel: video.channel_key || 'default',
+                    title: video.title || video.video_id || '',
+                    duration_seconds: Number(video.duration || 0),
+                    max_clips: 4,
+                    cut: false,
+                }),
+            });
+            statusEl.textContent = `Đã gợi ý ${data?.clips?.length || 0} đoạn Shorts tiềm năng.`;
+            renderClips(data?.clips || []);
+        } catch (err) {
+            if (err?.status === 404) {
+                try {
+                    const fallback = await window.reupEngineClient.json('/api/assistant', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            kind: 'question',
+                            mode: 'voiceover',
+                            message: `Gợi ý 3 đoạn 20-45 giây hấp dẫn nhất để cắt Shorts 9:16 cho video "${video.title || video.video_id}" (thời lượng ${Number(video.duration || 120)}s). Trả lời ngắn gọn mốc thời gian + tiêu đề Hook.`,
+                        }),
+                    });
+                    statusEl.textContent = 'Gợi ý từ Trợ lý AI (cập nhật Engine để cắt file MP4 9:16 tự động):';
+                    listEl.innerHTML = `<div style="padding:12px;border-radius:10px;background:rgba(15,23,42,0.55);white-space:pre-wrap;font-size:13px;line-height:1.5;">${escapeHtml(fallback?.answer || fallback?.reply || JSON.stringify(fallback))}</div>`;
+                } catch (e2) {
+                    statusEl.textContent = e2?.message || 'Không lấy được gợi ý Shorts.';
+                }
+            } else {
+                statusEl.textContent = err?.message || 'Không phân tích được Shorts.';
+            }
+        } finally {
+            refreshBtn.disabled = false;
+        }
+    };
+
+    refreshBtn.onclick = loadHighlights;
+    if (!dialog.open) dialog.showModal();
+    void loadHighlights();
 }
 
 let batchAutoPublishStopRequested = false;
@@ -8760,6 +9004,16 @@ function ensureBatchAutoPublishDialog() {
                             <input type="checkbox" id="batchApSkipProcessed" checked>
                             <span>Bỏ qua bước render nếu tập đó đã có sẵn thành phẩm tương ứng</span>
                         </label>
+                        <div class="batch-ap-field" style="margin-top:8px;">
+                            <span>Xuất đa ngôn ngữ (tùy chọn thêm tiếng nước ngoài tự động)</span>
+                            <div id="batchApMultiLangWrap" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;font-size:12px;">
+                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="vi" checked> Tiếng Việt</label>
+                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="en"> English</label>
+                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="ja"> 日本語</label>
+                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="ko"> 한국어</label>
+                                <label style="display:inline-flex;align-items:center;gap:4px;"><input type="checkbox" name="batchApLang" value="es"> Español</label>
+                            </div>
+                        </div>
                     </section>
 
                     <section class="batch-ap-section">
@@ -8806,6 +9060,19 @@ function ensureBatchAutoPublishDialog() {
                                         <option value="public">Công khai</option>
                                         <option value="unlisted">Không công khai</option>
                                         <option value="private">Riêng tư</option>
+                                    </select>
+                                </div>
+                                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.08);font-size:12px;">
+                                    <label class="batch-ap-checkbox" style="margin:0;">
+                                        <input type="checkbox" id="batchApScheduleEnabled">
+                                        <span>Hẹn giờ vàng</span>
+                                    </label>
+                                    <input type="datetime-local" id="batchApScheduleStart" style="flex:1;min-width:155px;padding:4px 6px;border-radius:6px;background:rgba(15,23,42,0.7);color:#f8fafc;border:1px solid rgba(148,163,184,0.25);font-size:12px;" disabled>
+                                    <select id="batchApScheduleInterval" class="batch-ap-inline-select" disabled>
+                                        <option value="4">Mỗi 4 giờ</option>
+                                        <option value="12">Mỗi 12 giờ</option>
+                                        <option value="24" selected>Mỗi 24 giờ</option>
+                                        <option value="48">Mỗi 48 giờ</option>
                                     </select>
                                 </div>
                             </div>
@@ -9002,6 +9269,26 @@ async function openBatchAutoPublishDialog() {
 
     ytStatusBadge.textContent = 'Đang kiểm tra kênh…';
     ytStatusBadge.dataset.connected = '0';
+
+    const scheduleEnabledInput = dialog.querySelector('#batchApScheduleEnabled');
+    const scheduleStartInput = dialog.querySelector('#batchApScheduleStart');
+    const scheduleIntervalSelect = dialog.querySelector('#batchApScheduleInterval');
+    const multiLangWrap = dialog.querySelector('#batchApMultiLangWrap');
+    if (scheduleStartInput && !scheduleStartInput.value) {
+        const tomorrow = new Date(Date.now() + 24 * 3600 * 1000);
+        tomorrow.setHours(19, 0, 0, 0);
+        const pad = n => String(n).padStart(2, '0');
+        scheduleStartInput.value = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}T${pad(tomorrow.getHours())}:${pad(tomorrow.getMinutes())}`;
+    }
+    if (scheduleEnabledInput) {
+        const syncScheduleInputs = () => {
+            const on = Boolean(scheduleEnabledInput.checked);
+            if (scheduleStartInput) scheduleStartInput.disabled = !on;
+            if (scheduleIntervalSelect) scheduleIntervalSelect.disabled = !on;
+        };
+        scheduleEnabledInput.onchange = syncScheduleInputs;
+        syncScheduleInputs();
+    }
     void (async () => {
         try {
             const conn = await youtubeRequest(window.reupEngineClient, 'connection');
@@ -9535,6 +9822,13 @@ async function openBatchAutoPublishDialog() {
 
         const batchProcessConfig = resolveSavedBatchProcessConfig(selectedPreset);
         const youtubeApi = (path, opts) => youtubeRequest(window.reupEngineClient, path, opts);
+        const checkedLangs = multiLangWrap
+            ? [...multiLangWrap.querySelectorAll('input[name="batchApLang"]:checked')].map(el => el.value)
+            : [];
+        const targetLanguages = resolveBatchTargetLanguages(checkedLangs, batchProcessConfig?.target_language || 'vi');
+        const scheduleEnabled = Boolean(scheduleEnabledInput?.checked);
+        const scheduleStartValue = scheduleStartInput?.value || '';
+        const scheduleIntervalHours = Number(scheduleIntervalSelect?.value || 24);
 
         let completedCount = 0;
 
@@ -9546,6 +9840,9 @@ async function openBatchAutoPublishDialog() {
                 const epNum = startEp + index;
                 const thumbDataUrl = thumbnailDataUrls[index] || null;
                 const stepPrefix = `Tập ${epNum} (${index + 1}/${ordered.length})`;
+                const episodePublishAt = scheduleEnabled
+                    ? computeEpisodeScheduleIso(scheduleStartValue, scheduleIntervalHours, index)
+                    : null;
 
                 const updateEpisodeState = (status, text, links = []) => {
                     episodeStates.set(video.video_id, { status, text, links });
@@ -9565,86 +9862,102 @@ async function openBatchAutoPublishDialog() {
                     );
                 }
 
-                const alreadyHasOutput = mode === 'voiceover'
-                    ? Boolean(video.has_voice_result)
-                    : Boolean(video.has_subtitle_result);
+                for (let langIdx = 0; langIdx < targetLanguages.length; langIdx += 1) {
+                    if (batchAutoPublishStopRequested) break;
+                    const langCode = targetLanguages[langIdx];
+                    const langSuffix = targetLanguages.length > 1 ? ` [${langCode.toUpperCase()}]` : '';
+                    const isPrimaryLang = langIdx === 0 && langCode === (batchProcessConfig?.target_language || 'vi');
+                    const langProcessConfig = isPrimaryLang
+                        ? batchProcessConfig
+                        : {
+                            ...batchProcessConfig,
+                            target_language: langCode,
+                            voice: defaultVoiceForLanguage(langCode),
+                        };
 
-                if (!(skipProcessed && alreadyHasOutput)) {
-                    updateEpisodeState('running', 'Đang xử lý video…');
-                    if (card) {
-                        await processVideo(video, card, mode, batchProcessConfig);
-                    }
-                    const finishedOk = mode === 'voiceover'
+                    const alreadyHasOutput = isPrimaryLang && (mode === 'voiceover'
                         ? Boolean(video.has_voice_result)
-                        : Boolean(video.has_subtitle_result);
-                    if (!finishedOk) {
-                        updateEpisodeState('error', 'Xử lý video gặp lỗi');
-                        continue;
-                    }
-                }
+                        : Boolean(video.has_subtitle_result));
 
-                if (batchAutoPublishStopRequested) {
-                    updateEpisodeState('complete', 'Đã xử lý xong (Đã dừng trước khi đăng)');
-                    break;
-                }
-
-                if (hasAnyPlatform) {
-                    const pubOutcome = await generateAndPublishEpisode({
-                        youtubeApi,
-                        accountId,
-                        video,
-                        channel: video.channel_key || 'default',
-                        mode,
-                        episodeNumber: epNum,
-                        totalEpisodes: ordered.length,
-                        basePrompt,
-                        useAiPrompt,
-                        thumbnailDataUrl: thumbDataUrl,
-                        platforms,
-                        youtubeConfig: {
-                            channelId: youtubeConn?.channel?.id || '',
-                            privacy: ytPrivacySelect.value || 'public',
-                            madeForKids: false,
-                        },
-                        facebookSaved: readSavedSocialTarget(localStorage, 'facebook'),
-                        tiktokSaved: readSavedSocialTarget(localStorage, 'tiktok'),
-                        onStage: (stageText) => {
-                            updateEpisodeState('running', stageText);
-                        },
-                        onThumbnailResolved: (extractedFrame) => {
-                            if (extractedFrame && !thumbnailDataUrls[index]) {
-                                thumbnailDataUrls[index] = extractedFrame;
-                                renderEpisodeRows();
-                            }
-                        },
-                    });
-
-                    const links = [];
-                    if (pubOutcome.results.youtube?.url) {
-                        links.push({ label: 'YouTube', url: pubOutcome.results.youtube.url });
-                    }
-                    if (pubOutcome.results.facebook?.url) {
-                        links.push({ label: 'Facebook', url: pubOutcome.results.facebook.url });
-                    }
-                    if (pubOutcome.results.tiktok?.url) {
-                        links.push({ label: 'TikTok', url: pubOutcome.results.tiktok.url });
+                    if (!(skipProcessed && alreadyHasOutput)) {
+                        updateEpisodeState('running', `Đang xử lý video${langSuffix}…`);
+                        if (card) {
+                            await processVideo(video, card, mode, langProcessConfig);
+                        }
+                        const finishedOk = mode === 'voiceover'
+                            ? Boolean(video.has_voice_result)
+                            : Boolean(video.has_subtitle_result);
+                        if (!finishedOk) {
+                            updateEpisodeState('error', `Xử lý video gặp lỗi${langSuffix}`);
+                            continue;
+                        }
                     }
 
-                    if (pubOutcome.errors.length) {
-                        updateEpisodeState(
-                            links.length ? 'complete' : 'error',
-                            links.length
-                                ? `Đã đăng 1 phần (${pubOutcome.errors.join('; ')})`
-                                : pubOutcome.errors.join(' · '),
-                            links,
-                        );
-                    } else {
+                    if (batchAutoPublishStopRequested) {
+                        updateEpisodeState('complete', 'Đã xử lý xong (Đã dừng trước khi đăng)');
+                        break;
+                    }
+
+                    if (hasAnyPlatform && (langIdx === 0 || targetLanguages.length > 1)) {
+                        const pubOutcome = await generateAndPublishEpisode({
+                            youtubeApi,
+                            accountId,
+                            video,
+                            channel: video.channel_key || 'default',
+                            mode,
+                            episodeNumber: epNum,
+                            totalEpisodes: ordered.length,
+                            basePrompt: langSuffix ? `${basePrompt} (${langCode.toUpperCase()})`.trim() : basePrompt,
+                            useAiPrompt,
+                            thumbnailDataUrl: thumbDataUrl,
+                            platforms,
+                            youtubeConfig: {
+                                channelId: youtubeConn?.channel?.id || '',
+                                privacy: ytPrivacySelect.value || 'public',
+                                madeForKids: false,
+                                publishAt: episodePublishAt,
+                            },
+                            facebookSaved: readSavedSocialTarget(localStorage, 'facebook'),
+                            tiktokSaved: readSavedSocialTarget(localStorage, 'tiktok'),
+                            onStage: (stageText) => {
+                                updateEpisodeState('running', `${stageText}${langSuffix}`);
+                            },
+                            onThumbnailResolved: (extractedFrame) => {
+                                if (extractedFrame && !thumbnailDataUrls[index]) {
+                                    thumbnailDataUrls[index] = extractedFrame;
+                                    renderEpisodeRows();
+                                }
+                            },
+                        });
+
+                        const links = [];
+                        if (pubOutcome.results.youtube?.url) {
+                            links.push({ label: `YouTube${langSuffix}`, url: pubOutcome.results.youtube.url });
+                        }
+                        if (pubOutcome.results.facebook?.url) {
+                            links.push({ label: `Facebook${langSuffix}`, url: pubOutcome.results.facebook.url });
+                        }
+                        if (pubOutcome.results.tiktok?.url) {
+                            links.push({ label: `TikTok${langSuffix}`, url: pubOutcome.results.tiktok.url });
+                        }
+
+                        if (pubOutcome.errors.length) {
+                            updateEpisodeState(
+                                links.length ? 'complete' : 'error',
+                                links.length
+                                    ? `Đã đăng 1 phần${langSuffix} (${pubOutcome.errors.join('; ')})`
+                                    : `${pubOutcome.errors.join(' · ')}${langSuffix}`,
+                                links,
+                            );
+                        } else if (langIdx === targetLanguages.length - 1) {
+                            const schedLabel = episodePublishAt ? ' (Đã hẹn giờ)' : '';
+                            updateEpisodeState('complete', `Đã xử lý & đăng thành công${langSuffix}${schedLabel}`, links);
+                            completedCount += 1;
+                        }
+                    } else if (langIdx === targetLanguages.length - 1) {
+                        updateEpisodeState('complete', `Đã xử lý xong video${langSuffix}`);
                         completedCount += 1;
-                        updateEpisodeState('complete', `✓ Hoàn tất (${pubOutcome.metadata.title})`, links);
                     }
-                } else {
-                    completedCount += 1;
-                    updateEpisodeState('complete', '✓ Đã xử lý xong video');
                 }
             }
 

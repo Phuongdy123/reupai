@@ -621,6 +621,7 @@ def start_upload(owner, video: Path, payload):
                             warning = "Video đã tải lên; hãy kiểm tra ảnh bìa trong YouTube Studio."
                     update(state="completed", percent=100, video_id=video_id, warning=warning,
                            url="https://www.youtube.com/watch?v=" + video_id,
+                           studio_url=f"https://studio.youtube.com/video/{video_id}/copyright",
                            privacy=result.get("status", {}).get("privacyStatus", "unknown"))
                     return
             raise RuntimeError("Chưa nhận được xác nhận cuối từ YouTube. Kiểm tra YouTube Studio trước khi thử lại.")
@@ -632,3 +633,38 @@ def start_upload(owner, video: Path, payload):
                 _uploads.discard((owner, job_id))
     threading.Thread(target=run, name="reupai-youtube-upload", daemon=True).start()
     return record
+
+
+def check_video_copyright_status(owner: str, youtube_video_id: str) -> dict:
+    """Poll YouTube Data API v3 for processing, licensedContent, and rejection status of an uploaded video."""
+    vid = str(youtube_video_id or "").strip()
+    if not vid:
+        raise ValueError("Thiếu YouTube video ID.")
+    credentials = _credentials(owner)
+    response = requests.get(
+        "https://www.googleapis.com/youtube/v3/videos",
+        params={"part": "status,processingDetails,contentDetails,snippet", "id": vid},
+        headers={"Authorization": "Bearer " + credentials.token},
+        timeout=20,
+    )
+    if not response.ok:
+        raise RuntimeError(_api_error(response))
+    items = (response.json() or {}).get("items") or []
+    if not items:
+        raise ValueError("Không tìm thấy video trên kênh YouTube này.")
+    item = items[0]
+    status = item.get("status") or {}
+    proc = item.get("processingDetails") or {}
+    content = item.get("contentDetails") or {}
+    snippet = item.get("snippet") or {}
+    return {
+        "id": vid,
+        "title": snippet.get("title") or "",
+        "privacy_status": status.get("privacyStatus") or "",
+        "upload_status": status.get("uploadStatus") or "",
+        "rejection_reason": status.get("rejectionReason") or "",
+        "processing_status": proc.get("processingStatus") or "",
+        "licensed_content": bool(content.get("licensedContent")),
+        "studio_url": f"https://studio.youtube.com/video/{vid}/copyright",
+        "watch_url": f"https://www.youtube.com/watch?v={vid}",
+    }

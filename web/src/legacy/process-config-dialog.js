@@ -412,6 +412,21 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     Boost GPU
                     <small>Tăng tốc tối đa CUDA Whisper/OCR, NVENC/NVDEC &amp; TTS song song.</small>
                 </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuse" type="checkbox">
+                    Gói chống Reused Content (YouTube)
+                    <small>Zoom nhẹ 1.04x + tốc độ 1.03x để né quét nội dung trùng lặp.</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuseMirror" type="checkbox">
+                    Lật gương video (Mirror)
+                    <small>Lật ngang khung hình gốc (giữ nguyên chữ phụ đề đúng chiều).</small>
+                </label>
+                <label class="process-check-option">
+                    <input id="processAntiReuseColor" type="checkbox">
+                    Chỉnh màu nhẹ (Contrast/Sat)
+                    <small>Tăng nhẹ tương phản &amp; bão hòa để đổi chữ ký khung hình.</small>
+                </label>
                 </div>
             </section>
 
