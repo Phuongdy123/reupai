@@ -2537,60 +2537,104 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
   transform: translateY(-1px);
 }
 
+body.theme-xports #batchAutoPublishDialog.batch-auto-publish-dialog,
 .batch-auto-publish-dialog {
-  width: min(1120px, 95vw);
-  max-height: 90vh;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 16px;
-  background: #0d1017;
-  color: #f4f4f5;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.72);
+  position: fixed !important;
+  inset: 0 !important;
+  margin: auto !important;
+  width: min(1160px, calc(100vw - 28px)) !important;
+  max-width: calc(100vw - 28px) !important;
+  max-height: calc(100dvh - 28px) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 16px !important;
+  background: #0d1017 !important;
+  color: #f4f4f5 !important;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.78) !important;
+  box-sizing: border-box !important;
+}
+.batch-auto-publish-dialog:not([open]) {
+  display: none !important;
 }
 .batch-auto-publish-dialog::backdrop {
-  background: rgba(3, 6, 12, 0.76);
+  background: rgba(3, 6, 12, 0.78);
   backdrop-filter: blur(6px);
 }
 .batch-auto-publish-dialog form {
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  width: 100%;
+  max-height: calc(100dvh - 30px);
+  margin: 0;
+  overflow: hidden;
 }
 .batch-ap-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 22px 14px;
+  padding: 14px 20px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: #11141d;
+  flex-shrink: 0;
+}
+.batch-ap-header-copy {
+  min-width: 0;
+  flex: 1;
 }
 .batch-ap-eyebrow {
   display: inline-block;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #a78bfa;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .batch-ap-header h2 {
-  margin: 0 0 4px;
-  font-size: 19px;
+  margin: 0 0 3px;
+  font-size: 17px;
   font-weight: 800;
   color: #ffffff;
+  line-height: 1.25;
 }
 .batch-ap-header p {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: #a1a1aa;
+  line-height: 1.35;
+}
+.batch-ap-close-btn {
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+  padding: 0 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #e4e4e7 !important;
+  font-size: 18px !important;
+  line-height: 1 !important;
+  display: inline-grid !important;
+  place-items: center !important;
+  cursor: pointer;
+}
+.batch-ap-close-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
 }
 .batch-ap-body {
   display: grid;
-  grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
-  gap: 18px;
-  padding: 18px 22px;
+  grid-template-columns: minmax(430px, 480px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 20px;
   overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
 }
-@media (max-width: 900px) {
+@media (max-width: 960px) {
   .batch-ap-body {
     grid-template-columns: 1fr;
   }
@@ -2598,66 +2642,103 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
 .batch-ap-config-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  min-width: 0;
 }
 .batch-ap-section {
-  padding: 14px 15px;
-  border-radius: 12px;
+  padding: 11px 13px;
+  border-radius: 11px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   background: rgba(255, 255, 255, 0.025);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .batch-ap-section h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
-  color: #e4e4e7;
-}
-.batch-ap-section label {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: 12px;
-  color: #d4d4d8;
-}
-.batch-ap-section input[type="text"],
-.batch-ap-section input[type="number"],
-.batch-ap-section select {
-  height: 36px;
-  padding: 0 11px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: #141822;
   color: #f4f4f5;
-  font-size: 13px;
+}
+.batch-ap-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  min-width: 0 !important;
+  font-size: 11.5px !important;
+  color: #d4d4d8 !important;
+}
+.batch-ap-field > span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.theme-xports #batchAutoPublishDialog .batch-ap-section :is(input[type="text"], input[type="number"], select),
+.batch-ap-section :is(input[type="text"], input[type="number"], select) {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: #141822 !important;
+  color: #f4f4f5 !important;
+  font-size: 12.5px !important;
+  box-sizing: border-box !important;
 }
 .batch-ap-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+.batch-ap-grid-ep {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: end;
   gap: 10px;
 }
 .batch-ap-checkbox {
+  display: inline-flex !important;
   flex-direction: row !important;
   align-items: center !important;
   gap: 8px !important;
+  font-size: 12px !important;
+  color: #e4e4e7 !important;
   cursor: pointer;
   user-select: none;
+  margin: 0 !important;
+}
+body.theme-xports #batchAutoPublishDialog .batch-ap-checkbox input[type="checkbox"],
+.batch-ap-checkbox input[type="checkbox"] {
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  flex: 0 0 15px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  accent-color: #ef4444;
+  cursor: pointer;
 }
 .batch-ap-platforms {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .batch-ap-platform-card {
-  padding: 10px 12px;
-  border-radius: 9px;
+  padding: 7px 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
+}
+.batch-ap-platform-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .batch-ap-conn-badge {
   margin-left: auto;
@@ -2666,38 +2747,54 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.07);
   color: #a1a1aa;
+  max-width: 185px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .batch-ap-conn-badge[data-connected="1"] {
   background: rgba(34, 197, 94, 0.16);
   color: #86efac;
   border: 1px solid rgba(34, 197, 94, 0.32);
 }
+body.theme-xports #batchAutoPublishDialog .batch-ap-inline-select,
+.batch-ap-inline-select {
+  width: auto !important;
+  min-width: 122px !important;
+  max-width: 140px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 8px !important;
+  font-size: 11.5px !important;
+  border-radius: 6px !important;
+}
 .batch-ap-hint {
-  font-size: 11.5px;
+  font-size: 11px;
   color: #9ca3af;
-  line-height: 1.45;
+  line-height: 1.38;
 }
 .batch-ap-episodes-col {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  min-height: 0;
 }
 .batch-ap-episodes-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .batch-ap-episodes-header h3 {
-  margin: 0 0 3px;
-  font-size: 14px;
+  margin: 0 0 2px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 .batch-ap-episodes-header p {
   margin: 0;
-  font-size: 12px;
+  font-size: 11.5px;
   color: #a1a1aa;
 }
 .batch-ap-thumb-actions {
@@ -2710,28 +2807,29 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
   cursor: pointer;
 }
 .batch-ap-overall-status {
-  padding: 9px 12px;
-  border-radius: 9px;
+  padding: 8px 11px;
+  border-radius: 8px;
   border: 1px solid rgba(139, 92, 246, 0.35);
   background: rgba(139, 92, 246, 0.12);
   color: #ddd6fe;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .batch-ap-episode-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 430px;
+  flex: 1 1 auto;
+  max-height: 440px;
   overflow-y: auto;
   padding-right: 4px;
 }
 .batch-ap-ep-row {
   display: grid;
-  grid-template-columns: 64px 96px minmax(0, 1fr) auto;
+  grid-template-columns: 60px 96px minmax(0, 1fr) auto;
   align-items: center;
   gap: 11px;
-  padding: 9px 11px;
+  padding: 8px 11px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.025);
@@ -2762,12 +2860,24 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
 }
 .batch-ap-ep-thumb-wrap {
   position: relative;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
   width: 96px;
   height: 54px;
   border-radius: 7px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: #18181b;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  background: #141720;
+  cursor: pointer;
+  margin: 0 !important;
+}
+.batch-ap-ep-thumb-wrap.has-thumb {
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.batch-ap-ep-thumb-wrap:hover {
+  border-color: rgba(167, 139, 250, 0.65);
 }
 .batch-ap-ep-thumb {
   width: 100%;
@@ -2776,24 +2886,22 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
   display: block;
 }
 .batch-ap-ep-thumb-empty {
-  width: 100%;
-  height: 100%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  color: #71717a;
+  font-size: 11px;
+  font-weight: 700;
+  color: #cbd5e1;
 }
 .batch-ap-ep-thumb-btn {
   position: absolute;
   inset: auto 0 0 0;
-  background: rgba(9, 11, 17, 0.78);
+  background: rgba(9, 11, 17, 0.82);
   color: #f4f4f5;
   font-size: 10px;
   font-weight: 700;
   text-align: center;
   padding: 2px 4px;
-  cursor: pointer;
 }
 .batch-ap-ep-info {
   display: flex;
@@ -2860,9 +2968,10 @@ body.theme-xports #batchBar .batch-auto-publish-trigger:hover {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 14px 22px;
+  padding: 12px 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(15, 18, 26, 0.95);
+  background: #11141d;
+  flex-shrink: 0;
 }
 #batchApFooterHint {
   font-size: 12px;

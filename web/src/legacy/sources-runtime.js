@@ -8530,12 +8530,12 @@ function ensureBatchAutoPublishDialog() {
     dialog.innerHTML = `
         <form id="batchAutoPublishForm" method="dialog" novalidate>
             <header class="batch-ap-header">
-                <div>
+                <div class="batch-ap-header-copy">
                     <small class="batch-ap-eyebrow">TỰ ĐỘNG HÓA SERIES 100%</small>
                     <h2>Xử lý hàng loạt &amp; Tự động đăng MXH</h2>
                     <p id="batchApSubtitle">Cấu hình một lần cho cả series (Tập 1, 2, 3…), chọn ảnh bìa hàng loạt và tự động đăng lần lượt sau khi xử lý xong.</p>
                 </div>
-                <button type="button" class="modern-icon-btn" id="batchApCloseBtn" aria-label="Đóng">×</button>
+                <button type="button" class="batch-ap-close-btn" id="batchApCloseBtn" aria-label="Đóng">×</button>
             </header>
 
             <div class="batch-ap-body">
@@ -8543,17 +8543,17 @@ function ensureBatchAutoPublishDialog() {
                     <section class="batch-ap-section">
                         <h3>1. Chế độ xử lý &amp; cấu hình video</h3>
                         <div class="batch-ap-grid-2">
-                            <label>
+                            <label class="batch-ap-field">
                                 <span>Chế độ xuất hàng loạt</span>
                                 <select id="batchApMode">
-                                    <option value="voiceover">Voice + Phụ đề (Lồng tiếng AI)</option>
+                                    <option value="voiceover">Voice + Phụ đề (Lồng tiếng)</option>
                                     <option value="subtitle">Chỉ Phụ đề (Sub)</option>
                                 </select>
                             </label>
-                            <label>
-                                <span>Preset cấu hình (Giọng, Sub, Logo, Mờ)</span>
+                            <label class="batch-ap-field">
+                                <span>Preset cấu hình (Giọng, Sub, Logo)</span>
                                 <select id="batchApPreset">
-                                    <option value="">Tự động dùng cấu hình gần nhất</option>
+                                    <option value="">Cấu hình gần nhất (Tự động)</option>
                                 </select>
                             </label>
                         </div>
@@ -8565,7 +8565,7 @@ function ensureBatchAutoPublishDialog() {
 
                     <section class="batch-ap-section">
                         <h3>2. Prompt Series &amp; Đánh số Tập tự động</h3>
-                        <label>
+                        <label class="batch-ap-field">
                             <span>Chủ đề / Prompt chung cho AI (tự tăng Tập 1, 2, 3… hoặc dùng <code>{ep}</code>)</span>
                             <input
                                 type="text"
@@ -8574,12 +8574,12 @@ function ensureBatchAutoPublishDialog() {
                                 maxlength="300"
                             >
                         </label>
-                        <div class="batch-ap-grid-2">
-                            <label>
-                                <span>Bắt đầu từ Tập số</span>
+                        <div class="batch-ap-grid-ep">
+                            <label class="batch-ap-field">
+                                <span>Tập bắt đầu</span>
                                 <input type="number" id="batchApStartEp" min="1" max="9999" value="1">
                             </label>
-                            <label>
+                            <label class="batch-ap-field">
                                 <span>Thứ tự danh sách tập</span>
                                 <select id="batchApOrder">
                                     <option value="selected">Giữ nguyên thứ tự trên danh sách</option>
@@ -8597,40 +8597,41 @@ function ensureBatchAutoPublishDialog() {
                         <h3>3. Nền tảng tự động đăng sau khi xử lý xong từng tập</h3>
                         <div class="batch-ap-platforms">
                             <div class="batch-ap-platform-card">
-                                <label class="batch-ap-checkbox">
-                                    <input type="checkbox" id="batchApPlatYoutube" checked>
-                                    <strong>YouTube</strong>
-                                    <span class="batch-ap-conn-badge" id="batchApYtStatus">Đang kiểm tra…</span>
-                                </label>
-                                <div class="batch-ap-plat-options">
-                                    <label>
-                                        <span>Chế độ hiển thị YouTube</span>
-                                        <select id="batchApYtPrivacy">
-                                            <option value="public">Công khai (Public)</option>
-                                            <option value="unlisted">Không công khai (Unlisted)</option>
-                                            <option value="private">Riêng tư (Private)</option>
-                                        </select>
+                                <div class="batch-ap-platform-row">
+                                    <label class="batch-ap-checkbox">
+                                        <input type="checkbox" id="batchApPlatYoutube" checked>
+                                        <strong>YouTube</strong>
                                     </label>
+                                    <span class="batch-ap-conn-badge" id="batchApYtStatus">Đang kiểm tra…</span>
+                                    <select id="batchApYtPrivacy" class="batch-ap-inline-select" aria-label="Chế độ hiển thị YouTube">
+                                        <option value="public">Công khai</option>
+                                        <option value="unlisted">Không công khai</option>
+                                        <option value="private">Riêng tư</option>
+                                    </select>
                                 </div>
                             </div>
 
                             <div class="batch-ap-platform-card">
-                                <label class="batch-ap-checkbox">
-                                    <input type="checkbox" id="batchApPlatFacebook">
-                                    <strong>Facebook Page</strong>
+                                <div class="batch-ap-platform-row">
+                                    <label class="batch-ap-checkbox">
+                                        <input type="checkbox" id="batchApPlatFacebook">
+                                        <strong>Facebook Page</strong>
+                                    </label>
                                     <span class="batch-ap-conn-badge" id="batchApFbStatus">Chưa lưu</span>
-                                </label>
+                                </div>
                             </div>
 
                             <div class="batch-ap-platform-card">
-                                <label class="batch-ap-checkbox">
-                                    <input type="checkbox" id="batchApPlatTiktok">
-                                    <strong>TikTok</strong>
+                                <div class="batch-ap-platform-row">
+                                    <label class="batch-ap-checkbox">
+                                        <input type="checkbox" id="batchApPlatTiktok">
+                                        <strong>TikTok</strong>
+                                    </label>
                                     <span class="batch-ap-conn-badge" id="batchApTtStatus">Chưa lưu</span>
-                                </label>
+                                </div>
                             </div>
                         </div>
-                        <small class="batch-ap-hint">Mẹo: Kết nối sẵn kênh YouTube / Fanpage Facebook / TikTok trong mục Đăng thành phẩm một lần, hệ thống sẽ tự đăng 100% không cần xác nhận lại.</small>
+                        <small class="batch-ap-hint">Mẹo: Kết nối sẵn kênh YouTube / Fanpage / TikTok trong mục Đăng thành phẩm 1 lần, hệ thống sẽ tự đăng 100%.</small>
                     </section>
                 </div>
 
@@ -8807,7 +8808,13 @@ async function openBatchAutoPublishDialog() {
         ordered.forEach((video, idx) => {
             const epNum = startEp + idx;
             const expectedTopic = formatEpisodeTopic(basePrompt, epNum, video.title || video.video_id);
-            const thumbUrl = thumbnailDataUrls[idx] || video.thumbnail || '';
+            const cardImg = document.querySelector(
+                `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"] img.cover`,
+            );
+            const fallbackCover = (cardImg?.complete && cardImg?.naturalWidth > 0 && cardImg?.currentSrc)
+                ? cardImg.currentSrc
+                : (video.thumbnail || '');
+            const thumbUrl = thumbnailDataUrls[idx] || fallbackCover || '';
             const hasCustomThumb = Boolean(thumbnailDataUrls[idx]);
             const stateInfo = episodeStates.get(video.video_id) || {
                 status: 'idle',
@@ -8827,20 +8834,17 @@ async function openBatchAutoPublishDialog() {
 
             row.innerHTML = `
                 <div class="batch-ap-ep-badge">Tập ${epNum}</div>
-                <div class="batch-ap-ep-thumb-wrap">
+                <label class="batch-ap-ep-thumb-wrap ${thumbUrl ? 'has-thumb' : 'is-empty'}" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
                     ${thumbUrl
-                        ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb">`
-                        : `<div class="batch-ap-ep-thumb-empty">Chưa có ảnh</div>`}
-                    <label class="batch-ap-ep-thumb-btn" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
-                        <span>${hasCustomThumb ? 'Đổi ảnh' : '+ Ảnh bìa'}</span>
-                        <input type="file" accept="image/jpeg,image/png,image/webp" data-slot-index="${idx}" hidden>
-                    </label>
-                </div>
+                        ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb"><span class="batch-ap-ep-thumb-btn">${hasCustomThumb ? 'Đổi ảnh' : '+ Ảnh bìa'}</span>`
+                        : `<span class="batch-ap-ep-thumb-empty">+ Ảnh bìa</span>`}
+                    <input type="file" accept="image/jpeg,image/png,image/webp" data-slot-index="${idx}" hidden>
+                </label>
                 <div class="batch-ap-ep-info">
                     <strong class="batch-ap-ep-topic">${escapeHtml(expectedTopic)}</strong>
                     <span class="batch-ap-ep-origin" title="${escapeHtml(video.title || video.video_id)}">Nguồn: ${escapeHtml(video.title || video.video_id)}</span>
                     ${hasCustomThumb && thumbnailSlots[idx]?.name
-                        ? `<small class="batch-ap-ep-filename">Ảnh bìa: ${escapeHtml(thumbnailSlots[idx].name)}</small>`
+                        ? `<small class="batch-ap-ep-filename">Ảnh bìa riêng: ${escapeHtml(thumbnailSlots[idx].name)}</small>`
                         : '<small class="batch-ap-ep-filename is-muted">Mặc định: khung hình video (hoặc bấm Chọn nhiều ảnh)</small>'}
                     ${linksHtml}
                 </div>
