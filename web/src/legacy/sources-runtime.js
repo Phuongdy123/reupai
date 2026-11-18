@@ -21,7 +21,7 @@ import {
   generateAndPublishEpisode,
 } from "../lib/batch-auto-publish.js";
 import { youtubeRequest, getSignedInAccountId } from "../lib/youtube-client.js";
-import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine } from "../lib/copyright-checker.js";
+import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine, copyrightIconSvg } from "../lib/copyright-checker.js";
 
 function threePlatformSvgs(size = 13) {
   return [
@@ -1851,7 +1851,7 @@ function buildCard(
                                 <span>Tải video gốc</span>
                             </button>
                             <button type="button" class="menu-action copyright-check-btn">
-                                <span aria-hidden="true">🛡️</span>
+                                ${copyrightIconSvg('shield', 15)}
                                 <span>Tra bản quyền Video &amp; Nhạc</span>
                             </button>
                             <div class="menu-section">
@@ -8556,32 +8556,35 @@ function ensureCopyrightReportDialog() {
             <header class="batch-ap-header">
                 <div class="batch-ap-header-copy">
                     <small class="batch-ap-eyebrow">KIỂM TRA CONTENT ID YOUTUBE</small>
-                    <h2>🛡️ Tra cứu Bản quyền Video &amp; Nhạc</h2>
+                    <h2 class="cr-dialog-heading">
+                        <span class="process-copyright-icon-box" aria-hidden="true">${copyrightIconSvg('shield', 15)}</span>
+                        <span>Tra cứu Bản quyền Video &amp; Nhạc</span>
+                    </h2>
                     <p id="crDialogTitle"></p>
                 </div>
                 <button type="button" class="batch-ap-close-btn" id="crDialogCloseBtn" aria-label="Đóng">×</button>
             </header>
             <div class="copyright-report-body">
                 <div class="copyright-report-top">
-                    <span class="process-copyright-badge" id="crOverallBadge">Đang kiểm tra…</span>
-                    <span class="process-copyright-pill" id="crMusicPill">🎵 Nhạc: --</span>
-                    <span class="process-copyright-pill" id="crVisualPill">🎬 Hình ảnh: --</span>
+                    <span class="process-copyright-badge" id="crOverallBadge"><i class="cr-status-dot"></i><span>Đang kiểm tra…</span></span>
+                    <span class="process-copyright-pill" id="crMusicPill">${copyrightIconSvg('music', 13)}<span>Nhạc: --</span></span>
+                    <span class="process-copyright-pill" id="crVisualPill">${copyrightIconSvg('film', 13)}<span>Hình ảnh: --</span></span>
                 </div>
                 <div class="copyright-report-music-box" id="crDetectedMusic"></div>
                 <div class="copyright-report-section">
-                    <h4>⚠️ Cảnh báo &amp; Nguy cơ phát hiện</h4>
+                    <h4>Cảnh báo &amp; Nguy cơ phát hiện</h4>
                     <ul id="crWarningsList"></ul>
                 </div>
                 <div class="copyright-report-section">
-                    <h4>💡 Khuyến nghị xử lý để né Bản quyền YouTube</h4>
+                    <h4>Khuyến nghị xử lý để né Bản quyền YouTube</h4>
                     <ul id="crRecommendationsList"></ul>
                 </div>
             </div>
             <footer class="batch-ap-footer">
                 <span id="crFooterStatus">Phân tích dựa trên metadata, cấu hình âm thanh và AI kiểm tra mẫu nhạc/hình.</span>
                 <div class="batch-ap-footer-btns">
-                    <button type="button" class="btn secondary" id="crDeepScanBtn">🔍 Quét sâu Nhạc &amp; Hình (AI)</button>
-                    <button type="button" class="btn primary" id="crOpenSafeConfigBtn">⚡ Mở thiết lập Né Bản Quyền</button>
+                    <button type="button" class="btn secondary" id="crDeepScanBtn">${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span></button>
+                    <button type="button" class="btn primary" id="crOpenSafeConfigBtn">${copyrightIconSvg('bolt', 14)}<span>Mở thiết lập Né Bản Quyền</span></button>
                 </div>
             </footer>
         </div>
@@ -8626,11 +8629,11 @@ async function openCopyrightReportDialog(video, card) {
 
     const renderReport = (report) => {
         const riskVi = (level) => (level === 'high' ? 'Nguy cơ cao' : level === 'medium' ? 'Cần lưu ý' : 'An toàn');
-        overallBadge.textContent = report.badge_label || '🟢 An toàn';
+        overallBadge.innerHTML = `<i class="cr-status-dot"></i><span>${escapeHtml(report.badge_label || 'An toàn')}</span>`;
         overallBadge.dataset.risk = report.overall_risk || 'low';
-        musicPill.textContent = `🎵 Bản quyền Nhạc: ${riskVi(report.music_risk)} (${report.music_score || 0}%)`;
+        musicPill.innerHTML = `${copyrightIconSvg('music', 13)}<span>Bản quyền Nhạc: ${escapeHtml(riskVi(report.music_risk))} (${Number(report.music_score || 0)}%)</span>`;
         musicPill.dataset.risk = report.music_risk || 'low';
-        visualPill.textContent = `🎬 Bản quyền Hình: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)`;
+        visualPill.innerHTML = `${copyrightIconSvg('film', 13)}<span>Bản quyền Hình: ${escapeHtml(riskVi(report.visual_risk))} (${Number(report.visual_score || 0)}%)</span>`;
         visualPill.dataset.risk = report.visual_risk || 'low';
         detectedMusicEl.textContent = `Nhận diện âm thanh/nhạc: ${report.detected_music || 'Chưa phát hiện nhạc thương mại rủi ro cao'}`;
 
@@ -8654,7 +8657,7 @@ async function openCopyrightReportDialog(video, card) {
         });
 
         footerStatus.textContent = report.ai_scanned
-            ? '✓ Đã quét sâu âm thanh & khung hình bằng AI Gemini.'
+            ? 'Đã quét sâu âm thanh & khung hình bằng AI Gemini.'
             : 'Đã kiểm tra nhanh thông tin nguồn. Bấm "Quét sâu Nhạc & Hình (AI)" để phân tích sâu mẫu âm thanh.';
     };
 
@@ -8667,7 +8670,7 @@ async function openCopyrightReportDialog(video, card) {
 
     deepScanBtn.onclick = async () => {
         deepScanBtn.disabled = true;
-        deepScanBtn.textContent = '⏳ Đang quét Nhạc & Hình…';
+        deepScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Đang quét Nhạc &amp; Hình…</span>`;
         try {
             const reqJson = (path, opts) => window.reupEngineClient.json(path, opts);
             const report = await checkVideoCopyrightWithEngine(reqJson, {
@@ -8677,7 +8680,7 @@ async function openCopyrightReportDialog(video, card) {
             renderReport(report);
         } finally {
             deepScanBtn.disabled = false;
-            deepScanBtn.textContent = '🔍 Quét sâu Nhạc & Hình (AI)';
+            deepScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span>`;
         }
     };
 
@@ -8722,7 +8725,8 @@ function ensureBatchAutoPublishDialog() {
                         <div class="batch-ap-sec-head">
                             <h3>1. Chế độ xử lý &amp; cấu hình video</h3>
                             <button type="button" class="batch-ap-open-config-btn" id="batchApOpenConfigBtn" title="Mở bảng Thiết lập video để tự chỉnh Giọng đọc, Phụ đề, Ngôn ngữ, Vùng mờ, Logo cho cả loạt video">
-                                ⚙️ Mở bảng tự cấu hình
+                                ${copyrightIconSvg('sliders', 13)}
+                                <span>Mở bảng tự cấu hình</span>
                             </button>
                         </div>
                         <div class="batch-ap-grid-2">
@@ -8827,13 +8831,16 @@ function ensureBatchAutoPublishDialog() {
                         </div>
                         <div class="batch-ap-thumb-actions">
                             <button type="button" class="btn secondary" id="batchApCheckCopyrightBtn" title="Kiểm tra bản quyền Video & Nhạc cho toàn bộ danh sách tập">
-                                🛡️ Tra bản quyền
+                                ${copyrightIconSvg('shield', 14)}
+                                <span>Tra bản quyền</span>
                             </button>
                             <button type="button" class="btn secondary" id="batchApToggleSourcePoolBtn" title="Mở kho video nguồn để kéo thả thay thế cho bất kỳ tập nào">
-                                🔄 Kho video nguồn
+                                ${copyrightIconSvg('swap', 14)}
+                                <span>Kho video nguồn</span>
                             </button>
                             <label class="btn secondary batch-ap-multi-upload">
-                                📁 Chọn nhiều ảnh bìa (Tập 1 → N)
+                                ${copyrightIconSvg('folder', 14)}
+                                <span>Chọn nhiều ảnh bìa (Tập 1 → N)</span>
                                 <input type="file" id="batchApMultiThumbInput" accept="image/jpeg,image/png,image/webp" multiple hidden>
                             </label>
                             <button type="button" class="btn secondary" id="batchApClearThumbsBtn">Xóa ảnh</button>
@@ -8858,7 +8865,7 @@ function ensureBatchAutoPublishDialog() {
                 <div class="batch-ap-footer-btns">
                     <button type="button" class="btn secondary" id="batchApStopBtn" hidden>Dừng sau bước hiện tại</button>
                     <button type="button" class="btn secondary" id="batchApCancelBtn">Đóng</button>
-                    <button type="submit" class="btn primary" id="batchApStartBtn">🚀 Bắt đầu tự động 100%</button>
+                    <button type="submit" class="btn primary" id="batchApStartBtn">${copyrightIconSvg('bolt', 14)}<span>Bắt đầu tự động 100%</span></button>
                 </div>
             </footer>
         </form>
@@ -9046,7 +9053,7 @@ async function openBatchAutoPublishDialog() {
             item.title = 'Kéo thả video này xuống Tập bất kỳ bên dưới để thay thế';
             item.innerHTML = `
                 <div class="batch-ap-pool-thumb">
-                    ${cover ? `<img src="${escapeHtml(cover)}" alt="">` : '<span>🎬</span>'}
+                    ${cover ? `<img src="${escapeHtml(cover)}" alt="">` : `<span>${copyrightIconSvg('film', 16)}</span>`}
                     ${inUseIdx !== -1 ? `<em class="batch-ap-pool-tag">Đang ở Tập ${startEp + inUseIdx}</em>` : '<em class="batch-ap-pool-tag is-free">Kéo để thay</em>'}
                 </div>
                 <span class="batch-ap-pool-title">${escapeHtml(srcVideo.title || srcVideo.video_id)}</span>
@@ -9132,8 +9139,8 @@ async function openBatchAutoPublishDialog() {
                 has_blur_region: Boolean(currentResolvedCfg.blur_region),
             });
             const crShortLabel = crReport.overall_risk === 'high'
-                ? '🔴 Cảnh báo Bản quyền'
-                : (crReport.overall_risk === 'medium' ? '🟡 Lưu ý nhạc/logo' : '🟢 Bản quyền: An toàn');
+                ? 'Cảnh báo Bản quyền'
+                : (crReport.overall_risk === 'medium' ? 'Lưu ý nhạc/logo' : 'Bản quyền: An toàn');
 
             const row = document.createElement('div');
             row.className = `batch-ap-ep-row is-${stateInfo.status}`;
@@ -9155,7 +9162,7 @@ async function openBatchAutoPublishDialog() {
                 <label class="batch-ap-ep-thumb-wrap ${thumbUrl ? 'has-thumb' : 'is-empty'}" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
                     ${thumbUrl
                         ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb"><span class="batch-ap-ep-thumb-btn">${hasCustomThumb ? 'Đổi ảnh' : 'Tự lấy trong video'}</span>`
-                        : `<span class="batch-ap-ep-thumb-empty">🎞️ Tự lấy trong video</span>`}
+                        : `<span class="batch-ap-ep-thumb-empty">${copyrightIconSvg('film', 12)}<span>Tự lấy trong video</span></span>`}
                     <input type="file" accept="image/jpeg,image/png,image/webp" data-slot-index="${idx}" hidden>
                 </label>
                 <div class="batch-ap-ep-info">
@@ -9168,7 +9175,8 @@ async function openBatchAutoPublishDialog() {
                 </div>
                 <div class="batch-ap-ep-status">
                     <button type="button" class="batch-ap-cr-pill" data-risk="${escapeHtml(crReport.overall_risk)}" title="${escapeHtml((crReport.warnings[0] || 'Bấm để xem chi tiết kiểm tra bản quyền Video & Nhạc'))}">
-                        ${escapeHtml(crShortLabel)}
+                        <i class="cr-status-dot"></i>
+                        <span>${escapeHtml(crShortLabel)}</span>
                     </button>
                     <div class="batch-ap-ep-move-btns">
                         <button type="button" class="batch-ap-move-btn" data-dir="-1" title="Đưa lên Tập ${epNum - 1}" ${idx === 0 || batchRunning ? 'disabled' : ''}>↑</button>
@@ -9366,7 +9374,7 @@ async function openBatchAutoPublishDialog() {
             const ordered = getOrderedVideos();
             if (!ordered.length) return;
             checkBatchCopyrightBtn.disabled = true;
-            checkBatchCopyrightBtn.textContent = '⏳ Đang tra bản quyền…';
+            checkBatchCopyrightBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Đang tra bản quyền…</span>`;
             try {
                 const currentResolvedCfg = resolveSavedBatchProcessConfig(
                     presetSelect.value === '__open_custom__' ? '' : presetSelect.value,
@@ -9393,16 +9401,16 @@ async function openBatchAutoPublishDialog() {
                 });
                 overallStatusEl.hidden = false;
                 if (highCount > 0) {
-                    overallStatusEl.textContent = `🚨 Cảnh báo: Có ${highCount}/${ordered.length} tập có nguy cơ Bản quyền cao (Nhạc/Hình). Hãy chọn chế độ "Voice + Phụ đề" và bấm vào nhãn Bản quyền trên tập đó để xem chi tiết!`;
+                    overallStatusEl.textContent = `Cảnh báo: Có ${highCount}/${ordered.length} tập có nguy cơ Bản quyền cao (Nhạc/Hình). Hãy chọn chế độ "Voice + Phụ đề" và bấm vào nhãn Bản quyền trên tập đó để xem chi tiết!`;
                 } else if (medCount > 0) {
-                    overallStatusEl.textContent = `⚠️ Lưu ý: Có ${medCount}/${ordered.length} tập cần lưu ý nhạc nền/logo gốc. Khuyên dùng Voice + Phụ đề (hạ âm gốc ≤ 8%) và bật làm mờ Logo.`;
+                    overallStatusEl.textContent = `Lưu ý: Có ${medCount}/${ordered.length} tập cần lưu ý nhạc nền/logo gốc. Khuyên dùng Voice + Phụ đề (hạ âm gốc ≤ 8%) và bật làm mờ Logo.`;
                 } else {
-                    overallStatusEl.textContent = `🟢 Đã kiểm tra ${ordered.length}/${ordered.length} tập: Cấu hình hiện tại An toàn (Nguy cơ dính bản quyền thấp).`;
+                    overallStatusEl.textContent = `Đã kiểm tra ${ordered.length}/${ordered.length} tập: Cấu hình hiện tại An toàn (Nguy cơ dính bản quyền thấp).`;
                 }
                 renderEpisodeRows();
             } finally {
                 checkBatchCopyrightBtn.disabled = false;
-                checkBatchCopyrightBtn.textContent = '🛡️ Tra bản quyền';
+                checkBatchCopyrightBtn.innerHTML = `${copyrightIconSvg('shield', 14)}<span>Tra bản quyền</span>`;
             }
         };
     }
@@ -9504,7 +9512,7 @@ async function openBatchAutoPublishDialog() {
         batchAutoPublishStopRequested = false;
         startBtn.disabled = true;
         startBtn.classList.add('is-processing');
-        startBtn.textContent = '⏳ Đang xử lý…';
+        startBtn.innerHTML = `${copyrightIconSvg('bolt', 14)}<span>Đang xử lý…</span>`;
         cancelBtn.disabled = false;
         cancelBtn.textContent = 'Ẩn chạy ngầm';
         closeBtn.disabled = false;
@@ -9530,7 +9538,7 @@ async function openBatchAutoPublishDialog() {
 
                 const updateEpisodeState = (status, text, links = []) => {
                     episodeStates.set(video.video_id, { status, text, links });
-                    startBtn.textContent = `⏳ Đang xử lý (Tập ${epNum} · ${index + 1}/${ordered.length})…`;
+                    startBtn.innerHTML = `${copyrightIconSvg('bolt', 14)}<span>Đang xử lý (Tập ${epNum} · ${index + 1}/${ordered.length})…</span>`;
                     renderEpisodeRows();
                     renderBatchBar(`${stepPrefix} · ${text}`);
                     overallStatusEl.textContent = `${stepPrefix}: ${text}`;
@@ -9631,13 +9639,13 @@ async function openBatchAutoPublishDialog() {
 
             overallStatusEl.textContent = batchAutoPublishStopRequested
                 ? `Đã dừng theo yêu cầu. Hoàn tất ${completedCount}/${ordered.length} tập.`
-                : `🎉 Hoàn tất tự động hóa ${completedCount}/${ordered.length} tập!`;
+                : `Hoàn tất tự động hóa ${completedCount}/${ordered.length} tập!`;
             footerHintEl.textContent = overallStatusEl.textContent;
         } finally {
             batchRunning = false;
             startBtn.disabled = false;
             startBtn.classList.remove('is-processing');
-            startBtn.textContent = '🚀 Bắt đầu tự động 100%';
+            startBtn.innerHTML = `${copyrightIconSvg('bolt', 14)}<span>Bắt đầu tự động 100%</span>`;
             cancelBtn.disabled = false;
             cancelBtn.textContent = 'Đóng';
             closeBtn.disabled = false;

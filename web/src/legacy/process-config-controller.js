@@ -3,7 +3,7 @@ import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
 import { defaultVoiceForLanguage, isVoiceCompatibleWithLanguage, playVoicePreview, renderVoiceOptionsHtml } from '../lib/tts-voices.js';
 import { getSubtitlePreviewData, sampleLinesForLanguage } from '../lib/subtitle-style-previews.js';
-import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine } from '../lib/copyright-checker.js';
+import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine, copyrightIconSvg } from '../lib/copyright-checker.js';
 import {
     clearLastConfig,
     mergeSectionIntoConfig,
@@ -2370,17 +2370,17 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!copyrightCard || !report) return;
         copyrightCard.dataset.risk = report.overall_risk || 'low';
         if (copyrightBadge) {
-            copyrightBadge.textContent = report.badge_label || '🟢 An toàn';
             copyrightBadge.dataset.risk = report.overall_risk || 'low';
+            copyrightBadge.innerHTML = `<i class="cr-status-dot"></i><span>${report.badge_label || 'An toàn'}</span>`;
         }
         const riskVi = level => (level === 'high' ? 'Nguy cơ cao' : level === 'medium' ? 'Cần lưu ý' : 'An toàn');
         if (copyrightMusicPill) {
-            copyrightMusicPill.textContent = `🎵 Nhạc: ${riskVi(report.music_risk)} (${report.music_score || 0}%)`;
             copyrightMusicPill.dataset.risk = report.music_risk || 'low';
+            copyrightMusicPill.innerHTML = `${copyrightIconSvg('music', 13)}<span>Nhạc: ${riskVi(report.music_risk)} (${report.music_score || 0}%)</span>`;
         }
         if (copyrightVisualPill) {
-            copyrightVisualPill.textContent = `🎬 Hình ảnh: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)`;
             copyrightVisualPill.dataset.risk = report.visual_risk || 'low';
+            copyrightVisualPill.innerHTML = `${copyrightIconSvg('film', 13)}<span>Hình ảnh: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)</span>`;
         }
         if (copyrightMusicNote) {
             copyrightMusicNote.textContent = report.detected_music ? `· ${report.detected_music}` : '';
@@ -2418,7 +2418,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         copyrightScanBtn.onclick = async () => {
             if (!isCurrent()) return;
             copyrightScanBtn.disabled = true;
-            copyrightScanBtn.textContent = '⏳ Đang quét Nhạc & Hình…';
+            copyrightScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Đang quét Nhạc &amp; Hình…</span>`;
             try {
                 const report = await checkVideoCopyrightWithEngine(requestJson, {
                     ...collectCopyrightCheckPayload(),
@@ -2430,7 +2430,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             } finally {
                 if (isCurrent()) {
                     copyrightScanBtn.disabled = false;
-                    copyrightScanBtn.textContent = '🔍 Quét sâu Nhạc & Hình (AI)';
+                    copyrightScanBtn.innerHTML = `${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span>`;
                 }
             }
         };

@@ -5,9 +5,38 @@ const STUDIO_VISUAL_REGEX = /\b(?:Tencent Video|腾讯视频|iQIYI|爱奇艺|You
 const MUSIC_KEYWORD_REGEX = /(?:\b(?:mv|ost|soundtrack|remix|cover|dj|edm|bgm|nhạc trẻ|nhạc hoa|nhạc nền|抖音神曲|op|ed|opening|ending)\b|♫|♪|🎵|🎶|🎧)/i;
 
 export function riskLabelFromLevel(level) {
-    if (level === 'high') return '🔴 Nguy cơ Bản quyền cao';
-    if (level === 'medium') return '🟡 Lưu ý Bản quyền';
-    return '🟢 An toàn (Nguy cơ thấp)';
+    if (level === 'high') return 'Nguy cơ Bản quyền cao';
+    if (level === 'medium') return 'Lưu ý Bản quyền';
+    return 'An toàn (Nguy cơ thấp)';
+}
+
+export function copyrightIconSvg(name, size = 14) {
+    const attrs = `viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"`;
+    if (name === 'shield') {
+        return `<svg ${attrs}><path d="M12 3l7 3v6c0 5-3.5 8.5-7 9.5C8.5 20.5 5 17 5 12V6l7-3z"/><path d="M9.5 12l1.8 1.8 3.7-3.8"/></svg>`;
+    }
+    if (name === 'music') {
+        return `<svg ${attrs}><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>`;
+    }
+    if (name === 'film') {
+        return `<svg ${attrs}><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 4v16M17 4v16M3 9h4M17 9h4M3 15h4M17 15h4"/></svg>`;
+    }
+    if (name === 'scan') {
+        return `<svg ${attrs}><path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M16 4h2a2 2 0 0 1 2 2v2M16 20h2a2 2 0 0 0 2-2v-2"/><circle cx="12" cy="12" r="3"/></svg>`;
+    }
+    if (name === 'sliders') {
+        return `<svg ${attrs}><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>`;
+    }
+    if (name === 'folder') {
+        return `<svg ${attrs}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>`;
+    }
+    if (name === 'swap') {
+        return `<svg ${attrs}><path d="M7 10l-3-3 3-3"/><path d="M4 7h13a3 3 0 0 1 3 3v1"/><path d="M17 14l3 3-3 3"/><path d="M20 17H7a3 3 0 0 1-3-3v-1"/></svg>`;
+    }
+    if (name === 'bolt') {
+        return `<svg ${attrs}><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>`;
+    }
+    return `<svg ${attrs}><rect x="4" y="4" width="16" height="16" rx="3"/></svg>`;
 }
 
 export function analyzeVideoCopyrightRisk({
@@ -128,10 +157,10 @@ export function analyzeVideoCopyrightRisk({
     const overallRisk = levelOf(overallScore);
 
     if (musicRisk === 'high') {
-        warnings.unshift('⚠️ Cảnh báo: Nguy cơ cao dính bản quyền Âm nhạc (YouTube Content ID Audio Claim).');
+        warnings.unshift('Cảnh báo: Nguy cơ cao dính bản quyền Âm nhạc (YouTube Content ID Audio Claim).');
     }
     if (visualRisk === 'high') {
-        warnings.push('⚠️ Cảnh báo: Hình ảnh video có nguy cơ trùng bản quyền phim/chương trình hoặc chứa logo nhà đài.');
+        warnings.push('Cảnh báo: Hình ảnh video có nguy cơ trùng bản quyền phim/chương trình hoặc chứa logo nhà đài.');
     }
     if (!warnings.length && overallRisk === 'medium') {
         warnings.push('Lưu ý: Video có khả năng chứa nhạc nền BGM hoặc logo gốc. Nên dùng Lồng tiếng AI + hạ âm gốc ≤ 8%.');

@@ -1,5 +1,6 @@
 // Loaded only when the user opens video processing settings.
 import { TARGET_LANGUAGE_OPTIONS, renderVoiceOptionsHtml } from '../lib/tts-voices';
+import { copyrightIconSvg } from '../lib/copyright-checker';
 
 function renderTargetLanguageOptionsHtml() {
     return TARGET_LANGUAGE_OPTIONS.map(
@@ -130,21 +131,22 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             <section class="process-copyright-card" id="processCopyrightCard" aria-label="Kiểm tra bản quyền Video và Nhạc YouTube">
                 <div class="process-copyright-head">
                     <div class="process-copyright-title-wrap">
-                        <strong>🛡️ Tra bản quyền Video &amp; Nhạc YouTube</strong>
-                        <span class="process-copyright-badge" id="processCopyrightBadge">Đang đánh giá…</span>
+                        <span class="process-copyright-icon-box">${copyrightIconSvg('shield', 15)}</span>
+                        <strong>Tra bản quyền Video &amp; Nhạc YouTube</strong>
+                        <span class="process-copyright-badge" id="processCopyrightBadge"><i class="cr-status-dot"></i><span>Đang đánh giá…</span></span>
                     </div>
                     <div class="process-copyright-actions">
                         <button type="button" class="btn secondary process-copyright-scan-btn" id="processCopyrightScanBtn" title="Trích xuất mẫu âm thanh & khung hình gửi AI kiểm tra bản quyền nhạc và hình ảnh">
-                            🔍 Quét sâu Nhạc &amp; Hình (AI)
+                            ${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span>
                         </button>
                         <button type="button" class="btn secondary process-copyright-fix-btn" id="processCopyrightFixBtn" hidden title="Tự động hạ âm gốc xuống 5%, bật lồng tiếng AI và bật làm mờ logo để né Content ID">
-                            ⚡ Áp dụng cấu hình Né Bản Quyền
+                            ${copyrightIconSvg('bolt', 14)}<span>Áp dụng cấu hình Né Bản Quyền</span>
                         </button>
                     </div>
                 </div>
                 <div class="process-copyright-metrics">
-                    <span class="process-copyright-pill" id="processCopyrightMusicPill">Nhạc: Đang kiểm tra</span>
-                    <span class="process-copyright-pill" id="processCopyrightVisualPill">Hình ảnh: Đang kiểm tra</span>
+                    <span class="process-copyright-pill" id="processCopyrightMusicPill">${copyrightIconSvg('music', 13)}<span>Nhạc: Đang kiểm tra</span></span>
+                    <span class="process-copyright-pill" id="processCopyrightVisualPill">${copyrightIconSvg('film', 13)}<span>Hình ảnh: Đang kiểm tra</span></span>
                     <span class="process-copyright-music-note" id="processCopyrightMusicNote"></span>
                 </div>
                 <ul class="process-copyright-warnings" id="processCopyrightWarnings"></ul>

@@ -38,7 +38,7 @@ test('analyzeVideoCopyrightRisk drops risk to low when AI voiceover + 5% origina
 
     assert.equal(report.music_risk, 'low');
     assert.equal(report.overall_risk, 'low');
-    assert.equal(report.badge_label, '🟢 An toàn (Nguy cơ thấp)');
+    assert.equal(report.badge_label, 'An toàn (Nguy cơ thấp)');
 });
 
 test('checkVideoCopyrightWithEngine merges AI deep scan results from Local Engine', async () => {
