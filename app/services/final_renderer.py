@@ -6296,9 +6296,7 @@ def build_video_filter(
             by = int(box["y"])
             bw = int(box["width"])
             bh = int(box["height"])
-            if erase_mode == "inpaint":
-                continue
-            if erase_mode == "delogo" and (dl := _delogo_expr(bx, by, bw, bh, video_width, video_height)):
+            if erase_mode in ("delogo", "inpaint") and (dl := _delogo_expr(bx, by, bw, bh, video_width, video_height)):
                 out_label = f"wm_out_{index}"
                 parts.append(f"[{current}]{dl}[{out_label}]")
                 current = out_label

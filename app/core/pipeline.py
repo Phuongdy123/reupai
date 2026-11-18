@@ -4316,18 +4316,45 @@ def pipeline(
         effective_blur_mode = str(config.get("blur_mode") or "blur").strip().lower() or "blur"
         if effective_blur_mode == "inpaint":
             try:
+                from services import final_renderer as _fr_norm
                 from services.video_inpainter import inpaint_video_regions
+                norm_layout = _fr_norm.normalize_region(region)
+                vid_info = norm_layout.get("video") or {}
+                vw = int(vid_info.get("width") or 1280)
+                vh = int(vid_info.get("height") or 720)
+                def _to_px_box(raw_box):
+                    if not isinstance(raw_box, dict):
+                        return None
+                    try:
+                        bx = float(raw_box.get("x", 0))
+                        by = float(raw_box.get("y", 0))
+                        bw = float(raw_box.get("width", 0))
+                        bh = float(raw_box.get("height", 0))
+                    except (TypeError, ValueError):
+                        return None
+                    if 0 <= bx <= 1.0 and 0 <= by <= 1.0 and 0 < bw <= 1.0 and 0 < bh <= 1.0:
+                        bx *= vw
+                        by *= vh
+                        bw *= vw
+                        bh *= vh
+                    if bw <= 2 or bh <= 2:
+                        return None
+                    return {"x": int(round(bx)), "y": int(round(by)), "width": int(round(bw)), "height": int(round(bh))}
+
                 inpaint_boxes = []
-                blur_rect = (region or {}).get("blur") if isinstance(region, dict) else None
-                if isinstance(blur_rect, dict) and (region or {}).get("blur_enabled", True):
-                    inpaint_boxes.append(blur_rect)
-                if isinstance(config.get("custom_blur_region"), dict):
-                    inpaint_boxes.append(config["custom_blur_region"])
-                if isinstance(config.get("secondary_sub_region"), dict) and config.get("secondary_sub_blur", True):
-                    inpaint_boxes.append(config["secondary_sub_region"])
-                vid_info = (region or {}).get("video") if isinstance(region, dict) else {}
-                vw = int((vid_info or {}).get("width") or 1280)
-                vh = int((vid_info or {}).get("height") or 720)
+                blur_rect = norm_layout.get("blur")
+                if norm_layout.get("blur_enabled", True) and isinstance(blur_rect, dict):
+                    px_blur = _to_px_box(blur_rect)
+                    if px_blur:
+                        inpaint_boxes.append(px_blur)
+                for extra_key, enabled in (
+                    ("custom_blur_region", True),
+                    ("secondary_sub_region", bool(config.get("secondary_sub_blur", True))),
+                ):
+                    if enabled and isinstance(config.get(extra_key), dict):
+                        px_extra = _to_px_box(config[extra_key])
+                        if px_extra:
+                            inpaint_boxes.append(px_extra)
                 if inpaint_boxes:
                     write_progress(
                         job_dir,
@@ -4344,8 +4371,10 @@ def pipeline(
                         inpaint_boxes,
                         video_width=vw,
                         video_height=vh,
-                        text_aware=True,
+                        text_aware=False,
                     )
+                else:
+                    effective_blur_mode = "delogo"
             except Exception as inpaint_err:
                 print(f"[INPAINT FALLBACK] {inpaint_err}")
                 effective_blur_mode = "delogo"

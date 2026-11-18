@@ -87,7 +87,6 @@ def inpaint_video_regions(
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             writer = cv2.VideoWriter(str(temp_silent), fourcc, fps, (w, h))
             clamped = [c for c in (_clamp_delogo_box(b, w, h) for b in valid_boxes) if c]
-            kernel = np.ones((3, 3), np.uint8)
             try:
                 while True:
                     ok, frame = cap.read()
@@ -95,22 +94,10 @@ def inpaint_video_regions(
                         break
                     mask = np.zeros((h, w), dtype=np.uint8)
                     for bx, by, bw, bh in clamped:
-                        if text_aware:
-                            roi = frame[by:by + bh, bx:bx + bw]
-                            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-                            # Detect bright subtitle text and dark outlines inside ROI
-                            _, bright = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
-                            edges = cv2.Canny(gray, 90, 200)
-                            combined = cv2.bitwise_or(bright, edges)
-                            combined = cv2.dilate(combined, kernel, iterations=2)
-                            if int(np.count_nonzero(combined)) > 12:
-                                mask[by:by + bh, bx:bx + bw] = combined
-                            else:
-                                mask[by:by + bh, bx:bx + bw] = 255
-                        else:
-                            mask[by:by + bh, bx:bx + bw] = 255
+                        # Mask the full ROI box so neither bright text nor dark outlines leak back into the fill
+                        mask[by:by + bh, bx:bx + bw] = 255
                     if int(np.count_nonzero(mask)) > 0:
-                        frame = cv2.inpaint(frame, mask, 3, cv2.INPAINT_TELEA)
+                        frame = cv2.inpaint(frame, mask, 9, cv2.INPAINT_TELEA)
                     writer.write(frame)
             finally:
                 cap.release()
