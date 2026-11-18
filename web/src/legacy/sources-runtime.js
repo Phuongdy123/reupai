@@ -8324,13 +8324,24 @@ function renderBatchBar(
         return;
     }
 
+    if (!batchRunning) {
+        const validIds = new Set(
+            currentVideos.map(v => String(v.video_id)),
+        );
+        for (const id of [...selectedVideoIds]) {
+            if (!validIds.has(String(id))) {
+                selectedVideoIds.delete(id);
+            }
+        }
+    }
+
     const count = (
-        selectedVideoIds.size
+        selectedVideos().length
     );
 
     bar.classList.toggle(
         'open',
-        count > 0
+        count > 0 || batchRunning
     );
 
     bar.classList.toggle(
@@ -12363,10 +12374,7 @@ function buildUiState() {
             window.scrollY
             || 0,
 
-        selectedVideoIds:
-            [
-                ...selectedVideoIds
-            ],
+        selectedVideoIds: [],
 
         // Snapshot ngan gon: source page chi 10 video,
         // library view gioi han 100 de localStorage khong phinh.
@@ -12564,21 +12572,6 @@ function applyUiStateFields(
 
     selectedVideoIds.clear();
 
-    for (
-        const videoId
-        of (
-            state.selectedVideoIds
-            || []
-        )
-    ) {
-
-        selectedVideoIds.add(
-            String(
-                videoId
-            )
-        );
-    }
-
     const sourceInput = (
         document.getElementById(
             'sourceUrl'
@@ -12683,6 +12676,7 @@ function applyUiStateFields(
 function resetSourceSessionData() {
 
     currentVideos = [];
+    selectedVideoIds.clear();
     for (const key of Object.keys(pageCache)) {
         delete pageCache[key];
     }
@@ -12695,6 +12689,7 @@ function resetSourceSessionData() {
     lastLoadedSourceUrl = '';
     lastLoadedInputMode = 'channel';
     currentView = 'source';
+    renderBatchBar();
 }
 
 
