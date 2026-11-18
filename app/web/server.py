@@ -513,6 +513,9 @@ class ProcessRequest(BaseModel):
         "auto", "zh", "en", "ja", "ko", "th", "id", "es", "pt", "fr", "de",
         "ru", "it", "hi", "ar", "tr", "ms", "vi",
     ] = "auto"
+    target_language: Literal[
+        "vi", "en", "zh", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru",
+    ] = "vi"
     transcript_source: Literal["audio", "video_subtitles"] = "audio"
     # Optional Whisper/OCR transcript reviewed in the web editor. When present,
     # the pipeline uses it as the source SRT and skips a second recognition pass.

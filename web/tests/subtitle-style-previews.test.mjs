@@ -17,6 +17,13 @@ test('subtitle preview exposes all 5 rendered styles and 3 Vietnamese sample lin
   }
 });
 
+import {
+  TARGET_LANGUAGE_OPTIONS,
+  defaultVoiceForLanguage,
+  isVoiceCompatibleWithLanguage,
+  renderVoiceOptionsHtml,
+} from '../src/lib/tts-voices.js';
+
 test('subtitle preview falls back safely and scales proportionally with font size', () => {
   const unknown = getSubtitlePreviewData('unknown_style', '', 4);
   assert.equal(unknown.spec.id, 'minimal');
@@ -26,4 +33,17 @@ test('subtitle preview falls back safely and scales proportionally with font siz
   const large = getSubtitlePreviewData('box', '36', 0);
   assert.ok(large.previewFontPx > small.previewFontPx);
   assert.ok(large.stageFontPx > small.stageFontPx);
+
+  const englishPreview = getSubtitlePreviewData('cinema', '', 0, 'en');
+  assert.ok(englishPreview.sampleText.includes('Welcome back'));
+});
+
+test('target language options default to vi and expose English & multi-language dubbing voices', () => {
+  assert.equal(TARGET_LANGUAGE_OPTIONS[0].value, 'vi');
+  assert.ok(TARGET_LANGUAGE_OPTIONS.some((item) => item.value === 'en'));
+  assert.equal(defaultVoiceForLanguage('vi'), 'Trúc Ly');
+  assert.equal(defaultVoiceForLanguage('en'), 'en-US-JennyNeural');
+  assert.equal(isVoiceCompatibleWithLanguage('en-US-GuyNeural', 'en'), true);
+  assert.equal(isVoiceCompatibleWithLanguage('Trúc Ly', 'en'), false);
+  assert.ok(renderVoiceOptionsHtml('en').includes('en-US-JennyNeural'));
 });

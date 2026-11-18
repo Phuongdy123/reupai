@@ -170,7 +170,62 @@ EDGE_VOICE_PROFILES = {
     "nam_minh_tram": ("vi-VN-NamMinhNeural", "-6Hz", "+4%"),
     "hoai_my_shorts": ("vi-VN-HoaiMyNeural", "+8Hz", "+8%"),
     "nam_minh_shorts": ("vi-VN-NamMinhNeural", "+8Hz", "+8%"),
+    # English voices
+    "en-US-JennyNeural": ("en-US-JennyNeural", "+0Hz", "+0%"),
+    "en-US-GuyNeural": ("en-US-GuyNeural", "+0Hz", "+0%"),
+    "en-US-AriaNeural": ("en-US-AriaNeural", "+0Hz", "+0%"),
+    "en-US-AndrewNeural": ("en-US-AndrewNeural", "+0Hz", "+0%"),
+    "en-GB-SoniaNeural": ("en-GB-SoniaNeural", "+0Hz", "+0%"),
+    "en-GB-RyanNeural": ("en-GB-RyanNeural", "+0Hz", "+0%"),
+    # Multi-language Edge-TTS voices
+    "zh-CN-XiaoxiaoNeural": ("zh-CN-XiaoxiaoNeural", "+0Hz", "+0%"),
+    "zh-CN-YunxiNeural": ("zh-CN-YunxiNeural", "+0Hz", "+0%"),
+    "ja-JP-NanamiNeural": ("ja-JP-NanamiNeural", "+0Hz", "+0%"),
+    "ja-JP-KeitaNeural": ("ja-JP-KeitaNeural", "+0Hz", "+0%"),
+    "ko-KR-SunHiNeural": ("ko-KR-SunHiNeural", "+0Hz", "+0%"),
+    "ko-KR-InJoonNeural": ("ko-KR-InJoonNeural", "+0Hz", "+0%"),
+    "th-TH-PremwadeeNeural": ("th-TH-PremwadeeNeural", "+0Hz", "+0%"),
+    "id-ID-GadisNeural": ("id-ID-GadisNeural", "+0Hz", "+0%"),
+    "fr-FR-DeniseNeural": ("fr-FR-DeniseNeural", "+0Hz", "+0%"),
+    "es-ES-ElviraNeural": ("es-ES-ElviraNeural", "+0Hz", "+0%"),
+    "de-DE-KatjaNeural": ("de-DE-KatjaNeural", "+0Hz", "+0%"),
+    "ru-RU-SvetlanaNeural": ("ru-RU-SvetlanaNeural", "+0Hz", "+0%"),
+    "pt-BR-FranciscaNeural": ("pt-BR-FranciscaNeural", "+0Hz", "+0%"),
 }
+
+DEFAULT_VOICE_BY_LANGUAGE = {
+    "vi": "Trúc Ly",
+    "en": "en-US-JennyNeural",
+    "zh": "zh-CN-XiaoxiaoNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "ko": "ko-KR-SunHiNeural",
+    "th": "th-TH-PremwadeeNeural",
+    "id": "id-ID-GadisNeural",
+    "fr": "fr-FR-DeniseNeural",
+    "es": "es-ES-ElviraNeural",
+    "de": "de-DE-KatjaNeural",
+    "ru": "ru-RU-SvetlanaNeural",
+    "pt": "pt-BR-FranciscaNeural",
+}
+
+
+def default_voice_for_language(target_language):
+    code = str(target_language or "vi").strip().lower()
+    return DEFAULT_VOICE_BY_LANGUAGE.get(code, "Trúc Ly")
+
+
+def resolve_voice_for_target_language(voice_name, target_language=None):
+    normalized = normalize_voice_name(voice_name)
+    target = str(target_language or "vi").strip().lower() or "vi"
+    if target == "vi":
+        return normalized
+    if normalized in EDGE_VOICE_PROFILES and not normalized.startswith("vi-"):
+        return normalized
+    return default_voice_for_language(target)
+
+
+def _effective_tts_provider():
+    return "edge" if VOICE in EDGE_VOICE_PROFILES else TTS_PROVIDER
 
 
 def normalize_voice_name(value):
@@ -700,7 +755,7 @@ def generate_tts(
     output_path,
     engine=None,
 ):
-    provider = "edge" if VOICE in EDGE_VOICE_PROFILES else TTS_PROVIDER
+    provider = _effective_tts_provider()
 
     if provider not in {
         "vieneu",
@@ -1025,7 +1080,7 @@ def _parallel_onnx_enabled():
     if workers_env == "1":
         return False
     return (
-        TTS_PROVIDER == "vieneu"
+        _effective_tts_provider() == "vieneu"
         and VIENEU_BACKEND == "onnx"
         and TTS_ONNX_WORKERS > 1
     )
@@ -1107,7 +1162,7 @@ def create_tts_clips(
             if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
                 pending.append((index, subtitle_id, subtitle["text"], raw_wav))
         _generate_parallel_raw_tts(pending, on_progress=on_progress)
-    elif TTS_PROVIDER == "edge" and len(subtitles) > 1:
+    elif _effective_tts_provider() == "edge" and len(subtitles) > 1:
         pending_edge = []
         for subtitle in subtitles:
             raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
@@ -1271,7 +1326,7 @@ def create_tts_clips(
                 **subtitle,
 
                 "tts_provider":
-                    TTS_PROVIDER,
+                    _effective_tts_provider(),
 
                 "tts_voice":
                     VOICE,
@@ -1279,7 +1334,7 @@ def create_tts_clips(
                 "tts_backend":
                     (
                         VIENEU_BACKEND
-                        if TTS_PROVIDER
+                        if _effective_tts_provider()
                         == "vieneu"
                         else "edge"
                     ),

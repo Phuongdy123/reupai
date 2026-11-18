@@ -1,8 +1,8 @@
 // Loaded only when the user opens video processing settings.
 import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
-import { playVoicePreview } from '../lib/tts-voices.js';
-import { SUBTITLE_SAMPLE_LINES, getSubtitlePreviewData } from '../lib/subtitle-style-previews.js';
+import { defaultVoiceForLanguage, isVoiceCompatibleWithLanguage, playVoicePreview, renderVoiceOptionsHtml } from '../lib/tts-voices.js';
+import { getSubtitlePreviewData, sampleLinesForLanguage } from '../lib/subtitle-style-previews.js';
 import {
     clearLastConfig,
     mergeSectionIntoConfig,
@@ -131,6 +131,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processPreviewSeconds', defaults.preview_seconds || '');
     set('processFontSize', defaults.subtitle_font_size || '');
     set('processSourceLanguage', defaults.source_language || 'auto');
+    set('processTargetLanguage', defaults.target_language || 'vi');
     set('processTranslationModel', defaults.translation_model || 'gemini-3.1-flash-lite');
     const modelPicker = dialog.querySelector('#processTranslationModel');
     if (modelPicker) {
@@ -204,6 +205,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const toggleStageBtn = dialog.querySelector('#processToggleStageSubBtn');
         const togglePickerBtn = dialog.querySelector('#toggleProcessPicker');
         const styleSelect = dialog.querySelector('#processSubtitleStyle');
+        const targetLangSelect = dialog.querySelector('#processTargetLanguage');
         const fontSizeSelect = dialog.querySelector('#processFontSize');
         const titleEl = dialog.querySelector('#processSubPreviewTitle');
         const descEl = dialog.querySelector('#processSubPreviewDesc');
@@ -219,45 +221,48 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         let activeSample = 0;
         let previewHovering = false;
         let showOnVideoStage = false;
+        let renderedSampleLang = null;
 
-        if (sampleListRoot) {
-            sampleListRoot.innerHTML = '';
-            SUBTITLE_SAMPLE_LINES.forEach((line, index) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'process-sub-sample-item';
-                btn.dataset.subSample = String(index);
-                const badge = document.createElement('b');
-                badge.textContent = `Câu ${index + 1}`;
-                const copy = document.createElement('span');
-                copy.textContent = line;
-                btn.appendChild(badge);
-                btn.appendChild(copy);
-                btn.onclick = () => {
-                    activeSample = index;
-                    showOnVideoStage = true;
-                    renderSubtitlePreview();
-                };
-                sampleListRoot.appendChild(btn);
-            });
-        }
+        const rebuildSampleButtons = lines => {
+            if (sampleListRoot) {
+                sampleListRoot.innerHTML = '';
+                lines.forEach((line, index) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'process-sub-sample-item';
+                    btn.dataset.subSample = String(index);
+                    const badge = document.createElement('b');
+                    badge.textContent = `Câu ${index + 1}`;
+                    const copy = document.createElement('span');
+                    copy.textContent = line;
+                    btn.appendChild(badge);
+                    btn.appendChild(copy);
+                    btn.onclick = () => {
+                        activeSample = index;
+                        showOnVideoStage = true;
+                        renderSubtitlePreview();
+                    };
+                    sampleListRoot.appendChild(btn);
+                });
+            }
 
-        if (showcaseSampleRoot) {
-            showcaseSampleRoot.innerHTML = '';
-            SUBTITLE_SAMPLE_LINES.forEach((line, index) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.dataset.subSample = String(index);
-                btn.textContent = `Câu ${index + 1}`;
-                btn.title = line;
-                btn.onclick = () => {
-                    activeSample = index;
-                    showOnVideoStage = true;
-                    renderSubtitlePreview();
-                };
-                showcaseSampleRoot.appendChild(btn);
-            });
-        }
+            if (showcaseSampleRoot) {
+                showcaseSampleRoot.innerHTML = '';
+                lines.forEach((line, index) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.dataset.subSample = String(index);
+                    btn.textContent = `Câu ${index + 1}`;
+                    btn.title = line;
+                    btn.onclick = () => {
+                        activeSample = index;
+                        showOnVideoStage = true;
+                        renderSubtitlePreview();
+                    };
+                    showcaseSampleRoot.appendChild(btn);
+                });
+            }
+        };
 
         const syncChipContainer = (root, selectedStyle) => {
             root?.querySelectorAll('[data-sub-style]').forEach(btn => {
@@ -283,13 +288,19 @@ export async function openProcessConfig(video, card, mode, dependencies) {
 
         const renderSubtitlePreview = () => {
             if (signal.aborted) return;
+            const targetLang = targetLangSelect?.value || 'vi';
             const isSrtOnly = outputFormat?.value === 'srt';
             const isPicking = togglePickerBtn?.getAttribute('aria-pressed') === 'true';
-            const { spec, sampleIndex, sampleText, previewFontPx, stageFontPx } = getSubtitlePreviewData(
+            const { spec, lines, sampleIndex, sampleText, previewFontPx, stageFontPx } = getSubtitlePreviewData(
                 styleSelect.value,
                 fontSizeSelect?.value,
                 activeSample,
+                targetLang,
             );
+            if (renderedSampleLang !== targetLang) {
+                renderedSampleLang = targetLang;
+                rebuildSampleButtons(lines);
+            }
 
             if (titleEl) titleEl.textContent = spec.label;
             if (descEl) descEl.textContent = spec.description;
@@ -350,6 +361,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         styleSelect.addEventListener('input', renderSubtitlePreview, { signal });
         fontSizeSelect?.addEventListener('change', onUserStyleChange, { signal });
         fontSizeSelect?.addEventListener('input', renderSubtitlePreview, { signal });
+        targetLangSelect?.addEventListener('change', renderSubtitlePreview, { signal });
+        targetLangSelect?.addEventListener('input', renderSubtitlePreview, { signal });
         outputFormat?.addEventListener('change', renderSubtitlePreview, { signal });
         togglePickerBtn?.addEventListener('click', () => setTimeout(renderSubtitlePreview, 0), { signal });
         dialog.querySelectorAll('.process-inspector-tab').forEach(tab => {
@@ -363,7 +376,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const cycleTimer = setInterval(() => {
             const subTabOpen = Boolean(subPanel && !subPanel.hidden);
             if (!isCurrent() || previewHovering || (!showOnVideoStage && !subTabOpen)) return;
-            activeSample = (activeSample + 1) % SUBTITLE_SAMPLE_LINES.length;
+            const totalSamples = sampleLinesForLanguage(targetLangSelect?.value || 'vi').length;
+            activeSample = (activeSample + 1) % totalSamples;
             renderSubtitlePreview();
         }, 2600);
         signal.addEventListener('abort', () => clearInterval(cycleTimer), { once: true });
@@ -376,20 +390,47 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     set('processVoiceVolume', defaults.voice_volume ?? 1);
     set('processTtsSpeed', defaults.tts_speed ?? 1.00);
     set('processVoice', defaults.voice || 'Trúc Ly');
+    const targetLangSelect = dialog.querySelector('#processTargetLanguage');
     const voiceSelect = dialog.querySelector('#processVoice');
     const summaryVoiceSelect = dialog.querySelector('#processSummaryVoice');
+    const syncTargetLanguageVoices = (targetLang = 'vi', { preferredVoice = null } = {}) => {
+        const lang = String(targetLang || 'vi').trim().toLowerCase() || 'vi';
+        const optionsHtml = renderVoiceOptionsHtml(lang);
+        const currentVoice = preferredVoice ?? voiceSelect?.value ?? '';
+        const nextVoice = isVoiceCompatibleWithLanguage(currentVoice, lang)
+            ? currentVoice
+            : defaultVoiceForLanguage(lang);
+        if (voiceSelect) {
+            voiceSelect.innerHTML = optionsHtml;
+            voiceSelect.value = nextVoice;
+        }
+        if (summaryVoiceSelect) {
+            summaryVoiceSelect.innerHTML = optionsHtml;
+            summaryVoiceSelect.value = nextVoice;
+        }
+        dialog._renderSubtitleStylePreview?.();
+        outputSummary.refresh();
+    };
+    syncTargetLanguageVoices(targetLangSelect?.value || 'vi', { preferredVoice: defaults.voice || 'Trúc Ly' });
+    targetLangSelect?.addEventListener('change', () => {
+        syncTargetLanguageVoices(targetLangSelect.value);
+    }, { signal });
     if (summaryVoiceSelect && voiceSelect) {
         summaryVoiceSelect.value = voiceSelect.value || 'Trúc Ly';
         summaryVoiceSelect.onchange = () => {
             voiceSelect.value = summaryVoiceSelect.value;
             voiceSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+            if ((targetLangSelect?.value || 'vi') === 'vi') {
+                try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+            }
         };
         voiceSelect.addEventListener('change', () => {
             if (summaryVoiceSelect.value !== voiceSelect.value) {
                 summaryVoiceSelect.value = voiceSelect.value;
             }
-            try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+            if ((targetLangSelect?.value || 'vi') === 'vi') {
+                try { localStorage.setItem('reupai:default-voice', voiceSelect.value || 'Trúc Ly'); } catch {}
+            }
         });
     }
     const wizardBtn = dialog.querySelector('#processFlowWizardBtn');
@@ -1314,18 +1355,25 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             const sourceLanguage = transcriptSource?.value === 'video_subtitles'
                 ? dialog.querySelector('#processOcrLanguage')?.value || 'auto'
                 : dialog.querySelector('#processSourceLanguage')?.value || 'auto';
+            const targetLanguage = dialog.querySelector('#processTargetLanguage')?.value || 'vi';
+            const targetLanguageLabel = dialog.querySelector('#processTargetLanguage')?.selectedOptions?.[0]?.textContent?.replace(/\s*\(Mặc định\)\s*/gi, '').trim() || 'Tiếng Việt';
             for (let offset = 0; offset < pending.length; offset += 16) {
                 if (!isCurrent() || skipReviewRequested) return;
                 const batch = pending.slice(offset, offset + 16);
                 const done = lines.filter(line => line.translated_text != null).length;
-                reviewStatus.textContent = `Đang dịch sang tiếng Việt · ${done}/${lines.length} câu. Bạn có thể sửa các câu đã dịch.`;
+                reviewStatus.textContent = `Đang dịch sang ${targetLanguageLabel} · ${done}/${lines.length} câu. Bạn có thể sửa các câu đã dịch.`;
                 setReviewProgress(1, done / lines.length * 100);
-                const result = sourceLanguage === 'vi'
+                const result = (sourceLanguage !== 'auto' && sourceLanguage === targetLanguage)
                     ? { translations: batch.map(line => ({ id: line.id, text: line.text })) }
                     : await requestJson('/api/preview/subtitle-translation', {
                         method: 'POST', timeoutMs: 180000, headers: { 'Content-Type': 'application/json' },
                         signal: previewAbortController?.signal,
-                        body: JSON.stringify({ source_language: sourceLanguage, translation_model: dialog.querySelector('#processTranslationModel')?.value || 'gemini-3.1-flash-lite', lines: batch.map(line => ({ id: line.id, text: line.text })) }),
+                        body: JSON.stringify({
+                            source_language: sourceLanguage,
+                            target_language: targetLanguage,
+                            translation_model: dialog.querySelector('#processTranslationModel')?.value || 'gemini-3.1-flash-lite',
+                            lines: batch.map(line => ({ id: line.id, text: line.text })),
+                        }),
                     });
                 if (!isCurrent() || skipReviewRequested) return;
                 const translated = new Map((result.translations || []).map(item => [String(item.id), String(item.text || '').trim()]));
@@ -1510,6 +1558,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processPreviewSeconds', '');
             set('processFontSize', '');
             set('processSourceLanguage', 'auto');
+            set('processTargetLanguage', 'vi');
             set('processTranslationModel', 'gemini-3.1-flash-lite');
             set('processTranscriptSource', 'audio');
             set('processOutputFormat', 'video');
@@ -1528,8 +1577,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processOriginalVolume', 0.15);
             set('processVoiceVolume', 1);
             set('processTtsSpeed', 1.00);
-            set('processVoice', 'Trúc Ly');
-            if (summaryVoiceSelect) summaryVoiceSelect.value = 'Trúc Ly';
+            syncTargetLanguageVoices('vi', { preferredVoice: 'Trúc Ly' });
             set('processAspectRatio', '');
             set('processMusicUrl', '');
             set('processMusicVolume', 0.25);
@@ -1581,7 +1629,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
-            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTranslationModel', 'processTranscriptSource', 'processOutputFormat',
+            'processPreviewSeconds', 'processFontSize', 'processSourceLanguage', 'processTargetLanguage', 'processTranslationModel', 'processTranscriptSource', 'processOutputFormat',
             'processOcrLanguage', 'processOcrFps', 'processOcrConfidence', 'processOcrParallelism', 'processOcrSimilarity', 'processSubtitleStyle', 'processOriginalVolume',
             'processVoiceVolume', 'processTtsSpeed', 'processVoice',
             'processAspectRatio', 'processMusicUrl', 'processMusicVolume',
@@ -1657,9 +1705,10 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     set(id, value);
                 }
             });
-            if (summaryVoiceSelect && voiceSelect) {
-                summaryVoiceSelect.value = voiceSelect.value || 'Trúc Ly';
-            }
+            syncTargetLanguageVoices(
+                preset.processTargetLanguage || targetLangSelect?.value || 'vi',
+                { preferredVoice: preset.processVoice },
+            );
             intervalRoot.innerHTML = '';
             (Array.isArray(preset.blur_intervals) ? preset.blur_intervals : []).forEach(addInterval);
             if (['sub', 'custom', 'logo'].includes(preset.active_pick_mode)) {
@@ -2220,6 +2269,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             preview_seconds: value('processPreviewSeconds') ? Number(value('processPreviewSeconds')) : null,
             subtitle_font_size: value('processFontSize') ? Number(value('processFontSize')) : null,
             source_language: value('processSourceLanguage') || 'auto',
+            target_language: value('processTargetLanguage') || 'vi',
             translation_model: value('processTranslationModel') || 'gemini-3.1-flash-lite',
             transcript_source: value('processTranscriptSource') || 'audio',
             manual_transcript: reviewedTranscript.length ? reviewedTranscript : null,

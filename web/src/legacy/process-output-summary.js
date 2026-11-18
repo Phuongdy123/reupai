@@ -16,15 +16,17 @@ export function bindProcessOutputSummary(dialog, { mode, signal }) {
     const refresh = () => {
         if (signal?.aborted) return;
         const language = value('processSourceLanguage') || 'auto';
+        const targetLang = value('processTargetLanguage') || 'vi';
+        const targetLabel = selectedLabel('processTargetLanguage', 'Tiếng Việt').replace(/\s*\(Mặc định\)\s*/gi, '').trim();
         const transcriptSource = value('processTranscriptSource') || 'audio';
         const sourceLabel = transcriptSource === 'video_subtitles'
             ? `Chữ trên video · ${value('processOcrLanguage') === 'auto' ? 'đa ngôn ngữ' : selectedLabel('processOcrLanguage', 'Tự nhận diện')}`
             : 'Tự nhận diện lời thoại';
         const languageLabel = language === 'auto'
-            ? `${sourceLabel} → Tiếng Việt`
-            : language === 'vi'
-                ? `${sourceLabel} → Tiếng Việt`
-                : `${sourceLabel} · ${selectedLabel('processSourceLanguage', language)} → Tiếng Việt`;
+            ? `${sourceLabel} → ${targetLabel}`
+            : language === targetLang
+                ? `${sourceLabel} → ${targetLabel}`
+                : `${sourceLabel} · ${selectedLabel('processSourceLanguage', language)} → ${targetLabel}`;
         const width = Number(value('processBlurWidth'));
         const height = Number(value('processBlurHeight'));
         const blurPreset = value('processBlurPreset');

@@ -1749,18 +1749,22 @@ def translate_srt(
 
 
     translation_model="gemini-3.1-flash-lite",
+    target_language="vi",
 
 ):
 
 
 
+    target_language = str(target_language or "vi").strip().lower() or "vi"
     model_path = vietnamese_srt.with_suffix(".model.txt")
+    target_lang_path = vietnamese_srt.with_suffix(".target_lang.txt")
     previous_model = model_path.read_text(encoding="utf-8").strip() if model_path.is_file() else ""
+    previous_target_lang = target_lang_path.read_text(encoding="utf-8").strip() if target_lang_path.is_file() else "vi"
     if not previous_model and checkpoint_path.is_file():
         # An earlier run stopped mid-translation before the model marker existed;
         # its checkpoint is still valid, so resume instead of translating again.
         previous_model = translation_model
-    force = force or previous_model != translation_model
+    force = force or previous_model != translation_model or previous_target_lang != target_language
     if file_ok(vietnamese_srt) and not force:
 
 
@@ -1822,17 +1826,19 @@ def translate_srt(
 
 
 
-    if source_language == "vi":
+    if source_language != "auto" and source_language == target_language:
         vietnamese_srt.write_bytes(chinese_srt.read_bytes())
         return
     from services import translator
-    # Tie the checkpoint to the chosen model immediately, so a stopped run can
-    # resume with the same model rather than being treated as a model change.
+    # Tie the checkpoint to the chosen model and target language immediately, so a stopped run can
+    # resume with the same settings rather than being treated as a setting change.
     try:
         model_path.write_text(translation_model, encoding="utf-8")
+        target_lang_path.write_text(target_language, encoding="utf-8")
     except OSError:
         pass
     translator.SOURCE_LANGUAGE = source_language
+    translator.TARGET_LANGUAGE = target_language
 
 
 
@@ -1921,10 +1927,12 @@ def translate_srt(
 
 
         source_hash = translator.get_file_hash(rel(chinese_srt))
+        if target_language != "vi":
+            source_hash = f"{source_hash}_{target_language}"
 
 
 
-        translated = translator.translate_all(subtitles, source_hash, translation_model=translation_model)
+        translated = translator.translate_all(subtitles, source_hash, translation_model=translation_model, target_language=target_language)
 
 
 
@@ -1932,7 +1940,7 @@ def translate_srt(
 
 
 
-        translated = translator.translate_all(subtitles, translation_model=translation_model)
+        translated = translator.translate_all(subtitles, translation_model=translation_model, target_language=target_language)
 
 
 
@@ -3230,9 +3238,13 @@ def pipeline(
 
     translation_checkpoint = job_dir / "translation_checkpoint.json"
     source_language = config.get("source_language", "auto")
+    target_language = str(config.get("target_language") or "vi").strip().lower() or "vi"
     source_language_path = job_dir / "source_language.txt"
+    target_language_path = job_dir / "target_language.txt"
     previous_source_language = source_language_path.read_text(encoding="utf-8").strip() if source_language_path.is_file() else "auto"
+    previous_target_language = target_language_path.read_text(encoding="utf-8").strip() if target_language_path.is_file() else "vi"
     language_force = source_language != previous_source_language
+    target_language_force = target_language != previous_target_language
     transcript_source = config.get("transcript_source", "audio")
     transcription_signature_path = job_dir / "transcription_settings.sha256"
     if config.get("boost_gpu"):
@@ -3265,7 +3277,7 @@ def pipeline(
     )
     transcription_changed = transcription_signature != previous_transcription_signature
     transcription_force = force or language_force or transcription_changed
-    translation_force = force or language_force or transcription_changed
+    translation_force = force or language_force or target_language_force or transcription_changed
     if translation_force:
         translation_checkpoint.unlink(missing_ok=True)
 
@@ -3923,9 +3935,11 @@ def pipeline(
 
             source_language=config.get("source_language", "auto"),
             translation_model=config.get("translation_model", "gemini-3.1-flash-lite"),
+            target_language=target_language,
 
             )
             source_language_path.write_text(source_language, encoding="utf-8")
+            target_language_path.write_text(target_language, encoding="utf-8")
 
         if config.get("output_format") == "srt":
             from services.subtitle_export import export_subtitle_file
@@ -3989,10 +4003,16 @@ def pipeline(
 
 
 
+            from services import tts as tts_module
+            effective_voice = tts_module.resolve_voice_for_target_language(
+                config.get("voice"),
+                target_language=target_language,
+            )
             tts_fingerprint = stable_fingerprint({
                 "schema": 1,
                 "subtitle": file_fingerprint(vietnamese_srt),
-                "voice": config.get("voice") or "default",
+                "voice": effective_voice or "default",
+                "target_language": target_language,
                 "speed": float(config.get("tts_speed") or 1.00),
             })
             tts_force = bool(
@@ -4064,7 +4084,7 @@ def pipeline(
 
 
 
-                voice_name=config.get("voice"),
+                voice_name=effective_voice,
 
 
 

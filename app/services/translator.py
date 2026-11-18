@@ -72,6 +72,7 @@ if not os.getenv("GEMINI_API_KEY"):
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 SOURCE_LANGUAGE = "auto"
+TARGET_LANGUAGE = "vi"
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
 
 
@@ -600,10 +601,27 @@ def read_srt(file_path):
 # PROMPT
 # =========================================================
 
+TARGET_LANGUAGE_NAMES = {
+    "vi": "tiếng Việt",
+    "en": "tiếng Anh (English)",
+    "zh": "tiếng Trung (简体中文)",
+    "ja": "tiếng Nhật (日本語)",
+    "ko": "tiếng Hàn (한국어)",
+    "th": "tiếng Thái",
+    "id": "tiếng Indonesia",
+    "fr": "tiếng Pháp",
+    "es": "tiếng Tây Ban Nha",
+    "de": "tiếng Đức",
+    "ru": "tiếng Nga",
+    "pt": "tiếng Bồ Đào Nha",
+}
+
+
 def build_prompt(
     batch,
     previous_context="",
     source_language=None,
+    target_language=None,
 ):
     data = [
         {
@@ -635,37 +653,38 @@ def build_prompt(
         "ar": "tiếng Ả Rập", "tr": "tiếng Thổ Nhĩ Kỳ", "ms": "tiếng Mã Lai",
         "vi": "tiếng Việt",
     }.get(source_language or SOURCE_LANGUAGE, "ngôn ngữ được tự động nhận diện")
+    effective_target = str(target_language or TARGET_LANGUAGE or "vi").strip().lower()
+    target_name = TARGET_LANGUAGE_NAMES.get(effective_target, "tiếng Việt")
     return f"""
-Bạn là biên dịch viên dịch sang tiếng Việt.
+Bạn là biên dịch viên dịch sang {target_name}.
 
 Đây là transcript được Whisper nhận diện từ lời thoại bằng {source_name}.
-Nếu transcript đã là tiếng Việt, giữ nguyên ý và câu chữ tự nhiên.
+Nếu transcript đã là {target_name}, hãy biên tập lại câu chữ tự nhiên, đúng ngữ pháp và dễ nghe.
 
-NHIEM VU:
-Dich sang tieng Viet tu nhien de dung cho:
+NHIỆM VỤ:
+Dịch toàn bộ nội dung sang {target_name} tự nhiên, súc tích để dùng cho:
 - subtitle
-- giong doc AI TTS
+- giọng đọc AI TTS
 
-QUY TAC:
-1. Dich theo ngu canh.
-2. Khong dich tung tu may moc.
-3. Tieng Viet ngan gon, tu nhien.
-4. Phu hop de doc bang TTS.
-5. Khong tu them noi dung.
-6. Neu Whisper sai nhe, dua vao ngu canh de hieu cau hop ly.
-7. Giu nguyen ID.
-8. Khong bo ID.
-9. Khong gop ID.
-10. Moi ID dung 1 ban dich.
-11. Chi tra JSON.
-12. Khong Markdown.
-13. Khong giai thich.
-14. Khong dua nhieu phuong an.
+QUY TẮC:
+1. Dịch theo ngữ cảnh, văn phong tự nhiên của người bản xứ nói {target_name}.
+2. Không dịch từng từ máy móc.
+3. Câu ngắn gọn, rõ nghĩa, phù hợp để đọc bằng giọng AI TTS.
+4. Không tự thêm nội dung ngoài bản gốc.
+5. Nếu Whisper nhận diện sai nhẹ, dựa vào ngữ cảnh để hiểu và dịch hợp lý.
+6. Giữ nguyên ID.
+7. Không bỏ ID.
+8. Không gộp ID.
+9. Mỗi ID đúng 1 bản dịch bằng {target_name}.
+10. Chỉ trả JSON.
+11. Không Markdown.
+12. Không giải thích.
+13. Không đưa nhiều phương án.
 
-NGU CANH CAC CAU TRUOC:
+NGỮ CẢNH CÁC CÂU TRƯỚC:
 {context}
 
-DU LIEU:
+DỮ LIỆU:
 {json.dumps(
     data,
     ensure_ascii=False
@@ -676,7 +695,7 @@ OUTPUT:
     "translations": [
         {{
             "id": 1,
-            "text": "Ban dich tieng Viet"
+            "text": "Translated line in {target_name}"
         }}
     ]
 }}
@@ -868,9 +887,21 @@ NLLB_SOURCE_LANG_MAP = {
 }
 
 
+NLLB_TARGET_LANG_MAP = {
+    **NLLB_SOURCE_LANG_MAP,
+    "vi": "vie_Latn",
+    "pt": "por_Latn",
+}
+
+
 def _nllb_source_lang(source_language: str | None) -> str:
     code = str(source_language or SOURCE_LANGUAGE or "auto").strip().lower()
     return NLLB_SOURCE_LANG_MAP.get(code, LOCAL_SOURCE_LANG)
+
+
+def _nllb_target_lang(target_language: str | None) -> str:
+    code = str(target_language or TARGET_LANGUAGE or "vi").strip().lower()
+    return NLLB_TARGET_LANG_MAP.get(code, LOCAL_TARGET_LANG)
 
 
 def _load_local_translator(source_language: str | None = None):
@@ -982,6 +1013,7 @@ def translate_batch_local(
     batch,
     previous_context="",
     source_language=None,
+    target_language=None,
 ):
     del previous_context
 
@@ -992,9 +1024,10 @@ def translate_batch_local(
         device,
     ) = _load_local_translator(source_language=source_language)
 
+    target_token = _nllb_target_lang(target_language)
     forced_bos_token_id = (
         tokenizer.convert_tokens_to_ids(
-            LOCAL_TARGET_LANG
+            target_token
         )
     )
 
@@ -1004,7 +1037,7 @@ def translate_batch_local(
     ):
         raise RuntimeError(
             "Khong tim thay NLLB target language token: "
-            f"{LOCAL_TARGET_LANG}"
+            f"{target_token}"
         )
 
     results = []
@@ -1118,14 +1151,17 @@ def translate_batch(
     previous_context="",
     source_language=None,
     translation_model=None,
+    target_language=None,
 ):
     effective_source = source_language or SOURCE_LANGUAGE
+    effective_target = target_language or TARGET_LANGUAGE
     if _is_offline_mode():
         print("\n[OFFLINE] Dich cuc bo bang model NLLB noi bo...")
         return translate_batch_local(
             batch,
             previous_context,
             source_language=effective_source,
+            target_language=effective_target,
         )
 
     if not OAUTH_CREDENTIALS and client is None:
@@ -1134,6 +1170,7 @@ def translate_batch(
                 batch,
                 previous_context,
                 source_language=effective_source,
+                target_language=effective_target,
             )
         raise _require_gemini_credentials_error()
 
@@ -1141,6 +1178,7 @@ def translate_batch(
         batch,
         previous_context,
         source_language=source_language,
+        target_language=effective_target,
     )
 
     last_error = None
@@ -1336,6 +1374,7 @@ def translate_batch(
             batch,
             previous_context,
             source_language=effective_source,
+            target_language=effective_target,
         )
 
     raise RuntimeError(
@@ -1477,6 +1516,7 @@ def translate_all(
     subtitles,
     source_hash=None,
     translation_model=None,
+    target_language=None,
 ):
     if source_hash is None:
         if os.path.exists(
@@ -1611,6 +1651,7 @@ def translate_all(
                     batch,
                     context,
                     translation_model=translation_model,
+                    target_language=target_language,
                 )
             )
 

@@ -1182,6 +1182,7 @@ class ManualSubtitleTranslationLine(BaseModel):
 class ManualSubtitleTranslationRequest(BaseModel):
     lines: list[ManualSubtitleTranslationLine] = Field(min_length=1, max_length=20)
     source_language: str = "auto"
+    target_language: Literal["vi", "en", "zh", "ja", "ko", "th", "id", "es", "pt", "fr", "de", "ru"] = "vi"
     translation_model: Literal["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.8-flash"] = "gemini-3.1-flash-lite"
 
 
@@ -1321,7 +1322,7 @@ async def translate_manual_subtitle_lines(body: ManualSubtitleTranslationRequest
         if any(not line["text"] for line in batch):
             raise HTTPException(status_code=422, detail="Có câu phụ đề đang để trống.")
         translations = await run_in_threadpool(
-            translate_batch, batch, "", source_language=body.source_language, translation_model=body.translation_model,
+            translate_batch, batch, "", source_language=body.source_language, translation_model=body.translation_model, target_language=body.target_language,
         )
         translated_by_id = {int(item["id"]): str(item["text"]).strip() for item in translations}
         return {"translations": [{"id": line.id, "text": translated_by_id[line.id]} for line in body.lines]}

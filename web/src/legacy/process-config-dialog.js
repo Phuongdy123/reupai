@@ -1,5 +1,11 @@
 // Loaded only when the user opens video processing settings.
-import { renderVoiceOptionsHtml } from '../lib/tts-voices';
+import { TARGET_LANGUAGE_OPTIONS, renderVoiceOptionsHtml } from '../lib/tts-voices';
+
+function renderTargetLanguageOptionsHtml() {
+    return TARGET_LANGUAGE_OPTIONS.map(
+        (lang) => `<option value="${lang.value}">${lang.label}</option>`,
+    ).join('\n');
+}
 
 export function createProcessConfigDialog({ document, uiIcon }) {
     let dialog = document.getElementById('processConfigDialog');
@@ -242,7 +248,6 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <button type="button" class="process-inspector-tab active" id="processInspectorTabVideo" role="tab" data-inspector-tab="video" aria-controls="processInspectorVideo" aria-selected="true" tabindex="0"><span class="process-inspector-tab-icon">${uiIcon('video', 18)}</span><span>Video</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabSubtitles" role="tab" data-inspector-tab="subtitles" aria-controls="processInspectorSubtitles" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>Phụ đề</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabOcr" role="tab" data-inspector-tab="ocr" aria-controls="processInspectorOcr" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>SRT</span></button>
-                    <button type="button" class="process-inspector-tab" id="processInspectorTabManualSrt" role="tab" data-inspector-tab="manual-srt" aria-controls="processInspectorManualSrt" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('captions', 18)}</span><span>Phụ đề</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabAudio" role="tab" data-inspector-tab="audio" aria-controls="processInspectorAudio" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('voice', 18)}</span><span>Âm thanh</span></button>
                     <button type="button" class="process-inspector-tab" id="processInspectorTabPresets" role="tab" data-inspector-tab="presets" aria-controls="processInspectorPresets" aria-selected="false" tabindex="-1"><span class="process-inspector-tab-icon">${uiIcon('save', 18)}</span><span>Cấu hình</span></button>
                 </nav>
@@ -283,7 +288,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             </section>
 
             <section class="process-settings-card process-inspector-panel process-subtitles-settings-panel" id="processInspectorSubtitles" data-inspector-panel="subtitles" role="tabpanel" aria-labelledby="processInspectorTabSubtitles" tabindex="0" hidden>
-                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>Phụ đề tiếng Việt</strong><small>Ngôn ngữ và kiểu chữ</small></div>
+                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>Phụ đề &amp; Ngôn ngữ</strong><small>Ngôn ngữ nguồn, đầu ra và kiểu chữ</small></div>
                 <div class="process-config-grid">
                 <label class="process-source-language-field">Ngôn ngữ nguồn để dịch
                     <select id="processSourceLanguage">
@@ -307,6 +312,12 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <option value="vi">Tiếng Việt</option>
                     </select>
                     <small>Để tự động nếu bạn chưa biết ngôn ngữ của video.</small>
+                </label>
+                <label class="process-source-language-field">Dịch sang ngôn ngữ (Phụ đề &amp; Lồng tiếng)
+                    <select id="processTargetLanguage">
+                        ${renderTargetLanguageOptionsHtml()}
+                    </select>
+                    <small>Mặc định là Tiếng Việt. Có thể chọn Tiếng Anh hoặc ngôn ngữ khác để tạo phụ đề &amp; lồng tiếng AI tương ứng.</small>
                 </label>
                 <label>Model dịch
                     <select id="processTranslationModel">
@@ -424,16 +435,8 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <output data-for="processOcrSimilarity">82%</output>
                     </label>
                     <p class="process-ocr-note" id="processOcrNote">Quét 2 khung hình/giây là mức cân bằng. Tăng tốc độ sẽ đọc sát hơn nhưng xử lý lâu hơn; lần đầu có thể cần tải model OCR.</p>
+                    <small class="process-ocr-note" id="processOcrManualStatus" role="status"></small>
                 </div>
-                </div>
-            </section>
-            <section class="process-settings-card process-inspector-panel process-manual-srt-panel" id="processInspectorManualSrt" data-inspector-panel="manual-srt" role="tabpanel" aria-labelledby="processInspectorTabManualSrt" tabindex="0" hidden>
-                <div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('captions', 18)}</span><strong>Duyệt phụ đề trước khi xuất</strong><small>Bước kiểm tra sẽ xuất hiện sau khi nhận diện, ngay trong luồng xử lý video</small></div>
-                <div class="process-ocr-manual-tools process-transcript-stage-note">
-                    <strong>Phụ đề là một bước trong tiến trình xử lý</strong>
-                    <p>Khi bắt đầu, ReupAI sẽ nhận diện lời thoại hoặc quét chữ trên hình theo lựa chọn của bạn. Sau đó bạn có thể chỉnh câu và thời gian ở bước kiểm tra trước khi xác nhận dịch, tạo giọng đọc và xuất video.</p>
-                    <div class="process-ocr-statusbar"><span class="process-ocr-status-dot" aria-hidden="true"></span><span id="processOcrManualStatus" role="status">Sẵn sàng. Bảng chỉnh phụ đề sẽ mở sau bước nhận diện.</span></div>
-                    <small class="process-manual-srt-note">Nếu video có phụ đề gắn sẵn, chọn “Chữ phụ đề trên hình” và khoanh vùng phụ đề trong khung xem trước.</small>
                 </div>
             </section>
             <section class="process-settings-card process-inspector-panel process-audio-settings-panel" id="processInspectorAudio" data-inspector-panel="audio" role="tabpanel" aria-labelledby="processInspectorTabAudio" tabindex="0" hidden>
