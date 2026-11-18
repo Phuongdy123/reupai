@@ -3051,12 +3051,47 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 brandBlur.checked = true;
                 brandBlur.dispatchEvent(new Event('change', { bubbles: true }));
             }
+            const antiReuse = dialog.querySelector('#processAntiReuse');
+            if (antiReuse) {
+                antiReuse.checked = true;
+                antiReuse.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const vocalSep = dialog.querySelector('#processVocalSeparation');
+            if (vocalSep) {
+                vocalSep.checked = true;
+                vocalSep.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            const eraseSel = dialog.querySelector('#processEraseMode');
+            if (eraseSel && eraseSel.value === 'blur') {
+                eraseSel.value = 'delogo';
+                eraseSel.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             outputSummary.refresh?.();
             refreshCopyrightEvaluation();
             if (copyrightMusicNote) {
-                copyrightMusicNote.textContent = '· Đã áp dụng cấu hình Né Bản Quyền (Voice + Vietsub · Âm gốc 5% · Làm mờ logo).';
+                copyrightMusicNote.textContent = '· Đã bật Né Bản Quyền (Âm gốc 5% · Tách SFX · Delogo không mờ · Anti-Reuse).';
             }
             dialog._scheduleSaveLastConfig?.();
+        };
+    }
+
+    const shortsQuickBtn = dialog.querySelector('#processShortsQuickBtn');
+    if (shortsQuickBtn) {
+        shortsQuickBtn.onclick = () => {
+            set('processAspectRatio', '9:16');
+            set('processSubtitleStyle', 'bold');
+            set('processEraseMode', 'delogo');
+            const antiReuse = dialog.querySelector('#processAntiReuse');
+            if (antiReuse) antiReuse.checked = true;
+            ['processAspectRatio', 'processSubtitleStyle', 'processEraseMode'].forEach(id => {
+                dialog.querySelector(`#${id}`)?.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            outputSummary.refresh?.();
+            refreshCopyrightEvaluation();
+            dialog._scheduleSaveLastConfig?.();
+            if (copyrightMusicNote) {
+                copyrightMusicNote.textContent = '· Đã áp dụng nhanh Preset Shorts 9:16 Viral (Chữ Bold · Delogo · Anti-Reuse).';
+            }
         };
     }
 

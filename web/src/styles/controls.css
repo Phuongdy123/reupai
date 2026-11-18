@@ -2915,6 +2915,15 @@ body.theme-xports #batchAutoPublishDialog .batch-ap-inline-select,
   font-size: 11px;
   font-weight: 600;
 }
+@media (max-width: 720px) {
+  .cr-api-keys-panel {
+    grid-template-columns: 1fr;
+  }
+  .shorts-clip-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 .batch-ap-multi-upload {
   cursor: pointer;
 }

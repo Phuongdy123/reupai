@@ -181,8 +181,11 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                         <button type="button" class="btn secondary process-copyright-scan-btn" id="processCopyrightScanBtn" title="Phân tích chuyên sâu cả Nhạc nền & Hình ảnh/Logo video miễn phí bằng AI">
                             ${copyrightIconSvg('scan', 14)}<span>Quét sâu Nhạc &amp; Hình (AI)</span>
                         </button>
-                        <button type="button" class="btn secondary process-copyright-fix-btn" id="processCopyrightFixBtn" hidden title="Tự động hạ âm gốc xuống 5%, bật lồng tiếng AI và bật làm mờ logo để né Content ID">
-                            ${copyrightIconSvg('bolt', 14)}<span>Áp dụng cấu hình Né Bản Quyền</span>
+                        <button type="button" class="btn secondary process-copyright-fix-btn" id="processCopyrightFixBtn" hidden title="Tự động hạ âm gốc xuống 5%, bật lồng tiếng AI, xóa logo & Anti-Reuse để né Content ID">
+                            ${copyrightIconSvg('bolt', 14)}<span>Áp dụng Né Bản Quyền</span>
+                        </button>
+                        <button type="button" class="btn secondary" id="processShortsQuickBtn" title="Chuyển nhanh sang khung dọc 9:16, chữ Creator Bold, xóa sub không mờ & Anti-Reuse">
+                            <span>Preset Shorts 9:16</span>
                         </button>
                     </div>
                 </div>

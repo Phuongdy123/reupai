@@ -9388,6 +9388,19 @@ async function openBatchAutoPublishDialog() {
         scheduleEnabledInput.onchange = syncScheduleInputs;
         syncScheduleInputs();
     }
+    if (multiLangWrap) {
+        const syncLangHint = () => {
+            const checkedCount = multiLangWrap.querySelectorAll('input[name="batchApLang"]:checked').length || 1;
+            const epCount = getOrderedVideos().length;
+            if (checkedCount > 1) {
+                footerHintEl.textContent = `Sẽ xuất ${epCount} tập × ${checkedCount} ngôn ngữ = ${epCount * checkedCount} bản thành phẩm.`;
+            } else {
+                footerHintEl.textContent = 'Bạn có thể đóng cửa sổ này để làm việc khác — tiến trình vẫn tự chạy ngầm.';
+            }
+        };
+        multiLangWrap.onchange = syncLangHint;
+        syncLangHint();
+    }
     void (async () => {
         try {
             const conn = await youtubeRequest(window.reupEngineClient, 'connection');
