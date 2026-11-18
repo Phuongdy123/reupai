@@ -2200,7 +2200,13 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }, 400);
     };
 
-    const applyPresetConfig = (preset, name = '', { statusText = '', markClean = true, restoreLogo = false } = {}) => {
+    const REGION_FIELD_IDS = new Set([
+        'processBlurPreset', 'processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
+        'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
+        'processSecondarySubX', 'processSecondarySubY', 'processSecondarySubWidth', 'processSecondarySubHeight',
+    ]);
+
+    const applyPresetConfig = (preset, name = '', { statusText = '', markClean = true, restoreLogo = false, restoreRegions = false } = {}) => {
         if (!preset || typeof preset !== 'object') return;
         const allowLogoRestore = Boolean(restoreLogo || logoSessionEnabled);
         if (restoreLogo && (preset.processLogoMode && preset.processLogoMode !== 'none')) {
@@ -2208,8 +2214,14 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
         dialog.dataset.presetApplying = '1';
         try {
+            if (!restoreRegions) {
+                REGION_FIELD_IDS.forEach(fid => set(fid, ''));
+            }
             Object.entries(preset).forEach(([id, value]) => {
                 if (!allowLogoRestore && (id.startsWith('processLogo') || id === 'logo_data' || id === 'logo_filename')) {
+                    return;
+                }
+                if (!restoreRegions && REGION_FIELD_IDS.has(id)) {
                     return;
                 }
                 if (id === 'auto_brand_blur') {
@@ -2248,7 +2260,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 { preferredVoice: preset.processVoice },
             );
             intervalRoot.innerHTML = '';
-            (Array.isArray(preset.blur_intervals) ? preset.blur_intervals : []).forEach(addInterval);
+            if (restoreRegions) {
+                (Array.isArray(preset.blur_intervals) ? preset.blur_intervals : []).forEach(addInterval);
+            }
             if (['sub', 'custom', 'logo'].includes(preset.active_pick_mode)) {
                 pickMode = preset.active_pick_mode;
                 pickButtons.forEach(button => button.classList.toggle('active', button.dataset.pickMode === pickMode));
@@ -2377,7 +2391,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             void persistLastConfigNow(true);
             return;
         }
-        applyPresetConfig(presets[name], name, { restoreLogo: true });
+        applyPresetConfig(presets[name], name, { restoreLogo: true, restoreRegions: true });
         void persistLastConfigNow(true);
     };
 
