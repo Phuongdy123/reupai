@@ -361,6 +361,7 @@ export async function generateAndPublishEpisode({
     facebookSaved = null,
     tiktokSaved = null,
     onStage = null,
+    onThumbnailResolved = null,
 } = {}) {
     const identity = {
         video_id: video.video_id,
@@ -368,6 +369,31 @@ export async function generateAndPublishEpisode({
         mode,
         account_id: accountId,
     };
+
+    let resolvedThumbnail = thumbnailDataUrl || null;
+    let videoFrames = [];
+
+    // Nếu chưa có ảnh bìa riêng, tự động trích xuất khung hình trực tiếp từ trong video
+    if (!resolvedThumbnail) {
+        if (onStage) onStage(`Đang tự lấy ảnh bìa trong video Tập ${episodeNumber}…`);
+        try {
+            const thumbRes = await youtubeApi('thumbnails', {
+                method: 'POST',
+                timeoutMs: 75000,
+                body: JSON.stringify(identity),
+            });
+            if (Array.isArray(thumbRes?.images) && thumbRes.images.length) {
+                videoFrames = thumbRes.images.filter(Boolean);
+                const midIdx = Math.floor(videoFrames.length / 2);
+                resolvedThumbnail = videoFrames[midIdx] || videoFrames[0] || null;
+                if (resolvedThumbnail && typeof onThumbnailResolved === 'function') {
+                    onThumbnailResolved(resolvedThumbnail);
+                }
+            }
+        } catch {
+            // Nếu API trích xuất khung hình gặp lỗi tạm thời, tiếp tục đăng bình thường
+        }
+    }
 
     let aiSuggestion = null;
     if (useAiPrompt) {
@@ -379,6 +405,9 @@ export async function generateAndPublishEpisode({
                 totalEpisodes,
                 originalTitle: video.title || video.video_id,
             });
+            const imagesForAi = thumbnailDataUrl
+                ? [thumbnailDataUrl]
+                : (videoFrames.length ? videoFrames : []);
             aiSuggestion = await youtubeApi('suggest', {
                 method: 'POST',
                 timeoutMs: 95000,
@@ -386,9 +415,19 @@ export async function generateAndPublishEpisode({
                     ...identity,
                     title: formatEpisodeTopic(basePrompt, episodeNumber, video.title || video.video_id),
                     instructions,
-                    images: thumbnailDataUrl ? [thumbnailDataUrl] : [],
+                    images: imagesForAi,
                 }),
             });
+            if (
+                !thumbnailDataUrl
+                && Number.isInteger(aiSuggestion?.thumbnail_index)
+                && videoFrames[aiSuggestion.thumbnail_index]
+            ) {
+                resolvedThumbnail = videoFrames[aiSuggestion.thumbnail_index];
+                if (typeof onThumbnailResolved === 'function') {
+                    onThumbnailResolved(resolvedThumbnail);
+                }
+            }
         } catch {
             aiSuggestion = null;
         }
@@ -420,7 +459,7 @@ export async function generateAndPublishEpisode({
                         title: metadata.title,
                         description: metadata.description,
                         tags: metadata.tags,
-                        thumbnail: thumbnailDataUrl || null,
+                        thumbnail: resolvedThumbnail || null,
                         privacy: youtubeConfig.privacy || 'public',
                         made_for_kids: Boolean(youtubeConfig.madeForKids),
                         confirmed: true,

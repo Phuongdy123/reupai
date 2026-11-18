@@ -3141,6 +3141,51 @@ body.theme-xports #batchAutoPublishDialog .batch-ap-inline-select,
   align-items: center;
   gap: 8px;
 }
+.batch-ap-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.batch-ap-open-config-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 27px !important;
+  min-height: 27px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  border: 1px solid rgba(167, 139, 250, 0.45) !important;
+  background: rgba(124, 58, 237, 0.16) !important;
+  color: #e9d5ff !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.batch-ap-open-config-btn:hover {
+  background: rgba(124, 58, 237, 0.28) !important;
+  border-color: #a78bfa !important;
+  color: #ffffff !important;
+}
+.batch-ap-config-summary {
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.35;
+}
+body.theme-xports #batchApStartBtn.is-processing,
+#batchApStartBtn.is-processing {
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%) !important;
+  border-color: rgba(167, 139, 250, 0.55) !important;
+  color: #ffffff !important;
+  opacity: 0.92 !important;
+  cursor: progress !important;
+}
 
 
 

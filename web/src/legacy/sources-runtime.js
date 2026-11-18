@@ -8543,22 +8543,28 @@ function ensureBatchAutoPublishDialog() {
             <div class="batch-ap-body">
                 <div class="batch-ap-config-col">
                     <section class="batch-ap-section">
-                        <h3>1. Chế độ xử lý &amp; cấu hình video</h3>
+                        <div class="batch-ap-sec-head">
+                            <h3>1. Chế độ xử lý &amp; cấu hình video</h3>
+                            <button type="button" class="batch-ap-open-config-btn" id="batchApOpenConfigBtn" title="Mở bảng Thiết lập video để tự chỉnh Giọng đọc, Phụ đề, Ngôn ngữ, Vùng mờ, Logo cho cả loạt video">
+                                ⚙️ Mở bảng tự cấu hình
+                            </button>
+                        </div>
                         <div class="batch-ap-grid-2">
                             <label class="batch-ap-field">
                                 <span>Chế độ xuất hàng loạt</span>
                                 <select id="batchApMode">
-                                    <option value="voiceover">Voice + Phụ đề (Lồng tiếng)</option>
+                                    <option value="voiceover">Voice + Phụ đề</option>
                                     <option value="subtitle">Chỉ Phụ đề (Sub)</option>
                                 </select>
                             </label>
                             <label class="batch-ap-field">
-                                <span>Preset cấu hình (Giọng, Sub, Logo)</span>
+                                <span>Preset cấu hình</span>
                                 <select id="batchApPreset">
-                                    <option value="">Cấu hình gần nhất (Tự động)</option>
+                                    <option value="">Cấu hình gần nhất</option>
                                 </select>
                             </label>
                         </div>
+                        <div id="batchApConfigSummary" class="batch-ap-config-summary"></div>
                         <label class="batch-ap-checkbox">
                             <input type="checkbox" id="batchApSkipProcessed" checked>
                             <span>Bỏ qua bước render nếu tập đó đã có sẵn thành phẩm tương ứng</span>
@@ -8737,19 +8743,45 @@ async function openBatchAutoPublishDialog() {
         ytPrivacySelect.value = savedPrefs.ytPrivacy;
     }
 
-    // Nạp danh sách Preset
-    const presets = readPresetsLocal(localStorage);
-    const activePref = readActivePresetPref(localStorage);
-    presetSelect.innerHTML = '<option value="">Tự động dùng cấu hình gần nhất</option>';
-    Object.keys(presets).sort((a, b) => a.localeCompare(b, 'vi')).forEach((name) => {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = `Preset: ${name}`;
-        presetSelect.appendChild(opt);
-    });
-    if (activePref.name && presets[activePref.name]) {
-        presetSelect.value = activePref.name;
-    }
+    // Nạp danh sách Preset & tóm tắt cấu hình hiện tại
+    const openConfigBtn = dialog.querySelector('#batchApOpenConfigBtn');
+    const configSummaryEl = dialog.querySelector('#batchApConfigSummary');
+
+    const refreshBatchPresetListAndSummary = () => {
+        const presets = readPresetsLocal(localStorage);
+        const activePref = readActivePresetPref(localStorage);
+        const previousVal = presetSelect.value;
+        presetSelect.innerHTML = `
+            <option value="">Cấu hình gần nhất</option>
+            <option value="__open_custom__">⚙️ Mở bảng tự cấu hình…</option>
+        `;
+        Object.keys(presets).sort((a, b) => a.localeCompare(b, 'vi')).forEach((name) => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = `Preset: ${name}`;
+            presetSelect.appendChild(opt);
+        });
+        if (previousVal && presets[previousVal]) {
+            presetSelect.value = previousVal;
+        } else if (activePref.name && presets[activePref.name]) {
+            presetSelect.value = activePref.name;
+        } else {
+            presetSelect.value = '';
+        }
+
+        if (configSummaryEl) {
+            const resolved = resolveSavedBatchProcessConfig(presetSelect.value === '__open_custom__' ? '' : presetSelect.value);
+            const langMap = { vi: 'Tiếng Việt', en: 'Tiếng Anh (English)', zh: 'Tiếng Trung', ja: 'Tiếng Nhật', ko: 'Tiếng Hàn' };
+            const langLabel = langMap[resolved.target_language || 'vi'] || (resolved.target_language || 'Tiếng Việt');
+            const styleLabel = resolved.subtitle_style || 'minimal';
+            const voiceLabel = resolved.voice || 'Trúc Ly';
+            const logoLabel = resolved.logo_mode && resolved.logo_mode !== 'none'
+                ? `Có Logo (${resolved.logo_shape === 'circle' ? 'Tròn' : 'Chữ nhật'})`
+                : 'Không Logo';
+            configSummaryEl.textContent = `Đang áp dụng: ${langLabel} · Giọng ${voiceLabel} · Sub ${styleLabel} · ${logoLabel}`;
+        }
+    };
+    refreshBatchPresetListAndSummary();
 
     // Trạng thái kết nối MXH
     let youtubeConn = null;
@@ -8915,8 +8947,8 @@ async function openBatchAutoPublishDialog() {
                 </div>
                 <label class="batch-ap-ep-thumb-wrap ${thumbUrl ? 'has-thumb' : 'is-empty'}" title="Chọn/đổi ảnh bìa cho Tập ${epNum}">
                     ${thumbUrl
-                        ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb"><span class="batch-ap-ep-thumb-btn">${hasCustomThumb ? 'Đổi ảnh' : '+ Ảnh bìa'}</span>`
-                        : `<span class="batch-ap-ep-thumb-empty">+ Ảnh bìa</span>`}
+                        ? `<img src="${escapeHtml(thumbUrl)}" alt="Ảnh bìa Tập ${epNum}" class="batch-ap-ep-thumb"><span class="batch-ap-ep-thumb-btn">${hasCustomThumb ? 'Đổi ảnh' : 'Tự lấy trong video'}</span>`
+                        : `<span class="batch-ap-ep-thumb-empty">🎞️ Tự lấy trong video</span>`}
                     <input type="file" accept="image/jpeg,image/png,image/webp" data-slot-index="${idx}" hidden>
                 </label>
                 <div class="batch-ap-ep-info">
@@ -8924,7 +8956,7 @@ async function openBatchAutoPublishDialog() {
                     <span class="batch-ap-ep-origin" title="${escapeHtml(video.title || video.video_id)}">Video: ${escapeHtml(video.title || video.video_id)}</span>
                     ${hasCustomThumb && thumbnailSlots[idx]?.name
                         ? `<small class="batch-ap-ep-filename">Ảnh bìa riêng: ${escapeHtml(thumbnailSlots[idx].name)}</small>`
-                        : '<small class="batch-ap-ep-filename is-muted">Kéo thả dòng để đổi tập · hoặc kéo video từ Kho nguồn thả vào đây</small>'}
+                        : '<small class="batch-ap-ep-filename is-muted">Chưa chọn ảnh riêng → Tự lấy đại khung hình trong video khi đăng</small>'}
                     ${linksHtml}
                 </div>
                 <div class="batch-ap-ep-status">
@@ -9036,6 +9068,53 @@ async function openBatchAutoPublishDialog() {
         });
     };
 
+    const openCustomConfigEditor = async () => {
+        if (batchRunning) return;
+        const sampleVideo = episodeVideos[0] || rawVideos[0];
+        if (!sampleVideo) return;
+        let sampleCard = document.querySelector(
+            `.compact-video-card[data-video-id="${CSS.escape(String(sampleVideo.video_id))}"]`,
+        );
+        if (!sampleCard) {
+            renderVideos();
+            sampleCard = document.querySelector(
+                `.compact-video-card[data-video-id="${CSS.escape(String(sampleVideo.video_id))}"]`,
+            );
+        }
+        if (!sampleCard) return;
+
+        dialog.close();
+        await openProcessConfig(sampleVideo, sampleCard, modeSelect.value || 'voiceover');
+        const configDialog = document.getElementById('processConfigDialog');
+        if (configDialog) {
+            const onConfigClosed = () => {
+                configDialog.removeEventListener('close', onConfigClosed);
+                refreshBatchPresetListAndSummary();
+                overallStatusEl.hidden = false;
+                overallStatusEl.textContent = '✓ Đã cập nhật cấu hình video từ bảng Thiết lập chi tiết.';
+                if (!dialog.open) {
+                    dialog.showModal();
+                }
+            };
+            configDialog.addEventListener('close', onConfigClosed);
+        }
+    };
+
+    if (openConfigBtn) {
+        openConfigBtn.onclick = () => {
+            void openCustomConfigEditor();
+        };
+    }
+
+    presetSelect.onchange = () => {
+        if (presetSelect.value === '__open_custom__') {
+            presetSelect.value = '';
+            void openCustomConfigEditor();
+            return;
+        }
+        refreshBatchPresetListAndSummary();
+    };
+
     basePromptInput.oninput = () => {
         persistCurrentPrefs();
         renderEpisodeRows();
@@ -9106,7 +9185,7 @@ async function openBatchAutoPublishDialog() {
         if (!ordered.length) return;
 
         const mode = modeSelect.value || 'voiceover';
-        const selectedPreset = presetSelect.value || '';
+        const selectedPreset = presetSelect.value === '__open_custom__' ? '' : (presetSelect.value || '');
         const skipProcessed = Boolean(skipProcessedInput.checked);
         const basePrompt = basePromptInput.value.trim();
         const startEp = Math.max(1, Number(startEpInput.value || 1));
@@ -9153,6 +9232,8 @@ async function openBatchAutoPublishDialog() {
         batchRunning = true;
         batchAutoPublishStopRequested = false;
         startBtn.disabled = true;
+        startBtn.classList.add('is-processing');
+        startBtn.textContent = '⏳ Đang xử lý…';
         cancelBtn.disabled = true;
         closeBtn.disabled = true;
         stopBtn.hidden = false;
@@ -9176,6 +9257,7 @@ async function openBatchAutoPublishDialog() {
 
                 const updateEpisodeState = (status, text, links = []) => {
                     episodeStates.set(video.video_id, { status, text, links });
+                    startBtn.textContent = `⏳ Đang xử lý (Tập ${epNum} · ${index + 1}/${ordered.length})…`;
                     renderEpisodeRows();
                     renderBatchBar(`${stepPrefix} · ${text}`);
                     overallStatusEl.textContent = `${stepPrefix}: ${text}`;
@@ -9237,6 +9319,12 @@ async function openBatchAutoPublishDialog() {
                         onStage: (stageText) => {
                             updateEpisodeState('running', stageText);
                         },
+                        onThumbnailResolved: (extractedFrame) => {
+                            if (extractedFrame && !thumbnailDataUrls[index]) {
+                                thumbnailDataUrls[index] = extractedFrame;
+                                renderEpisodeRows();
+                            }
+                        },
                     });
 
                     const links = [];
@@ -9275,6 +9363,8 @@ async function openBatchAutoPublishDialog() {
         } finally {
             batchRunning = false;
             startBtn.disabled = false;
+            startBtn.classList.remove('is-processing');
+            startBtn.textContent = '🚀 Bắt đầu tự động 100%';
             cancelBtn.disabled = false;
             closeBtn.disabled = false;
             stopBtn.hidden = true;

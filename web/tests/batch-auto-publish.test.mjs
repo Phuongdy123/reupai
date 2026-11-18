@@ -189,3 +189,56 @@ test('reorderEpisodeVideos and replaceEpisodeVideoAt swap or replace episode vid
     const dedupSwapped = replaceEpisodeVideoAt(replaced, 0, { video_id: 'v1', title: 'Video 1' });
     assert.deepEqual(dedupSwapped.map((v) => v.video_id), ['v1', 'v99', 'v3']);
 });
+
+test('generateAndPublishEpisode automatically grabs a frame from the video when no custom thumbnail is chosen', async () => {
+    const calls = [];
+    let resolvedPreview = null;
+    const fakeYoutubeApi = async (path, options = {}) => {
+        const body = options.body ? JSON.parse(options.body) : null;
+        calls.push({ path, body });
+        if (path === 'thumbnails') {
+            return {
+                images: [
+                    'data:image/jpeg;base64,FRAME_0',
+                    'data:image/jpeg;base64,FRAME_1',
+                    'data:image/jpeg;base64,FRAME_2',
+                ],
+            };
+        }
+        if (path === 'suggest') {
+            return {
+                title: 'Xuyên không dị giới - Tập 1',
+                description: 'Mô tả Tập 1',
+                tags: ['Tap1'],
+                thumbnail_index: 2,
+            };
+        }
+        if (path === 'uploads') {
+            return { id: 'yt-job-1', state: 'completed', url: 'https://youtu.be/ep1' };
+        }
+        throw new Error(`Unexpected path: ${path}`);
+    };
+
+    const outcome = await generateAndPublishEpisode({
+        youtubeApi: fakeYoutubeApi,
+        accountId: 'user-123',
+        video: { video_id: 'vid_ep1', title: 'Raw ep 1' },
+        channel: 'default',
+        mode: 'voiceover',
+        episodeNumber: 1,
+        totalEpisodes: 2,
+        basePrompt: 'Xuyên không dị giới',
+        useAiPrompt: true,
+        thumbnailDataUrl: null,
+        platforms: { youtube: true },
+        youtubeConfig: { channelId: 'UC_TEST', privacy: 'public', madeForKids: false },
+        onThumbnailResolved: (frame) => {
+            resolvedPreview = frame;
+        },
+    });
+
+    assert.equal(outcome.errors.length, 0);
+    assert.equal(resolvedPreview, 'data:image/jpeg;base64,FRAME_2');
+    const ytCall = calls.find((c) => c.path === 'uploads');
+    assert.equal(ytCall.body.thumbnail, 'data:image/jpeg;base64,FRAME_2');
+});
