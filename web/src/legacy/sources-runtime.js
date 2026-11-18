@@ -8689,13 +8689,20 @@ function ensureBatchAutoPublishDialog() {
 }
 
 async function openBatchAutoPublishDialog() {
+    const dialog = ensureBatchAutoPublishDialog();
+    if (batchRunning) {
+        if (!dialog.open) {
+            dialog.showModal();
+        }
+        return;
+    }
+
     const rawVideos = selectedVideos();
     if (!rawVideos.length) {
         alert('Hãy tích chọn ít nhất 1 video trên danh sách trước khi mở Xử lý & Tự động đăng.');
         return;
     }
 
-    const dialog = ensureBatchAutoPublishDialog();
     const form = dialog.querySelector('#batchAutoPublishForm');
     const modeSelect = dialog.querySelector('#batchApMode');
     const presetSelect = dialog.querySelector('#batchApPreset');
@@ -9164,11 +9171,15 @@ async function openBatchAutoPublishDialog() {
     };
 
     const closeDialog = () => {
-        if (batchRunning) return;
         dialog.close();
     };
     closeBtn.onclick = closeDialog;
     cancelBtn.onclick = closeDialog;
+    dialog.onclick = (ev) => {
+        if (ev.target === dialog) {
+            dialog.close();
+        }
+    };
 
     stopBtn.onclick = () => {
         batchAutoPublishStopRequested = true;
@@ -9234,11 +9245,13 @@ async function openBatchAutoPublishDialog() {
         startBtn.disabled = true;
         startBtn.classList.add('is-processing');
         startBtn.textContent = '⏳ Đang xử lý…';
-        cancelBtn.disabled = true;
-        closeBtn.disabled = true;
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = 'Ẩn chạy ngầm';
+        closeBtn.disabled = false;
         stopBtn.hidden = false;
         stopBtn.disabled = false;
         stopBtn.textContent = 'Dừng sau tập hiện tại';
+        footerHintEl.textContent = 'Bạn có thể đóng cửa sổ này để làm việc khác — tiến trình vẫn tự chạy ngầm. Bấm lại "Xử lý & Tự động đăng" để mở lại.';
         overallStatusEl.hidden = false;
 
         const batchProcessConfig = resolveSavedBatchProcessConfig(selectedPreset);
@@ -9366,6 +9379,7 @@ async function openBatchAutoPublishDialog() {
             startBtn.classList.remove('is-processing');
             startBtn.textContent = '🚀 Bắt đầu tự động 100%';
             cancelBtn.disabled = false;
+            cancelBtn.textContent = 'Đóng';
             closeBtn.disabled = false;
             stopBtn.hidden = true;
             renderBatchBar('Hoàn tất');
