@@ -4177,7 +4177,14 @@ def build_ytdlp_download_command(
         "45",
     )
 
-    command.extend(ytdlp_performance_args())
+    if platform == "bilibili":
+        command.extend(["--concurrent-fragments", "1"])
+        for token in ytdlp_performance_args():
+            if token in {"--concurrent-fragments", "8"}:
+                continue
+            command.append(token)
+    else:
+        command.extend(ytdlp_performance_args())
 
     if use_browser_cookies:
         command.extend([
@@ -4188,9 +4195,10 @@ def build_ytdlp_download_command(
             ),
         ])
 
+    format_selector = "bv*[height<=720]+ba/b/bv*+ba/b" if platform == "bilibili" else "bv*+ba/b"
     command.extend([
         "-f",
-        "bv*+ba/b",
+        format_selector,
         "--merge-output-format",
         "mp4",
         "--no-playlist",
