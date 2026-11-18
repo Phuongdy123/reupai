@@ -2068,7 +2068,7 @@ def create_voice(
 
 
 
-        return
+        return voice_path
 
 
 
