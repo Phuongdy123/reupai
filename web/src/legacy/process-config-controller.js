@@ -218,7 +218,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
 
         let activeSample = 0;
         let previewHovering = false;
-        let showOnVideoStage = true;
+        let showOnVideoStage = false;
 
         if (sampleListRoot) {
             sampleListRoot.innerHTML = '';
@@ -235,6 +235,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 btn.appendChild(copy);
                 btn.onclick = () => {
                     activeSample = index;
+                    showOnVideoStage = true;
                     renderSubtitlePreview();
                 };
                 sampleListRoot.appendChild(btn);
@@ -312,9 +313,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             if (showcaseBar) {
                 showcaseBar.hidden = isSrtOnly;
             }
+            if (showcaseSampleRoot) {
+                showcaseSampleRoot.hidden = !showOnVideoStage;
+            }
             if (toggleStageBtn) {
                 toggleStageBtn.setAttribute('aria-pressed', String(showOnVideoStage));
-                toggleStageBtn.textContent = showOnVideoStage ? 'Đang bật trên video' : 'Đã ẩn trên video';
+                toggleStageBtn.textContent = showOnVideoStage ? 'Đang bật trên video · Bấm để ẩn' : 'Xem sub trên video';
             }
 
             if (stageOverlay && stageOverlayText) {
@@ -336,9 +340,15 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             };
         }
 
-        styleSelect.addEventListener('change', renderSubtitlePreview, { signal });
+        const onUserStyleChange = () => {
+            if (dialog.dataset.presetApplying !== '1') {
+                showOnVideoStage = true;
+            }
+            renderSubtitlePreview();
+        };
+        styleSelect.addEventListener('change', onUserStyleChange, { signal });
         styleSelect.addEventListener('input', renderSubtitlePreview, { signal });
-        fontSizeSelect?.addEventListener('change', renderSubtitlePreview, { signal });
+        fontSizeSelect?.addEventListener('change', onUserStyleChange, { signal });
         fontSizeSelect?.addEventListener('input', renderSubtitlePreview, { signal });
         outputFormat?.addEventListener('change', renderSubtitlePreview, { signal });
         togglePickerBtn?.addEventListener('click', () => setTimeout(renderSubtitlePreview, 0), { signal });

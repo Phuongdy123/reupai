@@ -101,7 +101,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </div>
                 <div class="process-showcase-subbar-samples">
                     <div class="process-sub-sample-pills" id="processShowcaseSampleChips" role="group" aria-label="Xem thử từng câu mẫu"></div>
-                    <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSubBtn" aria-pressed="true">Đang bật trên video</button>
+                    <button type="button" class="process-showcase-sub-toggle" id="processToggleStageSubBtn" aria-pressed="false">Xem sub trên video</button>
                 </div>
             </div>
 
