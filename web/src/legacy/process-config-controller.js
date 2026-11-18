@@ -3298,7 +3298,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             logo_path: value('processLogoPath') || null,
             logo_text: value('processLogoText') || null,
             logo_data: logoData,
-            logo_filename: logoFile?.name || dialog._logoFilename || null,
+            logo_filename: logoFilename,
+            regenerate_voice: Boolean(video.has_voice_result && mode === 'voiceover'),
         };
         if (!isCurrent()) return;
         dialog.close();
