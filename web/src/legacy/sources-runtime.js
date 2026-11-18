@@ -1,6 +1,6 @@
 // Generated from the mature local Sources UI by web/scripts/sync-source-ui.mjs.
 // All API and media transport is supplied by the shared LocalEngineClient.
-import { prepareSourceInput, isDirectVideoInput, videoUrlForIdentity } from "../lib/source-url-input.js";
+import { prepareSourceInput, isDirectVideoInput, isPublicSourceHost, videoUrlForIdentity } from "../lib/source-url-input.js";
 import { createSingleFlight } from "../lib/single-flight.js";
 import { PROCESSING_STAR_BORDER } from "./processing-star-border.js";
 
@@ -1372,7 +1372,7 @@ async function loadVideos(refresh = false) {
 
             if (!response.ok) {
                 const detail = String(data.detail || '');
-                const isShortLink = /(?:^|\/\/)(?:[a-z0-9-]+\.)?(?:b23\.tv|v\.douyin\.com)\//i.test(sourceUrl);
+                const isShortLink = /(?:^|\/\/)(?:[a-z0-9-]+\.)?(?:b23\.tv|v\.douyin\.com|vt\.tiktok\.com|vm\.tiktok\.com|fb\.watch|t\.co|xhslink\.com|dai\.ly)\//i.test(sourceUrl);
                 if (isShortLink && response.status === 400 && /kênh|playlist|mã video|một video/i.test(detail)) {
                     const modeEl = document.getElementById('sourceInputMode');
                     if (modeEl) modeEl.value = 'channel';
@@ -3628,32 +3628,28 @@ function videoLibraryPayload(
 function detectPlatformClient(
     url
 ) {
-
-    const value = String(
-        url
-        || ''
-    ).toLowerCase();
-
-    if (
-        value.includes(
-            'bilibili.com'
-        )
-        || value.includes(
-            'b23.tv'
-        )
-    ) {
-        return 'bilibili';
+    try {
+        const parsed = new URL(prepareSourceInput(url));
+        const host = parsed.hostname.toLowerCase();
+        if (!['http:', 'https:'].includes(parsed.protocol) || !isPublicSourceHost(host)) {
+            return 'unknown';
+        }
+        const matchHost = domains => domains.some(d => host === d || host.endsWith('.' + d));
+        if (matchHost(['bilibili.com', 'b23.tv'])) return 'bilibili';
+        if (matchHost(['douyin.com', 'iesdouyin.com'])) return 'douyin';
+        if (matchHost(['youtube.com', 'youtu.be', 'youtube-nocookie.com'])) return 'youtube';
+        if (matchHost(['tiktok.com', 'tiktokv.com'])) return 'tiktok';
+        if (matchHost(['facebook.com', 'fb.com', 'fb.watch'])) return 'facebook';
+        if (matchHost(['instagram.com', 'instagr.am'])) return 'instagram';
+        if (matchHost(['x.com', 'twitter.com', 't.co'])) return 'twitter';
+        if (matchHost(['xiaohongshu.com', 'xhslink.com'])) return 'xiaohongshu';
+        if (matchHost(['vimeo.com'])) return 'vimeo';
+        if (matchHost(['twitch.tv'])) return 'twitch';
+        if (matchHost(['dailymotion.com', 'dai.ly'])) return 'dailymotion';
+        return 'generic';
+    } catch {
+        return 'unknown';
     }
-
-    if (
-        value.includes(
-            'douyin.com'
-        )
-    ) {
-        return 'douyin';
-    }
-
-    return 'unknown';
 }
 
 
@@ -3670,6 +3666,10 @@ function isChannelSourceUrl(url, platform) {
     if (platform === 'douyin') {
         return /douyin\.com\/user\//.test(value)
             || /(?:^|\/\/)v\.douyin\.com\/[0-9a-z]+/.test(value);
+    }
+
+    if (platform && platform !== 'unknown') {
+        return !isDirectVideoInput(value);
     }
 
     return false;
@@ -5886,12 +5886,7 @@ async function saveCurrentSource() {
     );
 
     if (
-        ![
-            'bilibili',
-            'douyin'
-        ].includes(
-            platform
-        )
+        platform === 'unknown'
         || !isChannelSourceUrl(
             sourceUrl,
             platform
@@ -5899,11 +5894,25 @@ async function saveCurrentSource() {
     ) {
 
         alert(
-            'Nguồn phải là Bilibili hoặc Douyin.'
+            'Hãy dán link kênh hoặc danh sách phát hợp lệ.'
         );
 
         return;
     }
+
+    const platformNames = {
+        bilibili: 'Bilibili',
+        douyin: 'Douyin',
+        youtube: 'YouTube',
+        tiktok: 'TikTok',
+        facebook: 'Facebook',
+        instagram: 'Instagram',
+        twitter: 'X / Twitter',
+        xiaohongshu: 'Xiaohongshu',
+        vimeo: 'Vimeo',
+        twitch: 'Twitch',
+        dailymotion: 'Dailymotion',
+    };
 
     const name = (
         document
@@ -5912,12 +5921,7 @@ async function saveCurrentSource() {
         )
         .value
         .trim()
-        || (
-            platform
-            === 'douyin'
-            ? 'Douyin source'
-            : 'Bilibili source'
-        )
+        || `${platformNames[platform] || 'Video'} source`
     );
 
     const channel = (
@@ -9087,12 +9091,22 @@ function sourceDisplayNameFromContext(
         // ignore
     }
 
-    return (
-        platform
-        === 'douyin'
-        ? 'Kênh Douyin'
-        : 'Kênh Bilibili'
-    );
+    const names = {
+        bilibili: 'Kênh Bilibili',
+        douyin: 'Kênh Douyin',
+        youtube: 'Kênh YouTube',
+        tiktok: 'Kênh TikTok',
+        facebook: 'Kênh Facebook',
+        instagram: 'Kênh Instagram',
+        twitter: 'Kênh X',
+        xiaohongshu: 'Kênh Xiaohongshu',
+    };
+    try {
+        const host = new URL(url).hostname.replace(/^www\./i, '');
+        return names[platform] || `Kênh ${host}`;
+    } catch {
+        return names[platform] || 'Kênh nguồn';
+    }
 }
 
 
@@ -9141,12 +9155,7 @@ function updateFollowSourceButton() {
     if (
         !url
         || inputMode !== 'channel'
-        || ![
-            'bilibili',
-            'douyin'
-        ].includes(
-            platform
-        )
+        || platform === 'unknown'
         || !isChannelSourceUrl(
             url,
             platform
@@ -13493,12 +13502,11 @@ document.addEventListener('reupai:assistant-source', async event => {
     const finish = result => { if (typeof complete === 'function') complete(result); };
     try {
         await ready;
-        const parsed = new URL(String(url || ''));
+        const prepared = prepareSourceInput(url);
+        const parsed = new URL(String(prepared || ''));
         const host = parsed.hostname.toLowerCase();
-        const allowed = ['bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'b23.tv',
-            'douyin.com', 'www.douyin.com', 'v.douyin.com'];
-        if (!['https:', 'http:'].includes(parsed.protocol) || !allowed.includes(host)) {
-            throw new Error('Chỉ hỗ trợ link Bilibili hoặc Douyin hợp lệ.');
+        if (!['https:', 'http:'].includes(parsed.protocol) || !isPublicSourceHost(host)) {
+            throw new Error('Link video không hợp lệ hoặc không phải địa chỉ công khai.');
         }
         if (!['subtitle', 'voiceover'].includes(mode)) throw new Error('Hãy chọn Vietsub hoặc Voice.');
         const input = document.getElementById('sourceUrl');

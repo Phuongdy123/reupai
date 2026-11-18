@@ -3,7 +3,9 @@
 Short-link resolution follows only official source hosts, never arbitrary
 redirect destinations. It does not attempt to bypass source access controls.
 """
+import hashlib
 import html
+import ipaddress
 import math
 import re
 from urllib.parse import parse_qs, unquote, urlencode, urljoin, urlsplit, urlunsplit
@@ -13,20 +15,97 @@ import requests
 BV = r'BV[0-9A-Za-z]{10}'
 AV = r'av[0-9]{1,20}'
 
+_BARE_SOURCE_DOMAINS = (
+    r'(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com|youtube\.com|youtu\.be|'
+    r'tiktok\.com|facebook\.com|fb\.watch|instagram\.com|x\.com|twitter\.com|'
+    r'xiaohongshu\.com|xhslink\.com|vimeo\.com|twitch\.tv|dailymotion\.com)'
+)
+
+PLATFORM_LABELS = {
+    'bilibili': 'Bilibili',
+    'douyin': 'Douyin',
+    'youtube': 'YouTube',
+    'tiktok': 'TikTok',
+    'facebook': 'Facebook',
+    'instagram': 'Instagram',
+    'twitter': 'X / Twitter',
+    'xiaohongshu': 'Xiaohongshu',
+    'vimeo': 'Vimeo',
+    'twitch': 'Twitch',
+    'dailymotion': 'Dailymotion',
+}
+
+_HOST_PLATFORMS = (
+    (('b23.tv', 'bilibili.com'), 'bilibili'),
+    (('douyin.com', 'iesdouyin.com'), 'douyin'),
+    (('youtube.com', 'youtu.be', 'youtube-nocookie.com'), 'youtube'),
+    (('tiktok.com', 'tiktokv.com'), 'tiktok'),
+    (('facebook.com', 'fb.com', 'fb.watch'), 'facebook'),
+    (('instagram.com', 'instagr.am'), 'instagram'),
+    (('twitter.com', 'x.com', 't.co'), 'twitter'),
+    (('xiaohongshu.com', 'xhslink.com'), 'xiaohongshu'),
+    (('vimeo.com',), 'vimeo'),
+    (('twitch.tv',), 'twitch'),
+    (('dailymotion.com', 'dai.ly'), 'dailymotion'),
+)
+
+
+def _match_host(host, domains):
+    return any(host == domain or host.endswith('.' + domain) for domain in domains)
+
+
+def is_safe_public_url(value):
+    """Return True if value is a public HTTP/HTTPS URL without private/loopback targets."""
+    raw = str(value or '').strip()
+    if not raw or any(ord(char) < 32 for char in raw):
+        return False
+    try:
+        parsed = urlsplit(raw)
+        if parsed.scheme.lower() not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.port not in {None, 80, 443}:
+            return False
+    except ValueError:
+        return False
+    host = parsed.hostname.lower().rstrip('.')
+    if not host:
+        return False
+    if host == 'localhost' or host.endswith(('.localhost', '.local', '.internal', '.arpa', '.test')):
+        return False
+    try:
+        ip = ipaddress.ip_address(host)
+        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified)
+    except ValueError:
+        return '.' in host and not host.endswith('.')
+
 
 def source_platform(value):
     try:
         host = (urlsplit(str(value)).hostname or '').lower()
     except ValueError:
         return 'unknown'
-    if host == 'b23.tv' or host.endswith('.b23.tv') or host == 'bilibili.com' or host.endswith('.bilibili.com'):
+    if _match_host(host, ('b23.tv', 'bilibili.com')):
         return 'bilibili'
-    if host == 'douyin.com' or host.endswith('.douyin.com') or host == 'iesdouyin.com' or host.endswith('.iesdouyin.com'):
+    if _match_host(host, ('douyin.com', 'iesdouyin.com')):
         return 'douyin'
     return 'unknown'
 
 
-def _plain(value):
+def detected_platform(value):
+    """Identify known video platforms or 'generic' for safe public HTTP/HTTPS URLs."""
+    try:
+        host = (urlsplit(str(value)).hostname or '').lower()
+    except ValueError:
+        return 'unknown'
+    for domains, platform in _HOST_PLATFORMS:
+        if _match_host(host, domains):
+            return platform
+    return 'generic' if is_safe_public_url(value) else 'unknown'
+
+
+def platform_label(platform):
+    return PLATFORM_LABELS.get(str(platform or '').lower(), 'nguồn')
+
+
+def _plain(value, *, allow_generic=False):
     text = html.unescape(str(value or '').strip())
     if not text or len(text) > 8192:
         raise ValueError('Dán một link video hợp lệ, tối đa 8.192 ký tự.')
@@ -46,6 +125,13 @@ def _plain(value):
         raise ValueError('Có nhiều link trong nội dung chia sẻ. Hãy dán một link video mỗi lần.')
     if supported:
         return supported[0]
+    if allow_generic:
+        if len(candidates) > 1:
+            raise ValueError('Có nhiều link trong nội dung chia sẻ. Hãy dán một link video mỗi lần.')
+        if len(candidates) == 1:
+            return candidates[0]
+        if re.match(rf'(?:(?:[a-z0-9-]+)\.)?{_BARE_SOURCE_DOMAINS}/', text, re.I):
+            return 'https://' + text
     if len(candidates) == 1 and text == candidates[0]:
         return candidates[0]
     if re.match(r'(?:(?:www|m|v)\.)?(?:bilibili\.com|b23\.tv|douyin\.com|iesdouyin\.com)/', text, re.I):
@@ -103,12 +189,14 @@ def resolve_short_url(value):
 
 
 def normalize_source_url(value, *, resolve_short=False, allow_generic=False):
-    url = _plain(value)
+    url = _plain(value, allow_generic=allow_generic)
     parsed = _checked(url)
     platform = source_platform(url)
     if platform == 'unknown':
         if allow_generic:
-            return url
+            if not is_safe_public_url(url):
+                raise ValueError('Link nguồn không hợp lệ hoặc không phải địa chỉ công khai.')
+            return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, ''))
         raise ValueError('ReupAI hiện hỗ trợ link video Bilibili và Douyin.')
     if parsed.hostname.lower() in {'b23.tv','www.b23.tv','v.douyin.com'}:
         if not resolve_short:
@@ -145,7 +233,30 @@ def normalize_source_url(value, *, resolve_short=False, allow_generic=False):
     return 'https://www.douyin.com/video/' + identifier
 
 
-def video_identity(url):
+def _safe_generic_video_id(url):
+    parsed = urlsplit(str(url or '').strip())
+    host = (parsed.hostname or '').lower()
+    query = parse_qs(parsed.query)
+    if _match_host(host, ('youtube.com', 'youtu.be', 'youtube-nocookie.com')):
+        yt_id = ''
+        if host == 'youtu.be' or host.endswith('.youtu.be'):
+            yt_id = parsed.path.strip('/').split('/')[0]
+        elif '/shorts/' in parsed.path or '/live/' in parsed.path or '/embed/' in parsed.path:
+            match = re.search(r'/(?:shorts|live|embed)/([A-Za-z0-9_-]{6,32})', parsed.path)
+            yt_id = match.group(1) if match else ''
+        else:
+            yt_id = (query.get('v') or [''])[0]
+        if re.fullmatch(r'[A-Za-z0-9_-]{6,32}', yt_id):
+            return f'yt_{yt_id}'
+    if _match_host(host, ('tiktok.com', 'tiktokv.com')):
+        match = re.search(r'/video/(\d{8,30})', parsed.path)
+        if match:
+            return f'tt_{match.group(1)}'
+    canonical = urlunsplit((parsed.scheme.lower() or 'https', host, parsed.path, parsed.query, ''))
+    return 'vid_' + hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:16]
+
+
+def video_identity(url, *, allow_generic=False):
     """Stable library/job key; multipart selections must not reuse part one's file."""
     parsed = urlsplit(url)
     if source_platform(url) == 'bilibili':
@@ -159,4 +270,6 @@ def video_identity(url):
         match = re.search(r'/video/(\d{10,25})(?:/|$)', parsed.path)
         if match:
             return match.group(1)
+    if allow_generic and is_safe_public_url(url):
+        return _safe_generic_video_id(url)
     return None

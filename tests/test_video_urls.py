@@ -82,3 +82,22 @@ class VideoUrlTests(unittest.TestCase):
         url = 'https://www.bilibili.com/vi/video/BV1S7446fEFw/?p=2&trackid=x'
         assert parse_video_id('bilibili', url) == 'BV1S7446fEFw_p2'
         assert canonical_video_url('bilibili', 'BV1S7446fEFw_p2', url) == url.split('&trackid')[0]
+
+    def test_generic_public_urls_and_ssrf_guards(self):
+        from services.video_urls import detected_platform, is_safe_public_url
+        assert detected_platform('https://www.youtube.com/watch?v=dQw4w9WgXcQ') == 'youtube'
+        assert detected_platform('https://vt.tiktok.com/ZSYabc123/') == 'tiktok'
+        assert detected_platform('https://www.facebook.com/watch/?v=123456') == 'facebook'
+        assert detected_platform('https://vimeo.com/123456') == 'vimeo'
+        assert detected_platform('https://example-video.org/watch/1') == 'generic'
+        assert detected_platform('http://127.0.0.1:8080/internal') == 'unknown'
+        assert detected_platform('https://bilibili.com.evil.test/video/BV1S7446fEFw/') == 'unknown'
+        assert is_safe_public_url('https://localhost/admin') is False
+        assert is_safe_public_url('http://192.168.1.10/video.mp4') is False
+        assert normalize_source_url('Xem https://youtu.be/dQw4w9WgXcQ nha', allow_generic=True) == 'https://youtu.be/dQw4w9WgXcQ'
+        assert video_identity('https://youtu.be/dQw4w9WgXcQ', allow_generic=True) == 'yt_dQw4w9WgXcQ'
+        assert video_identity('https://www.tiktok.com/@user/video/732109876543210', allow_generic=True) == 'tt_732109876543210'
+        assert normalize_source_url('vimeo.com/123456', allow_generic=True) == 'https://vimeo.com/123456'
+        assert video_identity('https://vimeo.com/123456', allow_generic=True).startswith('vid_')
+        with self.assertRaises(ValueError):
+            normalize_source_url('http://127.0.0.1/video.mp4', allow_generic=True)

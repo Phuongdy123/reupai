@@ -9,20 +9,41 @@ import { useGuestAccess } from "./guest-access";
 const CHAT_STORAGE_KEY = "reupai:assistant-chat-v1";
 const GUEST_DRAFT_KEY = "reupai:guest-assistant-draft";
 export const PENDING_SOURCE_KEY = "reupai:assistant-pending-source";
-const VIDEO_HOSTS = new Set(["bilibili.com", "www.bilibili.com", "m.bilibili.com", "space.bilibili.com", "b23.tv", "douyin.com", "www.douyin.com", "v.douyin.com"]);
+import { isDirectVideoInput, isPublicSourceHost, prepareSourceInput } from "../lib/source-url-input";
+
 const PROMPTS = ["Tạo Vietsub từ link", "Gợi ý cấu hình video", "Hỏi về lỗi xử lý"];
 
+function platformLabelFromHost(host) {
+  const value = String(host || "").toLowerCase();
+  const match = domains => domains.some(d => value === d || value.endsWith("." + d));
+  if (match(["douyin.com", "iesdouyin.com"])) return "Douyin";
+  if (match(["bilibili.com", "b23.tv"])) return "Bilibili";
+  if (match(["youtube.com", "youtu.be", "youtube-nocookie.com"])) return "YouTube";
+  if (match(["tiktok.com", "tiktokv.com"])) return "TikTok";
+  if (match(["facebook.com", "fb.com", "fb.watch"])) return "Facebook";
+  if (match(["instagram.com", "instagr.am"])) return "Instagram";
+  if (match(["x.com", "twitter.com", "t.co"])) return "X";
+  if (match(["xiaohongshu.com", "xhslink.com"])) return "Xiaohongshu";
+  return value.replace(/^www\./, "") || "Video";
+}
+
 function sourceFromMessage(message) {
-  const match = String(message).match(/(?:https?:\/\/)?(?:www\.|m\.|space\.)?(?:bilibili\.com|b23\.tv|douyin\.com|v\.douyin\.com)\/[^\s<>"']+/i);
-  if (!match) return null;
+  const prepared = prepareSourceInput(message);
+  const candidateMatch = /^https?:\/\//i.test(prepared)
+    ? [prepared]
+    : String(message).match(/https?:\/\/[^\s<>"']+/i);
+  if (!candidateMatch) return null;
   try {
-    const candidate = match[0].replace(/[),.;!?]+$/, "");
+    const candidate = String(candidateMatch[0]).replace(/[),.;!?]+$/, "");
     const url = new URL(/^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`);
-    if (!VIDEO_HOSTS.has(url.hostname.toLowerCase())) return null;
+    if (!["http:", "https:"].includes(url.protocol) || !isPublicSourceHost(url.hostname)) return null;
     const host = url.hostname.toLowerCase();
-    const platform = host.endsWith("douyin.com") ? "Douyin" : "Bilibili";
-    const isChannel = host === "space.bilibili.com" || /\/user\//i.test(url.pathname);
-    const isVideo = host === "b23.tv" || host === "v.douyin.com" || /\/(?:video|share\/video)\//i.test(url.pathname);
+    const platform = platformLabelFromHost(host);
+    const isVideo = isDirectVideoInput(url.href);
+    const isChannel = !isVideo && (
+      host === "space.bilibili.com"
+      || /\/user\/|\/channel\/|\/playlist|\/@/i.test(url.pathname)
+    );
     return { url: url.href, platform, kind: isChannel ? "channel" : isVideo ? "video" : "unknown" };
   } catch { return null; }
 }

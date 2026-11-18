@@ -582,22 +582,8 @@ class RenderEditRequest(BaseModel):
 def detect_platform(
     url: str,
 ) -> str:
-
-    value = (
-        url.strip()
-        .lower()
-    )
-
-    if (
-        "bilibili.com" in value
-        or "b23.tv" in value
-    ):
-        return "bilibili"
-
-    if "douyin.com" in value:
-        return "douyin"
-
-    return "unknown"
+    from services.video_urls import detected_platform
+    return detected_platform(url)
 
 
 def validate_video_id(
@@ -608,16 +594,8 @@ def validate_video_id(
         video_id.strip()
     )
 
-    # Bilibili
     if re.fullmatch(
-        r"(?:BV[0-9A-Za-z]{6,20}|av[0-9]{1,20})(?:_p[0-9]{1,5})?",
-        value,
-    ):
-        return value
-
-    # Douyin aweme/video ID
-    if re.fullmatch(
-        r"\d{10,25}",
+        r"[A-Za-z0-9_-]{4,80}",
         value,
     ):
         return value
@@ -625,9 +603,7 @@ def validate_video_id(
     raise HTTPException(
         status_code=400,
         detail=(
-            "Video ID khong hop le. "
-            "Ho tro Bilibili BV... "
-            "hoac Douyin numeric ID."
+            "Video ID không hợp lệ."
         ),
     )
 
@@ -3951,6 +3927,166 @@ def api_cover(
         )
 
 
+def _ytdlp_list_target_url(url: str, platform: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    host = (parsed.hostname or "").lower()
+    if platform == "youtube" and (host == "youtube.com" or host.endswith(".youtube.com")):
+        path = (parsed.path or "").rstrip("/")
+        if re.fullmatch(r"/@[^/]+|/channel/[^/]+|/c/[^/]+|/user/[^/]+", path, re.IGNORECASE):
+            return urllib.parse.urlunsplit((parsed.scheme or "https", parsed.netloc, path + "/videos", parsed.query, ""))
+    return url
+
+
+def _ytdlp_entry_cover(entry: dict) -> str:
+    thumb = str(entry.get("thumbnail") or "").strip()
+    if thumb:
+        return thumb
+    thumbs = entry.get("thumbnails") or []
+    if isinstance(thumbs, list):
+        for item in reversed(thumbs):
+            if isinstance(item, dict) and item.get("url"):
+                return str(item["url"]).strip()
+    return ""
+
+
+def _ytdlp_entry_published_at(entry: dict):
+    ts = entry.get("timestamp")
+    if isinstance(ts, (int, float)) and ts > 0:
+        return int(ts)
+    upload_date = str(entry.get("upload_date") or "").strip()
+    if re.fullmatch(r"\d{8}", upload_date):
+        try:
+            from datetime import timezone
+            return int(datetime.strptime(upload_date, "%Y%m%d").replace(tzinfo=timezone.utc).timestamp())
+        except ValueError:
+            return None
+    return None
+
+
+def _ytdlp_flatten_entries(raw_entries: list) -> list[dict]:
+    items: list[dict] = []
+    for entry in raw_entries or []:
+        if not isinstance(entry, dict):
+            continue
+        nested = entry.get("entries")
+        if isinstance(nested, list):
+            items.extend(_ytdlp_flatten_entries(nested))
+            continue
+        items.append(entry)
+    return items
+
+
+def ytdlp_fetch_page_meta(
+    url: str,
+    *,
+    platform: str,
+    page: int,
+    limit: int,
+):
+    from services.video_urls import is_safe_public_url, platform_label, video_identity
+
+    if not is_safe_public_url(url):
+        raise ValueError("Link nguồn không hợp lệ hoặc không phải địa chỉ công khai.")
+
+    target_url = _ytdlp_list_target_url(url, platform)
+    start = max(1, (page - 1) * limit + 1)
+    end = start + limit
+    env = _build_child_environment()
+    errors: list[str] = []
+    data = None
+
+    for use_cookies in (False, True):
+        command = python_module_command(
+            "yt_dlp",
+            "--flat-playlist",
+            "--dump-single-json",
+            "--skip-download",
+            "--no-warnings",
+            "--ignore-errors",
+            "--playlist-items",
+            f"{start}:{end}",
+        )
+        if use_cookies:
+            command.extend([
+                "--cookies-from-browser",
+                os.getenv("REUP_COOKIE_BROWSER", "chrome"),
+            ])
+        command.append(target_url)
+
+        result = subprocess.run(
+            command,
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=45,
+        )
+        stdout = (result.stdout or "").strip()
+        if result.returncode == 0 and stdout:
+            try:
+                data = json.loads(stdout.splitlines()[-1])
+                break
+            except Exception:
+                pass
+        errors.append((result.stderr or stdout or f"exit {result.returncode}")[-800:])
+
+    if not isinstance(data, dict):
+        site = platform_label(platform)
+        raise RuntimeError(
+            f"Không lấy được danh sách video từ {site}. "
+            "Hãy kiểm tra lại link hoặc mở link trên trình duyệt để chắc chắn vẫn truy cập được."
+        )
+
+    raw_entries = _ytdlp_flatten_entries(data.get("entries") or [])
+    if not raw_entries and (data.get("id") or data.get("title")):
+        raw_entries = [data]
+
+    videos: list[dict] = []
+    for entry in raw_entries[:limit]:
+        raw_url = str(entry.get("webpage_url") or entry.get("original_url") or entry.get("url") or "").strip()
+        if not raw_url.startswith(("http://", "https://")):
+            if platform == "youtube" and entry.get("id"):
+                raw_url = f"https://www.youtube.com/watch?v={entry['id']}"
+            else:
+                raw_url = url
+        if not is_safe_public_url(raw_url):
+            continue
+        video_id = video_identity(raw_url, allow_generic=True)
+        if not video_id:
+            continue
+        videos.append({
+            "video_id": video_id,
+            "platform": platform,
+            "url": raw_url,
+            "title": str(entry.get("title") or entry.get("fulltitle") or video_id),
+            "cover_url": _ytdlp_entry_cover(entry),
+            "duration_seconds": entry.get("duration"),
+            "video_width": entry.get("width"),
+            "video_height": entry.get("height"),
+            "published_at": _ytdlp_entry_published_at(entry),
+            "play_count": int(entry.get("view_count") or 0),
+            "like_count": int(entry.get("like_count") or 0),
+            "comment_count": int(entry.get("comment_count") or 0),
+            "share_count": int(entry.get("repost_count") or 0),
+        })
+
+    total = data.get("playlist_count")
+    total_int = int(total) if isinstance(total, (int, float)) and total > 0 else None
+    has_more = (
+        (start - 1 + len(videos)) < total_int
+        if total_int is not None
+        else len(raw_entries) > limit
+    )
+    return {
+        "videos": videos,
+        "total": total_int,
+        "has_more": bool(has_more),
+    }
+
+
 def fetch_platform_latest_meta(
     platform: str,
     url: str,
@@ -3968,8 +4104,16 @@ def fetch_platform_latest_meta(
             limit=limit,
         )
 
+    if platform and platform != "unknown":
+        return ytdlp_fetch_page_meta(
+            url,
+            platform=platform,
+            page=1,
+            limit=limit,
+        )
+
     raise ValueError(
-        "Platform chua ho tro: "
+        "Link chưa hỗ trợ: "
         + str(platform)
     )
 
@@ -3995,8 +4139,16 @@ def fetch_platform_page_meta(
             limit=limit,
         )
 
+    if platform and platform != "unknown":
+        return ytdlp_fetch_page_meta(
+            url,
+            platform=platform,
+            page=page,
+            limit=limit,
+        )
+
     raise ValueError(
-        "Platform chua ho tro: "
+        "Link chưa hỗ trợ: "
         + str(platform)
     )
 
@@ -4058,8 +4210,9 @@ def describe_source_download_error(
     exit_code: int | None = None,
 ) -> SourceDownloadError:
     """Classify upstream failures without exposing signed media URLs or cookies."""
+    from services.video_urls import platform_label
     detail = " ".join(str(item or "") for item in diagnostics).lower()
-    site = "Bilibili" if platform == "bilibili" else "Douyin"
+    site = platform_label(platform)
     prefix = f"Không tải được video từ {site}. "
 
     if any(marker in detail for marker in (
@@ -4383,14 +4536,15 @@ def api_videos(
     body: SourceRequest,
 ):
 
+    from services.video_urls import is_safe_public_url
     url = body.url.strip()
     limit = max(1, min(int(body.limit), 10))
     platform = detect_platform(url)
 
-    if platform not in {"bilibili", "douyin"}:
+    if platform == "unknown" or not is_safe_public_url(url):
         raise HTTPException(
             status_code=400,
-            detail="Link chưa được hỗ trợ. Chỉ hỗ trợ Bilibili và Douyin.",
+            detail="Link chưa hợp lệ hoặc không phải địa chỉ công khai.",
         )
 
     source = find_source_by_profile(url)
@@ -4739,6 +4893,7 @@ def api_videos_page(
     body: PageRequest,
 ):
 
+    from services.video_urls import is_safe_public_url
     url = body.url.strip()
 
     platform = (
@@ -4747,15 +4902,11 @@ def api_videos_page(
         )
     )
 
-    if platform not in {
-        "bilibili",
-        "douyin",
-    }:
+    if platform == "unknown" or not is_safe_public_url(url):
         raise HTTPException(
             status_code=400,
             detail=(
-                "Pagination chi ho tro "
-                "Bilibili va Douyin."
+                "Link phân trang không hợp lệ hoặc không phải địa chỉ công khai."
             ),
         )
 
@@ -5034,21 +5185,18 @@ def api_download(
         )
     )
 
+    from services.video_urls import is_safe_public_url
     platform = (
         detect_platform(
             body.url
         )
     )
 
-    if platform not in {
-        "bilibili",
-        "douyin",
-    }:
+    if platform == "unknown" or not is_safe_public_url(body.url):
         raise HTTPException(
             status_code=400,
             detail=(
-                "Download chi ho tro "
-                "Bilibili va Douyin."
+                "Link download không hợp lệ hoặc không phải địa chỉ công khai."
             ),
         )
 

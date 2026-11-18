@@ -148,8 +148,8 @@ def user_id_from_request(
 
 
 def detect_platform(url):
-    from services.video_urls import source_platform
-    return source_platform(url)
+    from services.video_urls import detected_platform
+    return detected_platform(url)
 
 
 def normalize_profile_url(
@@ -230,19 +230,30 @@ def normalize_profile_url(
             )
         )
 
-    raise HTTPException(
-        status_code=400,
-        detail=(
-            "Chỉ hỗ trợ nguồn "
-            "Bilibili và Douyin."
-        ),
+    from services.video_urls import is_safe_public_url
+
+    if not is_safe_public_url(value):
+        raise HTTPException(
+            status_code=400,
+            detail="Link nguồn không hợp lệ hoặc không phải địa chỉ công khai.",
+        )
+
+    parsed = urllib.parse.urlsplit(value)
+    return urllib.parse.urlunsplit(
+        (
+            parsed.scheme.lower() or "https",
+            parsed.netloc.lower(),
+            parsed.path.rstrip("/") or "/",
+            parsed.query,
+            "",
+        )
     )
 
 
 def parse_video_id(platform, url):
     from services.video_urls import normalize_source_url, video_identity
     try:
-        return video_identity(normalize_source_url(url))
+        return video_identity(normalize_source_url(url, allow_generic=True), allow_generic=True)
     except ValueError:
         return None
 
@@ -254,7 +265,7 @@ def canonical_video_url(
 ):
     from services.video_urls import normalize_source_url
     try:
-        normalized = normalize_source_url(original_url)
+        normalized = normalize_source_url(original_url, allow_generic=True)
         if parse_video_id(platform, normalized) == video_id:
             return normalized
     except ValueError:
@@ -742,9 +753,9 @@ def api_direct_video(
     body: DirectVideoBody,
 ):
 
-    from services.video_urls import normalize_source_url
+    from services.video_urls import normalize_source_url, platform_label
     try:
-        url = normalize_source_url(body.url, resolve_short=True)
+        url = normalize_source_url(body.url, resolve_short=True, allow_generic=True)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -758,8 +769,7 @@ def api_direct_video(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Link video phải là "
-                "Bilibili hoặc Douyin."
+                "Link video không hợp lệ hoặc không phải địa chỉ công khai."
             ),
         )
 
@@ -781,9 +791,6 @@ def api_direct_video(
 
     metadata = {}
 
-    # Bilibili metadata thuong lay nhanh va on dinh.
-    # Douyin neu yt-dlp fail thi van tra card de download
-    # bang downloader Playwright hien tai.
     try:
         metadata = (
             ytdlp_metadata(
@@ -794,18 +801,15 @@ def api_direct_video(
     except Exception:
         metadata = {}
 
+    fallback_site = platform_label(platform)
+    if fallback_site == "nguồn":
+        fallback_site = "Video"
     title = (
         metadata.get(
             "title"
         )
         or (
-            (
-                "Bilibili "
-                if platform
-                == "bilibili"
-                else "Douyin "
-            )
-            + video_id
+            f"{fallback_site} {video_id}"
         )
     )
 
