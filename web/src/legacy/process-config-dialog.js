@@ -66,7 +66,13 @@ export function createProcessConfigDialog({ document, uiIcon }) {
 
             <div class="process-config-body">
             <div class="process-editor-main">
-            <div class="process-config-showcase">
+            <div class="process-config-showcase" id="processConfigShowcase">
+            <div class="process-stage-topbar" id="processStageTopbar">
+                <span class="process-stage-metric-badge" id="processStageMetricBadge">Xem trước video &amp; Logo</span>
+                <button type="button" class="btn secondary process-expand-stage-btn" id="processExpandStageBtn" title="Phóng to khung video theo kích thước thực tế để chỉnh Logo và vùng mờ chính xác">
+                    ${uiIcon('expand', 14)}<span>Phóng to chỉnh kích thước thật</span>
+                </button>
+            </div>
             <div class="process-config-preview" id="processConfigPreviewWrap">
                 <img id="processConfigPoster" class="process-preview-poster" alt="" hidden>
                 <div class="process-preview-stage" id="processPreviewStage">
@@ -76,7 +82,8 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     <div id="processStageLogoOverlay" class="process-stage-logo-overlay" data-shape="rect" hidden>
                         <img id="processStageLogoImg" alt="" draggable="false" hidden>
                         <span id="processStageLogoTextPreview" class="process-stage-logo-text" hidden></span>
-                        <span id="processStageLogoHandle" class="process-stage-logo-handle" title="Kéo để đổi kích thước logo" aria-hidden="true"></span>
+                        <span id="processStageLogoDims" class="process-stage-logo-dims"></span>
+                        <span id="processStageLogoHandle" class="process-stage-logo-handle" title="Kéo để đổi kích thước logo (giữ đúng tỷ lệ)" aria-hidden="true"></span>
                     </div>
                 </div>
                 <div id="processConfigPreviewEmpty">
@@ -86,6 +93,26 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </div>
                 <button type="button" class="btn secondary process-download-source" id="processDownloadSource">${uiIcon('download', 16)} Tải video để xem trước</button>
                 <div id="processStageSubtitlePreview" class="process-stage-subtitle-preview" data-style="minimal" hidden aria-hidden="true"><span class="process-sub-render-text" id="processStageSubtitleText"></span></div>
+            </div>
+            <div class="process-expanded-logo-bar" id="processExpandedLogoBar" hidden>
+                <div class="process-expanded-logo-controls">
+                    <label class="process-expanded-scale-label">
+                        <span>Cỡ logo</span>
+                        <input type="range" id="processQuickLogoScale" min="3" max="35" step="1" value="12">
+                        <strong id="processQuickLogoScaleText">12%</strong>
+                    </label>
+                    <div class="process-expanded-corner-btns" role="group" aria-label="Đặt nhanh góc logo">
+                        <button type="button" class="btn secondary" data-logo-corner="tl">Trên trái</button>
+                        <button type="button" class="btn secondary" data-logo-corner="tr">Trên phải</button>
+                        <button type="button" class="btn secondary" data-logo-corner="bl">Dưới trái</button>
+                        <button type="button" class="btn secondary" data-logo-corner="br">Dưới phải</button>
+                    </div>
+                    <label class="process-expanded-rect-note">
+                        <input type="checkbox" id="processQuickLogoKeepRect" checked>
+                        <span>Giữ vuông/chữ nhật (không cắt tròn)</span>
+                    </label>
+                </div>
+                <button type="button" class="btn primary process-collapse-stage-btn" id="processCollapseStageBtn">Xong · Thu nhỏ</button>
             </div>
             <div class="process-preview-tools">
                 <div class="process-region-tabs" role="group" aria-label="Loại vùng chỉnh sửa">
@@ -254,7 +281,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 </label>
                 <label id="processLogoShapeField">Hình dáng logo
                     <select id="processLogoShape">
-                        <option value="rect">Giữ nguyên khung (Chữ nhật / Vuông)</option>
+                        <option value="rect">Giữ nguyên khung (Vuông / Chữ nhật · Không cắt tròn)</option>
                         <option value="circle">Cắt hình tròn</option>
                     </select>
                 </label>

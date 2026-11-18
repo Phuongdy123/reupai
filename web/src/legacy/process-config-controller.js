@@ -808,7 +808,18 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     dialog.querySelector('#addBlurInterval').onclick = () => addInterval();
 
     let logoAspectRatio = 1;
-    const probeLogoRatioFromData = dataUrl => {
+    const resolveVideoPixelSpace = () => {
+        if (preview?.videoWidth > 0 && preview?.videoHeight > 0) {
+            return { w: preview.videoWidth, h: preview.videoHeight, isExact: true };
+        }
+        return {
+            w: sourceWidth > 0 ? sourceWidth : 1280,
+            h: sourceHeight > 0 ? sourceHeight : 720,
+            isExact: sourceWidth > 0 && sourceHeight > 0,
+        };
+    };
+
+    const probeLogoRatioFromData = (dataUrl, { ensureReasonableSize = false } = {}) => {
         if (!dataUrl || typeof window.Image !== 'function') return;
         const img = new window.Image();
         img.onload = () => {
@@ -817,7 +828,26 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 logoAspectRatio = img.naturalWidth / img.naturalHeight;
                 const widthInput = dialog.querySelector('#processLogoWidth');
                 const heightInput = dialog.querySelector('#processLogoHeight');
-                if (widthInput && heightInput && !widthInput.value && heightInput.value) {
+                const sizeInput = dialog.querySelector('#processLogoSize');
+                const { w: vidW, h: vidH } = resolveVideoPixelSpace();
+                const shortSide = Math.min(vidW, vidH);
+
+                if (ensureReasonableSize) {
+                    const maxAutoW = Math.max(72, Math.min(180, Math.round(shortSide * 0.14)));
+                    const curW = Number(widthInput?.value || 0);
+                    const curH = Number(heightInput?.value || 0);
+                    const isEmpty = !curW && !curH;
+                    const isOversized = curW > Math.round(vidW * 0.35) || curH > Math.round(vidH * 0.35);
+                    if (isEmpty || isOversized) {
+                        const targetW = logoAspectRatio >= 1
+                            ? maxAutoW
+                            : Math.max(48, Math.round(maxAutoW * logoAspectRatio));
+                        const targetH = Math.max(24, Math.round(targetW / logoAspectRatio));
+                        if (widthInput) widthInput.value = String(targetW);
+                        if (heightInput) heightInput.value = String(targetH);
+                        if (sizeInput) sizeInput.value = String(Math.max(targetW, targetH));
+                    }
+                } else if (widthInput && heightInput && !widthInput.value && heightInput.value) {
                     widthInput.value = String(Math.round(Number(heightInput.value) * logoAspectRatio));
                 } else if (widthInput && heightInput && widthInput.value && !heightInput.value && logoShape?.value !== 'circle') {
                     heightInput.value = String(Math.round(Number(widthInput.value) / logoAspectRatio));
@@ -990,10 +1020,19 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         preview.load();
     };
 
+    const showcaseEl = dialog.querySelector('#processConfigShowcase');
+    const expandStageBtn = dialog.querySelector('#processExpandStageBtn');
+    const collapseStageBtn = dialog.querySelector('#processCollapseStageBtn');
+    const expandedLogoBar = dialog.querySelector('#processExpandedLogoBar');
+    const stageMetricBadge = dialog.querySelector('#processStageMetricBadge');
     const stageLogoOverlay = dialog.querySelector('#processStageLogoOverlay');
     const stageLogoImg = dialog.querySelector('#processStageLogoImg');
     const stageLogoTextPreview = dialog.querySelector('#processStageLogoTextPreview');
+    const stageLogoDims = dialog.querySelector('#processStageLogoDims');
     const stageLogoHandle = dialog.querySelector('#processStageLogoHandle');
+    const quickLogoScaleInput = dialog.querySelector('#processQuickLogoScale');
+    const quickLogoScaleText = dialog.querySelector('#processQuickLogoScaleText');
+    const quickLogoKeepRect = dialog.querySelector('#processQuickLogoKeepRect');
 
     const computeLogoLayoutPixels = (vidW, vidH) => {
         const readNum = id => {
@@ -1020,7 +1059,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             h = Math.round(clampNum(fontPx + 18, 28, vidH));
         } else if (shape === 'circle') {
             const circleSize = Math.round(clampNum(
-                sizeIn || (wIn && hIn ? Math.min(wIn, hIn) : 0) || clampNum(shortSide * 0.10, 82, 150),
+                sizeIn || (wIn && hIn ? Math.min(wIn, hIn) : 0) || clampNum(shortSide * 0.10, 72, 140),
                 20,
                 shortSide,
             ));
@@ -1048,7 +1087,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                     w = Math.max(1, Math.round(sizeIn * aspect));
                 }
             } else {
-                w = Math.round(clampNum(shortSide * (aspect > 1.25 ? 0.18 : 0.12), 82, Math.max(82, vidW * 0.38)));
+                const defaultCap = Math.min(180, Math.max(76, Math.round(vidW * 0.24)));
+                w = Math.round(clampNum(shortSide * (aspect > 1.25 ? 0.15 : 0.12), 72, defaultCap));
                 h = Math.max(1, Math.round(w / aspect));
             }
             if (w > vidW) {
@@ -1070,30 +1110,60 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         return { x, y, width: w, height: h, shape };
     };
 
+    const syncStageMetricsReadout = (vidW, vidH, layout) => {
+        if (!stageMetricBadge) return;
+        const videoText = vidW > 0 && vidH > 0 ? `Video thật: ${vidW}×${vidH}` : 'Xem trước video';
+        if (layout) {
+            stageMetricBadge.textContent = `${videoText} · Logo: ${layout.width}×${layout.height} px (X:${layout.x}, Y:${layout.y}) · ${layout.shape === 'circle' ? 'Tròn' : 'Vuông/Chữ nhật'}`;
+        } else {
+            stageMetricBadge.textContent = videoText;
+        }
+    };
+
     const syncLogoOverlay = () => {
         if (!stageLogoOverlay) return;
         const mode = logoMode.value || 'none';
         const textValue = (dialog.querySelector('#processLogoText')?.value || '').trim();
         const ready = dialog.dataset.previewState === 'ready' && preview.videoWidth > 0 && preview.videoHeight > 0;
-        const shouldShow = ready && (
-            (mode === 'custom' && Boolean(dialog._logoData))
+        const posterReady = !ready && poster && !poster.hidden && poster.naturalWidth > 0;
+        const hasLogoContent = (mode === 'custom' && Boolean(dialog._logoData))
             || (mode === 'text' && Boolean(textValue))
-            || mode === 'default'
-        );
+            || mode === 'default';
+        const shouldShow = (ready || posterReady) && hasLogoContent;
         stageLogoOverlay.hidden = !shouldShow;
-        if (!shouldShow) return;
 
-        const rect = preview.getBoundingClientRect();
+        const { w: vidW, h: vidH } = resolveVideoPixelSpace();
+        if (!shouldShow) {
+            syncStageMetricsReadout(preview.videoWidth || sourceWidth, preview.videoHeight || sourceHeight, null);
+            return;
+        }
+
+        const targetEl = ready ? preview : poster;
+        const rect = targetEl.getBoundingClientRect();
         const stageRect = stage.getBoundingClientRect();
         if (!rect.width || !rect.height) return;
 
-        const layout = computeLogoLayoutPixels(preview.videoWidth, preview.videoHeight);
+        const layout = computeLogoLayoutPixels(vidW, vidH);
         stageLogoOverlay.dataset.shape = mode === 'text' ? 'rect' : layout.shape;
-        stageLogoOverlay.style.left = `${rect.left - stageRect.left + (layout.x / preview.videoWidth) * rect.width}px`;
-        stageLogoOverlay.style.top = `${rect.top - stageRect.top + (layout.y / preview.videoHeight) * rect.height}px`;
-        stageLogoOverlay.style.width = `${Math.max(18, (layout.width / preview.videoWidth) * rect.width)}px`;
-        stageLogoOverlay.style.height = `${Math.max(18, (layout.height / preview.videoHeight) * rect.height)}px`;
+        stageLogoOverlay.style.left = `${rect.left - stageRect.left + (layout.x / vidW) * rect.width}px`;
+        stageLogoOverlay.style.top = `${rect.top - stageRect.top + (layout.y / vidH) * rect.height}px`;
+        stageLogoOverlay.style.width = `${Math.max(18, (layout.width / vidW) * rect.width)}px`;
+        stageLogoOverlay.style.height = `${Math.max(18, (layout.height / vidH) * rect.height)}px`;
         stageLogoOverlay.style.pointerEvents = (pickingEnabled && pickMode !== 'logo') ? 'none' : 'auto';
+
+        if (stageLogoDims) {
+            stageLogoDims.textContent = `${layout.width}×${layout.height} px`;
+        }
+        syncStageMetricsReadout(vidW, vidH, layout);
+
+        if (quickLogoScaleInput && quickLogoScaleText) {
+            const pct = Math.max(3, Math.min(35, Math.round((layout.width / Math.max(1, Math.min(vidW, vidH))) * 100)));
+            quickLogoScaleInput.value = String(pct);
+            quickLogoScaleText.textContent = `${pct}%`;
+        }
+        if (quickLogoKeepRect && logoShape) {
+            quickLogoKeepRect.checked = logoShape.value !== 'circle';
+        }
 
         if (stageLogoImg && stageLogoTextPreview) {
             if (mode === 'custom' && dialog._logoData) {
@@ -1104,7 +1174,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
                 stageLogoImg.hidden = true;
                 stageLogoTextPreview.hidden = false;
                 stageLogoTextPreview.textContent = mode === 'text' ? textValue : 'LOGO';
-                const displayScale = rect.width / preview.videoWidth;
+                const displayScale = rect.width / vidW;
                 stageLogoTextPreview.style.fontSize = `${Math.max(11, Math.round(Math.max(18, (Number(dialog.querySelector('#processLogoSize')?.value) || 96) * 0.28) * displayScale))}px`;
             }
         }
@@ -1113,6 +1183,73 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         }
     };
     dialog._syncLogoOverlay = syncLogoOverlay;
+
+    const setStageExpanded = (expanded) => {
+        if (!showcaseEl) return;
+        const next = Boolean(expanded);
+        showcaseEl.classList.toggle('is-stage-expanded', next);
+        if (expandedLogoBar) expandedLogoBar.hidden = !next;
+        if (expandStageBtn) {
+            expandStageBtn.innerHTML = next
+                ? `${uiIcon('expand', 14)}<span>Thu nhỏ khung</span>`
+                : `${uiIcon('expand', 14)}<span>Phóng to chỉnh kích thước thật</span>`;
+        }
+        window.requestAnimationFrame(() => {
+            if (isCurrent()) {
+                drawSelection();
+                syncLogoOverlay();
+            }
+        });
+    };
+
+    if (expandStageBtn) {
+        expandStageBtn.onclick = () => {
+            setStageExpanded(!showcaseEl?.classList.contains('is-stage-expanded'));
+        };
+    }
+    if (collapseStageBtn) {
+        collapseStageBtn.onclick = () => setStageExpanded(false);
+    }
+    if (quickLogoKeepRect && logoShape) {
+        quickLogoKeepRect.onchange = () => {
+            logoShape.value = quickLogoKeepRect.checked ? 'rect' : 'circle';
+            logoShape.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+    }
+    if (quickLogoScaleInput) {
+        quickLogoScaleInput.oninput = () => {
+            const pct = Math.max(3, Math.min(35, Number(quickLogoScaleInput.value || 12)));
+            if (quickLogoScaleText) quickLogoScaleText.textContent = `${pct}%`;
+            const { w: vidW, h: vidH } = resolveVideoPixelSpace();
+            const shortSide = Math.min(vidW, vidH);
+            const shape = logoShape?.value || 'rect';
+            const mode = logoMode.value || 'none';
+            const aspect = mode === 'custom' && logoAspectRatio > 0 ? logoAspectRatio : 1;
+            const lw = Math.max(24, Math.round((shortSide * pct) / 100));
+            const lh = shape === 'circle' ? lw : Math.max(16, Math.round(lw / aspect));
+            set('processLogoWidth', lw);
+            set('processLogoHeight', lh);
+            set('processLogoSize', shape === 'circle' ? lw : Math.max(lw, lh));
+            syncLogoOverlay();
+            if (pickMode === 'logo') syncSelectionFromFields();
+        };
+    }
+    dialog.querySelectorAll('[data-logo-corner]').forEach(btn => {
+        btn.onclick = () => {
+            const { w: vidW, h: vidH } = resolveVideoPixelSpace();
+            const layout = computeLogoLayoutPixels(vidW, vidH);
+            const marginX = Math.max(12, Math.round(vidW * 0.02));
+            const marginY = Math.max(12, Math.round(vidH * 0.02));
+            const corner = btn.dataset.logoCorner;
+            const nx = (corner === 'tr' || corner === 'br') ? Math.max(0, vidW - layout.width - marginX) : marginX;
+            const ny = (corner === 'bl' || corner === 'br') ? Math.max(0, vidH - layout.height - marginY) : marginY;
+            set('processLogoX', nx);
+            set('processLogoY', ny);
+            syncLogoOverlay();
+            if (pickMode === 'logo') syncSelectionFromFields();
+            dialog._presetMarkDirty?.(dialog.querySelector('#processLogoX'));
+        };
+    });
 
     if (stageLogoOverlay) {
         let logoDragState = null;
@@ -2195,8 +2332,9 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         dialog._logoData = logoData;
         dialog._logoFilename = file.name;
         if (logoMode.value !== 'custom') logoMode.value = 'custom';
+        if (logoShape && logoShape.value !== 'rect') logoShape.value = 'rect';
         updateLogoFields();
-        probeLogoRatioFromData(logoData);
+        probeLogoRatioFromData(logoData, { ensureReasonableSize: true });
         dialog._scheduleSaveLastConfig?.();
     };
 
