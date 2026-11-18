@@ -2,6 +2,18 @@
 import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
 import { playVoicePreview } from '../lib/tts-voices.js';
+import {
+    clearLastConfig,
+    mergeSectionIntoConfig,
+    readActivePresetPref,
+    readLastConfigLocal,
+    readPresetsLocal,
+    syncLastConfigFromEngine,
+    syncPresetsFromEngine,
+    writeActivePresetPref,
+    writeLastConfig,
+    writePresets,
+} from '../lib/process-config-store.js';
 
 export async function openProcessConfig(video, card, mode, dependencies) {
     const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
@@ -33,15 +45,22 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     let skipReviewRequested = false;
     let previewAbortController = null;
     let statusTimer = null;
+    let lastConfigSaveTimer = null;
+    let hasUserEditedSinceOpen = false;
+    signal.addEventListener('abort', () => clearTimeout(lastConfigSaveTimer), { once: true });
     const set = (id, value) => {
         const element = dialog.querySelector(`#${id}`);
         if (element && value !== undefined && value !== null) element.value = value;
         element?.dispatchEvent(new Event('input'));
     };
+    const isPresetMetaControl = target => {
+        const id = target?.id || '';
+        return id === 'processPresetSelect' || id === 'processPresetName' || id === 'processAutoRememberConfig';
+    };
     const sectionForTarget = target => {
         const id = target?.id || '';
         if (id.startsWith('processOcr') || id === 'processTranscriptSource' || id === 'processSourceLanguage') return 'sub';
-        if (id.startsWith('processBlur') || id === 'processBlurPreset' || id === 'processSourceNoSub') return 'sub';
+        if (id.startsWith('processBlur') || id === 'processBlurPreset' || id === 'processSourceNoSub' || id === 'processAutoBrandBlur') return 'sub';
         if (id.startsWith('processCustomBlur') || target?.classList?.contains('blur-start') || target?.classList?.contains('blur-end')) return 'custom';
         if (id.startsWith('processLogo') || id === 'processLogoFile') return 'logo';
         return 'general';
@@ -50,17 +69,31 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         const dirty = [...dialog._presetDirtySections];
         const name = dialog.querySelector('#processPresetSelect')?.value || '';
         const status = dialog.querySelector('#processPresetStatus');
+        const updateBtn = dialog.querySelector('#updateProcessPreset');
+        if (updateBtn) {
+            updateBtn.hidden = !name;
+            updateBtn.textContent = name ? `Cập nhật “${name}”` : 'Cập nhật preset đang chọn';
+        }
         if (!status) return;
-        if (!name || !dirty.length) {
-            status.textContent = name ? `Đã lưu: ${name}` : 'Không chọn preset: dùng cấu hình hiện tại/mặc định.';
+        if (!name) {
+            const rememberOn = dialog.querySelector('#processAutoRememberConfig')?.checked !== false;
+            status.textContent = rememberOn
+                ? 'Tự động lưu thao tác cấu hình gần nhất cho lần mở video sau.'
+                : 'Đang dùng cấu hình của riêng video hiện tại.';
             return;
         }
-        status.textContent = `Chưa lưu: ${dirty.join(', ')}. Hãy lưu trước khi xuất.`;
+        if (!dirty.length) {
+            status.textContent = `Đang dùng preset: ${name}`;
+            return;
+        }
+        status.textContent = `Đã chỉnh sửa từ preset “${name}” — bấm Cập nhật để lưu vào preset, hoặc bấm Xuất ngay cho video này.`;
     };
     dialog._presetMarkDirty = target => {
-        if (dialog.dataset.presetApplying === '1') return;
+        if (dialog.dataset.presetApplying === '1' || isPresetMetaControl(target)) return;
+        hasUserEditedSinceOpen = true;
         dialog._presetDirtySections.add(sectionForTarget(target));
         updatePresetDirtyStatus();
+        dialog._scheduleSaveLastConfig?.();
     };
     const configForm = dialog.querySelector('form');
     const inspector = bindProcessInspectorTabs(dialog, { window, signal });
@@ -544,11 +577,22 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             <label>Đến giây <input class="blur-end" type="number" min="0" step="0.1" value="${item.end ?? ''}" placeholder="12"></label>
             <button type="button" class="btn secondary remove-blur-interval" aria-label="Xóa khoảng mờ">${uiIcon('close', 15)}</button>
         `;
-        row.querySelector('.remove-blur-interval').onclick = () => row.remove();
+        row.querySelector('.remove-blur-interval').onclick = () => {
+            row.remove();
+            intervalRoot.dispatchEvent(new Event('change', { bubbles: true }));
+        };
         intervalRoot.appendChild(row);
     };
     (defaults.blur_intervals || []).forEach(addInterval);
     dialog.querySelector('#addBlurInterval').onclick = () => addInterval();
+
+    const syncLogoSavedBadge = () => {
+        const badge = dialog.querySelector('#processLogoSavedBadge');
+        if (!badge) return;
+        const hasSaved = Boolean(dialog._logoData && dialog._logoFilename && dialog.querySelector('#processLogoMode')?.value === 'custom');
+        badge.hidden = !hasSaved;
+        if (hasSaved) badge.textContent = `Đã nhớ file logo: ${dialog._logoFilename}`;
+    };
 
     const logoMode = dialog.querySelector('#processLogoMode');
     const updateLogoFields = () => {
@@ -556,13 +600,13 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         dialog.querySelector('#processLogoPathField').style.display = mode === 'custom' ? '' : 'none';
         dialog.querySelector('#processLogoFileField').style.display = mode === 'custom' ? '' : 'none';
         dialog.querySelector('#processLogoTextField').style.display = mode === 'text' ? '' : 'none';
+        syncLogoSavedBadge();
     };
     set('processLogoMode', defaults.logo_mode || 'none');
     set('processLogoPath', defaults.logo_path || '');
     set('processLogoText', defaults.logo_text || '');
     logoMode.onchange = updateLogoFields;
     updateLogoFields();
-    dialog.dataset.presetApplying = '0';
 
     const downloadButton = dialog.querySelector('#processDownloadSource');
     downloadButton.disabled = false;
@@ -782,6 +826,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processBlurHeight', Math.round(rect.height));
             set('processBlurPreset', '');
         }
+        const dirtyField = pickMode === 'logo' ? '#processLogoX' : pickMode === 'custom' ? '#processCustomBlurX' : '#processBlurY';
+        dialog._presetMarkDirty?.(dialog.querySelector(dirtyField));
     };
 
     pickButtons.forEach(button => {
@@ -1269,87 +1315,91 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     }
 
     dialog.querySelector('#resetProcessConfig').onclick = () => {
-        manualOcrRows = [];
-        recognitionComplete = false;
-        translationReady = false;
-        reviewPaused = false;
-        if (reviewPause) reviewPause.hidden = false;
-        if (reviewConfirm) reviewConfirm.hidden = true;
-        if (reviewFootnote) reviewFootnote.textContent = 'Tự tiếp tục xuất khi dịch xong. Bạn có thể tạm dừng để chỉnh bản dịch.';
-        transcriptConfirmed = false;
-        transcriptSignature = '';
-        if (reviewConfirm) reviewConfirm.disabled = true;
-        if (reviewStatus) reviewStatus.textContent = 'Đang nhận diện lời thoại…';
-        renderManualOcrRows();
-        set('processPreviewSeconds', '');
-        set('processFontSize', '');
-        set('processSourceLanguage', 'auto');
-        set('processTranslationModel', 'gemini-3.1-flash-lite');
-        set('processTranscriptSource', 'audio');
-        set('processOcrLanguage', 'auto');
-        set('processOcrFps', 2);
-        set('processOcrConfidence', 0.45);
-        set('processOcrParallelism', 2);
-        set('processOcrSimilarity', 0.82);
-        dialog.querySelector('#processOcrUseGpu').checked = false;
-        dialog.querySelector('#processOcrMergeSimilar').checked = true;
-        syncOcrOptions();
-        set('processSubtitleStyle', 'minimal');
-        set('processOriginalVolume', 0.15);
-        set('processVoiceVolume', 1);
-        set('processTtsSpeed', 1.00);
-        set('processVoice', 'Trúc Ly');
-        set('processAspectRatio', '');
-        set('processMusicUrl', '');
-        set('processMusicVolume', 0.25);
-        dialog.querySelector('#processMusicFile').value = '';
-        dialog.querySelector('#processAutoBrandBlur').checked = false;
-        dialog.querySelector('#processSourceNoSub').checked = false;
-        set('processBlurPreset', '');
-        ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
-            'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
-            'processLogoSize', 'processLogoX', 'processLogoY', 'processLogoPath', 'processLogoText']
-            .forEach(id => set(id, ''));
-        set('processLogoMode', 'none');
-        intervalRoot.innerHTML = '';
-        dialog.querySelector('#processLogoFile').value = '';
-        dialog._logoData = null;
-        dialog._logoFilename = null;
-        updateLogoFields();
-        pickMode = 'sub';
-        syncPickButtons();
-        setPickingEnabled(false);
-        selectedRect = null;
-        drawSelection();
-        outputSummary.refresh();
+        dialog.dataset.presetApplying = '1';
+        try {
+            manualOcrRows = [];
+            recognitionComplete = false;
+            translationReady = false;
+            reviewPaused = false;
+            if (reviewPause) reviewPause.hidden = false;
+            if (reviewConfirm) reviewConfirm.hidden = true;
+            if (reviewFootnote) reviewFootnote.textContent = 'Tự tiếp tục xuất khi dịch xong. Bạn có thể tạm dừng để chỉnh bản dịch.';
+            transcriptConfirmed = false;
+            transcriptSignature = '';
+            if (reviewConfirm) reviewConfirm.disabled = true;
+            if (reviewStatus) reviewStatus.textContent = 'Đang nhận diện lời thoại…';
+            renderManualOcrRows();
+            set('processPreviewSeconds', '');
+            set('processFontSize', '');
+            set('processSourceLanguage', 'auto');
+            set('processTranslationModel', 'gemini-3.1-flash-lite');
+            set('processTranscriptSource', 'audio');
+            set('processOutputFormat', 'video');
+            set('processOcrLanguage', 'auto');
+            set('processOcrFps', 2);
+            set('processOcrConfidence', 0.45);
+            set('processOcrParallelism', 2);
+            set('processOcrSimilarity', 0.82);
+            dialog.querySelector('#processOcrUseGpu').checked = false;
+            const modalBoost = dialog.querySelector('#processBoostGpu');
+            if (modalBoost) modalBoost.checked = false;
+            dialog.querySelector('#processOcrMergeSimilar').checked = true;
+            syncOcrOptions();
+            syncOutputLabel();
+            set('processSubtitleStyle', 'minimal');
+            set('processOriginalVolume', 0.15);
+            set('processVoiceVolume', 1);
+            set('processTtsSpeed', 1.00);
+            set('processVoice', 'Trúc Ly');
+            if (summaryVoiceSelect) summaryVoiceSelect.value = 'Trúc Ly';
+            set('processAspectRatio', '');
+            set('processMusicUrl', '');
+            set('processMusicVolume', 0.25);
+            dialog.querySelector('#processMusicFile').value = '';
+            dialog.querySelector('#processAutoBrandBlur').checked = false;
+            dialog.querySelector('#processSourceNoSub').checked = false;
+            set('processBlurPreset', '');
+            ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
+                'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
+                'processLogoSize', 'processLogoX', 'processLogoY', 'processLogoPath', 'processLogoText']
+                .forEach(id => set(id, ''));
+            set('processLogoMode', 'none');
+            intervalRoot.innerHTML = '';
+            dialog.querySelector('#processLogoFile').value = '';
+            dialog._logoData = null;
+            dialog._logoFilename = null;
+            updateLogoFields();
+            pickMode = 'sub';
+            syncPickButtons();
+            setPickingEnabled(false);
+            selectedRect = null;
+            drawSelection();
+            outputSummary.refresh();
+            if (presetSelect) presetSelect.value = '';
+            dialog._presetDirtySections.clear();
+            hasUserEditedSinceOpen = true;
+            const rememberOn = autoRememberCheckbox?.checked !== false;
+            writeActivePresetPref(localStorage, { name: '', autoRemember: rememberOn });
+            clearTimeout(lastConfigSaveTimer);
+            void clearLastConfig(localStorage, requestJson);
+            updatePresetDirtyStatus();
+            if (presetStatus) presetStatus.textContent = 'Đã khôi phục cấu hình mặc định sạch.';
+        } finally {
+            dialog.dataset.presetApplying = '0';
+        }
     };
 
-    // Preset v2: bản cấu hình độc lập cho từng job, áp dụng ngay khi chọn.
-    const presetStoreKey = 'reup.process.presets.v2';
+    // Preset & Auto-remember: tự lưu thao tác gần nhất và đồng bộ với Engine.
     const presetSelect = dialog.querySelector('#processPresetSelect');
     const presetNameInput = dialog.querySelector('#processPresetName');
     const presetStatus = dialog.querySelector('#processPresetStatus');
-    const readPresets = () => {
-        try {
-            const value = JSON.parse(localStorage.getItem(presetStoreKey) || '{}');
-            return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-        } catch {
-            return {};
-        }
-    };
-    const writePresets = async presets => {
-        try {
-        await requestJson('/api/library/ui-state/process_presets_v2', {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ value: presets }),
-        });
-        localStorage.setItem(presetStoreKey, JSON.stringify(presets));
-        return true;
-        } catch (error) {
-            if (isCurrent()) presetStatus.textContent = 'Không lưu được preset: ' + error.message;
-            return false;
-        }
-    };
+    const updatePresetBtn = dialog.querySelector('#updateProcessPreset');
+    const autoRememberCheckbox = dialog.querySelector('#processAutoRememberConfig');
+    let activePref = readActivePresetPref(localStorage);
+    if (autoRememberCheckbox) {
+        autoRememberCheckbox.checked = activePref.autoRemember;
+    }
+
     const collectPresetConfig = () => {
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const fields = [
@@ -1365,6 +1415,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         ];
         return {
             ...Object.fromEntries(fields.map(id => [id, value(id)])),
+            boost_gpu: !!dialog.querySelector('#processBoostGpu')?.checked,
             auto_brand_blur: !!dialog.querySelector('#processAutoBrandBlur')?.checked,
             ocr_use_gpu: !!dialog.querySelector('#processOcrUseGpu')?.checked,
             ocr_merge_similar: !!dialog.querySelector('#processOcrMergeSimilar')?.checked,
@@ -1378,105 +1429,257 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             })),
         };
     };
-    const applyPresetConfig = (preset, name = '') => {
-        if (!preset) return;
-        dialog.dataset.presetApplying = '1';
-        Object.entries(preset).forEach(([id, value]) => {
-            if (id === 'auto_brand_blur') {
-                dialog.querySelector('#processAutoBrandBlur').checked = !!value;
-            } else if (id === 'ocr_use_gpu') {
-                dialog.querySelector('#processOcrUseGpu').checked = !!value;
-            } else if (id === 'ocr_merge_similar') {
-                dialog.querySelector('#processOcrMergeSimilar').checked = !!value;
-            } else if (id === 'source_subtitle_mode') {
-                dialog.querySelector('#processSourceNoSub').checked = value === 'none';
-            } else if (id === 'logo_data') {
-                dialog._logoData = value || null;
-            } else if (id === 'logo_filename') {
-                dialog._logoFilename = value || null;
-            } else if (id === 'active_pick_mode' || id === 'blur_intervals') {
-                return;
-            } else {
-                set(id, value);
-            }
-        });
-        intervalRoot.innerHTML = '';
-        (Array.isArray(preset.blur_intervals) ? preset.blur_intervals : []).forEach(addInterval);
-        if (['sub', 'custom', 'logo'].includes(preset.active_pick_mode)) {
-            pickMode = preset.active_pick_mode;
-            pickButtons.forEach(button => button.classList.toggle('active', button.dataset.pickMode === pickMode));
-        }
-        logoMode.dispatchEvent(new Event('change'));
-        syncOcrOptions();
-        syncOutputLabel();
-        syncSelectionFromFields();
-        dialog._presetDirtySections.clear();
-        dialog.dataset.presetApplying = '0';
-        presetStatus.textContent = name ? `Đã áp dụng: ${name}` : 'Đã áp dụng cấu hình realtime.';
-        outputSummary.refresh();
+
+    const persistLastConfigNow = async (syncRemote = true) => {
+        if (!isCurrent() || autoRememberCheckbox?.checked === false) return;
+        await writeLastConfig(localStorage, requestJson, {
+            config: collectPresetConfig(),
+            presetName: presetSelect?.value || '',
+        }, { syncRemote });
     };
-    const refreshPresetOptions = (presets, selected = '') => {
+
+    dialog._scheduleSaveLastConfig = () => {
+        if (dialog.dataset.presetApplying === '1' || autoRememberCheckbox?.checked === false) return;
+        clearTimeout(lastConfigSaveTimer);
+        lastConfigSaveTimer = setTimeout(() => {
+            void persistLastConfigNow(true);
+        }, 400);
+    };
+
+    const applyPresetConfig = (preset, name = '', { statusText = '', markClean = true } = {}) => {
+        if (!preset || typeof preset !== 'object') return;
+        dialog.dataset.presetApplying = '1';
+        try {
+            Object.entries(preset).forEach(([id, value]) => {
+                if (id === 'auto_brand_blur') {
+                    const el = dialog.querySelector('#processAutoBrandBlur');
+                    if (el) el.checked = !!value;
+                } else if (id === 'boost_gpu') {
+                    const el = dialog.querySelector('#processBoostGpu');
+                    if (el) el.checked = !!value;
+                    const barBoost = document.getElementById('boostGpuToggle');
+                    if (barBoost) barBoost.checked = !!value;
+                    try { localStorage.setItem('reupai:boost-gpu', value ? '1' : '0'); } catch {}
+                } else if (id === 'ocr_use_gpu') {
+                    const el = dialog.querySelector('#processOcrUseGpu');
+                    if (el) el.checked = !!value;
+                } else if (id === 'ocr_merge_similar') {
+                    const el = dialog.querySelector('#processOcrMergeSimilar');
+                    if (el) el.checked = !!value;
+                } else if (id === 'source_subtitle_mode') {
+                    const el = dialog.querySelector('#processSourceNoSub');
+                    if (el) el.checked = value === 'none';
+                } else if (id === 'logo_data') {
+                    dialog._logoData = value || null;
+                } else if (id === 'logo_filename') {
+                    dialog._logoFilename = value || null;
+                } else if (id === 'active_pick_mode' || id === 'blur_intervals') {
+                    return;
+                } else {
+                    set(id, value);
+                }
+            });
+            if (summaryVoiceSelect && voiceSelect) {
+                summaryVoiceSelect.value = voiceSelect.value || 'Trúc Ly';
+            }
+            intervalRoot.innerHTML = '';
+            (Array.isArray(preset.blur_intervals) ? preset.blur_intervals : []).forEach(addInterval);
+            if (['sub', 'custom', 'logo'].includes(preset.active_pick_mode)) {
+                pickMode = preset.active_pick_mode;
+                pickButtons.forEach(button => button.classList.toggle('active', button.dataset.pickMode === pickMode));
+            }
+            logoMode.dispatchEvent(new Event('change'));
+            syncLogoSavedBadge();
+            syncOcrOptions();
+            syncOutputLabel();
+            syncSelectionFromFields();
+            if (markClean) {
+                dialog._presetDirtySections.clear();
+            }
+            updatePresetDirtyStatus();
+            if (statusText && presetStatus) {
+                presetStatus.textContent = statusText;
+            } else if (presetStatus) {
+                presetStatus.textContent = name
+                    ? `Đang dùng preset: ${name}`
+                    : 'Đã khôi phục cấu hình thao tác gần nhất.';
+            }
+            outputSummary.refresh();
+        } finally {
+            dialog.dataset.presetApplying = '0';
+        }
+    };
+
+    const refreshPresetOptions = (presetMap, selected = '') => {
+        if (!presetSelect) return;
         presetSelect.innerHTML = '<option value="">Không dùng preset</option>';
-        Object.keys(presets).sort((a, b) => a.localeCompare(b, 'vi')).forEach(name => {
+        Object.keys(presetMap).sort((a, b) => a.localeCompare(b, 'vi')).forEach(name => {
             const option = document.createElement('option');
             option.value = name;
             option.textContent = name;
             presetSelect.appendChild(option);
         });
-        presetSelect.value = selected;
+        presetSelect.value = selected && presetMap[selected] ? selected : '';
+        updatePresetDirtyStatus();
     };
-    const presets = readPresets();
-    refreshPresetOptions(presets);
+
+    let presets = readPresetsLocal(localStorage);
+    const initialLastSaved = activePref.autoRemember ? readLastConfigLocal(localStorage) : null;
+    const initialSelectedPreset = (activePref.name && presets[activePref.name])
+        ? activePref.name
+        : (initialLastSaved?.presetName && presets[initialLastSaved.presetName] ? initialLastSaved.presetName : '');
+    refreshPresetOptions(presets, initialSelectedPreset);
+
+    if (activePref.autoRemember) {
+        if (initialSelectedPreset && (!initialLastSaved || initialLastSaved.presetName === initialSelectedPreset)) {
+            const useLastSnapshot = initialLastSaved && initialLastSaved.config;
+            applyPresetConfig(
+                useLastSnapshot ? initialLastSaved.config : presets[initialSelectedPreset],
+                initialSelectedPreset,
+                { statusText: `Đã tự khôi phục preset “${initialSelectedPreset}” từ lần trước.` },
+            );
+        } else if (initialLastSaved?.config) {
+            applyPresetConfig(
+                initialLastSaved.config,
+                initialSelectedPreset,
+                { statusText: 'Đã tự khôi phục cấu hình thao tác gần nhất.' },
+            );
+        } else {
+            dialog.dataset.presetApplying = '0';
+            updatePresetDirtyStatus();
+        }
+    } else {
+        dialog.dataset.presetApplying = '0';
+        updatePresetDirtyStatus();
+    }
+
+    // Đồng bộ ngầm từ Local Engine để giữ cấu hình qua mọi phiên/trình duyệt.
+    void (async () => {
+        const [{ presets: syncedPresets, updated }, syncedLast] = await Promise.all([
+            syncPresetsFromEngine(localStorage, requestJson),
+            activePref.autoRemember ? syncLastConfigFromEngine(localStorage, requestJson) : Promise.resolve(null),
+        ]);
+        if (!isCurrent()) return;
+        presets = syncedPresets;
+        const currentName = presetSelect?.value || activePref.name || syncedLast?.presetName || '';
+        const resolvedName = currentName && presets[currentName] ? currentName : '';
+        if (updated || resolvedName !== (presetSelect?.value || '')) {
+            refreshPresetOptions(presets, resolvedName);
+        }
+        if (hasUserEditedSinceOpen || !activePref.autoRemember) return;
+        const initialTs = Number(initialLastSaved?.savedAt || 0);
+        if (syncedLast?.config && Number(syncedLast.savedAt || 0) > initialTs) {
+            applyPresetConfig(
+                syncedLast.config,
+                resolvedName,
+                { statusText: 'Đã đồng bộ cấu hình gần nhất từ Local Engine.' },
+            );
+        } else if (!initialSelectedPreset && resolvedName && presets[resolvedName]) {
+            applyPresetConfig(
+                presets[resolvedName],
+                resolvedName,
+                { statusText: `Đã đồng bộ preset “${resolvedName}” từ Local Engine.` },
+            );
+        }
+    })();
+
+    if (autoRememberCheckbox) {
+        autoRememberCheckbox.onchange = () => {
+            const enabled = !!autoRememberCheckbox.checked;
+            activePref = writeActivePresetPref(localStorage, {
+                name: presetSelect?.value || '',
+                autoRemember: enabled,
+            });
+            if (enabled) {
+                void persistLastConfigNow(true);
+            }
+            updatePresetDirtyStatus();
+        };
+    }
+
     presetSelect.onchange = () => {
         const name = presetSelect.value;
-        if (!name || !presets[name]) return;
+        activePref = writeActivePresetPref(localStorage, {
+            name,
+            autoRemember: autoRememberCheckbox?.checked !== false,
+        });
+        if (!name || !presets[name]) {
+            dialog._presetDirtySections.clear();
+            updatePresetDirtyStatus();
+            void persistLastConfigNow(true);
+            return;
+        }
         applyPresetConfig(presets[name], name);
+        void persistLastConfigNow(true);
     };
+
+    const persistPresetByName = async (name, { clearNameInput = false } = {}) => {
+        presets[name] = collectPresetConfig();
+        const result = await writePresets(localStorage, requestJson, presets);
+        refreshPresetOptions(presets, name);
+        activePref = writeActivePresetPref(localStorage, {
+            name,
+            autoRemember: autoRememberCheckbox?.checked !== false,
+        });
+        applyPresetConfig(presets[name], name, {
+            statusText: result.synced
+                ? `Đã lưu preset “${name}” lên máy & Engine.`
+                : `Đã lưu preset “${name}” trên trình duyệt.`,
+        });
+        void persistLastConfigNow(result.synced);
+        if (clearNameInput) presetNameInput.value = '';
+    };
+
+    if (updatePresetBtn) {
+        updatePresetBtn.onclick = async () => {
+            const name = presetSelect.value;
+            if (!name) return;
+            await persistPresetByName(name);
+        };
+    }
+
     dialog.querySelector('#saveProcessPreset').onclick = async () => {
         const name = presetNameInput.value.trim();
         if (!name) {
-            presetStatus.textContent = 'Hãy nhập tên preset trước.';
+            presetStatus.textContent = 'Hãy nhập tên preset mới trước.';
             presetNameInput.focus();
             return;
         }
-        presets[name] = collectPresetConfig();
-        if (!await writePresets(presets)) return;
-        refreshPresetOptions(presets, name);
-        applyPresetConfig(presets[name], name);
-        presetNameInput.value = '';
+        await persistPresetByName(name, { clearNameInput: true });
     };
+
     dialog.querySelector('#deleteProcessPreset').onclick = async () => {
         const name = presetSelect.value;
         if (!name || !presets[name]) return;
         delete presets[name];
-        if (!await writePresets(presets)) return;
+        const result = await writePresets(localStorage, requestJson, presets);
+        activePref = writeActivePresetPref(localStorage, {
+            name: '',
+            autoRemember: autoRememberCheckbox?.checked !== false,
+        });
         refreshPresetOptions(presets);
-        presetStatus.textContent = `Đã xóa: ${name}`;
+        dialog._presetDirtySections.clear();
+        presetStatus.textContent = result.synced
+            ? `Đã xóa preset: ${name}`
+            : `Đã xóa preset trên trình duyệt: ${name}`;
     };
+
     const saveSection = async (section, label) => {
         const name = presetSelect.value;
+        const current = collectPresetConfig();
         if (name && presets[name]) {
-            const current = collectPresetConfig();
-            const sectionFields = {
-                sub: ['processBlurPreset', 'processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight', 'source_subtitle_mode'],
-                custom: ['processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight', 'blur_intervals'],
-                logo: ['processLogoMode', 'processLogoPath', 'processLogoText', 'processLogoSize', 'processLogoX', 'processLogoY'],
-            }[section] || [];
-            const saved = { ...presets[name] };
-            sectionFields.forEach(field => { saved[field] = current[field]; });
-            if (section === 'sub') saved.auto_brand_blur = current.auto_brand_blur;
-            if (section === 'logo') {
-                saved.logo_data = current.logo_data;
-                saved.logo_filename = current.logo_filename;
-            }
-            presets[name] = saved;
-            if (!await writePresets(presets)) return;
+            presets[name] = mergeSectionIntoConfig(presets[name], current, section);
+            await writePresets(localStorage, requestJson, presets);
         }
+        await writeLastConfig(localStorage, requestJson, {
+            config: current,
+            presetName: name,
+        });
         dialog._presetDirtySections.delete(section);
         updatePresetDirtyStatus();
         presetStatus.textContent = name
-            ? `Đã lưu ${label} vào preset: ${name}`
-            : `Đã lưu ${label} cho job hiện tại.`;
+            ? `Đã lưu ${label} vào preset “${name}”.`
+            : `Đã nhớ ${label} cho lần mở video sau.`;
     };
     dialog.querySelector('#saveSubSelection').onclick = () => saveSection('sub', 'vùng mờ sub');
     dialog.querySelector('#saveCustomSelection').onclick = () => saveSection('custom', 'vùng mờ tùy chỉnh');
@@ -1486,6 +1689,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!file) {
             dialog._logoData = null;
             dialog._logoFilename = null;
+            syncLogoSavedBadge();
+            dialog._scheduleSaveLastConfig?.();
             return;
         }
         const logoData = await new Promise(resolve => {
@@ -1497,6 +1702,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         if (!isCurrent()) return;
         dialog._logoData = logoData;
         dialog._logoFilename = file.name;
+        syncLogoSavedBadge();
+        dialog._scheduleSaveLastConfig?.();
     };
 
     const aiPrompt = dialog.querySelector('#processAiPrompt');
@@ -1773,13 +1980,12 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             await translateReviewRows();
             return;
         }
-        const selectedPreset = presetSelect.value;
-        if (selectedPreset && dialog._presetDirtySections.size) {
-            inspector.select('presets');
-            const sections = [...dialog._presetDirtySections].join(', ');
-            presetStatus.textContent = `Chưa lưu: ${sections}. Hãy lưu lựa chọn trước khi xuất.`;
-            alert(`Preset "${selectedPreset}" còn thay đổi chưa lưu (${sections}). Hãy bấm nút Lưu tương ứng hoặc Lưu và áp dụng trước khi xuất.`);
-            return;
+        clearTimeout(lastConfigSaveTimer);
+        if (autoRememberCheckbox?.checked !== false) {
+            void writeLastConfig(localStorage, requestJson, {
+                config: collectPresetConfig(),
+                presetName: presetSelect?.value || '',
+            });
         }
         const value = id => dialog.querySelector(`#${id}`)?.value || '';
         const blur = {};

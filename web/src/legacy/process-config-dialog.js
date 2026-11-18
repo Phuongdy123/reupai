@@ -205,6 +205,7 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                 <label id="processLogoFileField">Chọn tệp logo trên máy
                     <input id="processLogoFile" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml">
                 </label>
+                <small id="processLogoSavedBadge" hidden></small>
                 <label id="processLogoTextField">Nội dung chữ
                     <input id="processLogoText" placeholder="Tên kênh / thương hiệu">
                 </label>
@@ -422,8 +423,9 @@ export function createProcessConfigDialog({ document, uiIcon }) {
             </section>
             </div>
 
-<section class="process-settings-card process-inspector-panel process-presets-settings-panel" id="processInspectorPresets" data-inspector-panel="presets" role="tabpanel" aria-labelledby="processInspectorTabPresets" tabindex="0" hidden><div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('save', 18)}</span><strong>Cấu hình đã lưu</strong><small>Dùng lại thiết lập yêu thích</small></div>
+<section class="process-settings-card process-inspector-panel process-presets-settings-panel" id="processInspectorPresets" data-inspector-panel="presets" role="tabpanel" aria-labelledby="processInspectorTabPresets" tabindex="0" hidden><div class="process-section-heading"><span class="process-panel-icon" aria-hidden="true">${uiIcon('save', 18)}</span><strong>Cấu hình đã lưu</strong><small>Tự nhớ thao tác gần nhất &amp; dùng lại preset</small></div>
             <div class="process-preset-bar">
+                <label class="process-checkbox"><input id="processAutoRememberConfig" type="checkbox" checked> Tự động nhớ thao tác cấu hình gần nhất cho video sau</label>
                 <div class="process-section-heading"><strong>Preset</strong><small>Lưu và dùng lại thiết lập yêu thích</small></div>
                 <label>Chọn cấu hình
                     <select id="processPresetSelect">
@@ -431,9 +433,10 @@ export function createProcessConfigDialog({ document, uiIcon }) {
                     </select>
                 </label>
                 <input id="processPresetName" aria-label="Tên cấu hình mới" placeholder="Tên cấu hình mới">
-                <button type="button" class="btn secondary" id="saveProcessPreset">Lưu và áp dụng</button>
+                <button type="button" class="btn secondary" id="updateProcessPreset" hidden>Cập nhật preset đang chọn</button>
+                <button type="button" class="btn secondary" id="saveProcessPreset">Lưu thành preset mới</button>
                 <button type="button" class="btn secondary" id="deleteProcessPreset">Xóa</button>
-                <small id="processPresetStatus">Chọn preset sẽ cập nhật ngay cấu hình hiện tại.</small>
+                <small id="processPresetStatus">Tự động lưu thao tác gần nhất. Chọn preset sẽ áp dụng ngay.</small>
             </div>
 
 </section>
