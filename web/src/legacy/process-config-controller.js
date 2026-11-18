@@ -3,6 +3,7 @@ import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
 import { defaultVoiceForLanguage, isVoiceCompatibleWithLanguage, playVoicePreview, renderVoiceOptionsHtml } from '../lib/tts-voices.js';
 import { getSubtitlePreviewData, sampleLinesForLanguage } from '../lib/subtitle-style-previews.js';
+import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine } from '../lib/copyright-checker.js';
 import {
     clearLastConfig,
     mergeSectionIntoConfig,
@@ -2331,6 +2332,133 @@ export async function openProcessConfig(video, card, mode, dependencies) {
         aiAnswer.textContent += ' Đã áp dụng vào form; hãy kiểm tra lại trước khi xử lý.';
         aiApply.hidden = true;
     };
+
+    const copyrightCard = dialog.querySelector('#processCopyrightCard');
+    const copyrightBadge = dialog.querySelector('#processCopyrightBadge');
+    const copyrightMusicPill = dialog.querySelector('#processCopyrightMusicPill');
+    const copyrightVisualPill = dialog.querySelector('#processCopyrightVisualPill');
+    const copyrightMusicNote = dialog.querySelector('#processCopyrightMusicNote');
+    const copyrightWarnings = dialog.querySelector('#processCopyrightWarnings');
+    const copyrightScanBtn = dialog.querySelector('#processCopyrightScanBtn');
+    const copyrightFixBtn = dialog.querySelector('#processCopyrightFixBtn');
+    let latestAiCopyrightReport = null;
+
+    const collectCopyrightCheckPayload = () => {
+        const origVol = Number(dialog.querySelector('#processOriginalVolume')?.value ?? 0.15);
+        const hasBlurCoords = ['X', 'Y', 'Width', 'Height'].some(
+            suffix => String(dialog.querySelector(`#processBlur${suffix}`)?.value || '').trim() !== '',
+        );
+        return {
+            video_id: video.video_id,
+            channel: video.channel || video.channel_key || 'default',
+            title: video.title || video.video_id || '',
+            description: video.description || '',
+            url: video.url || '',
+            track: video.track || video.music_title || '',
+            artist: video.artist || video.music_author || '',
+            license: video.license || '',
+            mode,
+            original_volume: Number.isFinite(origVol) ? origVol : 0.15,
+            music_url: dialog.querySelector('#processMusicUrl')?.value || '',
+            auto_brand_blur: Boolean(dialog.querySelector('#processAutoBrandBlur')?.checked),
+            has_blur_region: hasBlurCoords,
+            aspect_ratio: dialog.querySelector('#processAspectRatio')?.value || '',
+        };
+    };
+
+    const renderCopyrightReport = (report) => {
+        if (!copyrightCard || !report) return;
+        copyrightCard.dataset.risk = report.overall_risk || 'low';
+        if (copyrightBadge) {
+            copyrightBadge.textContent = report.badge_label || '🟢 An toàn';
+            copyrightBadge.dataset.risk = report.overall_risk || 'low';
+        }
+        const riskVi = level => (level === 'high' ? 'Nguy cơ cao' : level === 'medium' ? 'Cần lưu ý' : 'An toàn');
+        if (copyrightMusicPill) {
+            copyrightMusicPill.textContent = `🎵 Nhạc: ${riskVi(report.music_risk)} (${report.music_score || 0}%)`;
+            copyrightMusicPill.dataset.risk = report.music_risk || 'low';
+        }
+        if (copyrightVisualPill) {
+            copyrightVisualPill.textContent = `🎬 Hình ảnh: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)`;
+            copyrightVisualPill.dataset.risk = report.visual_risk || 'low';
+        }
+        if (copyrightMusicNote) {
+            copyrightMusicNote.textContent = report.detected_music ? `· ${report.detected_music}` : '';
+        }
+        if (copyrightWarnings) {
+            copyrightWarnings.replaceChildren();
+            const items = [
+                ...(Array.isArray(report.warnings) ? report.warnings : []),
+                ...(Array.isArray(report.recommendations) ? report.recommendations.slice(0, 2) : []),
+            ];
+            items.slice(0, 4).forEach(msg => {
+                const li = document.createElement('li');
+                li.textContent = msg;
+                copyrightWarnings.appendChild(li);
+            });
+        }
+        if (copyrightFixBtn) {
+            copyrightFixBtn.hidden = report.overall_risk === 'low' && mode === 'voiceover';
+        }
+    };
+
+    const refreshCopyrightEvaluation = () => {
+        const localReport = analyzeVideoCopyrightRisk(collectCopyrightCheckPayload());
+        if (latestAiCopyrightReport?.ai_scanned) {
+            renderCopyrightReport({
+                ...localReport,
+                detected_music: latestAiCopyrightReport.detected_music || localReport.detected_music,
+            });
+        } else {
+            renderCopyrightReport(localReport);
+        }
+    };
+
+    if (copyrightScanBtn) {
+        copyrightScanBtn.onclick = async () => {
+            if (!isCurrent()) return;
+            copyrightScanBtn.disabled = true;
+            copyrightScanBtn.textContent = '⏳ Đang quét Nhạc & Hình…';
+            try {
+                const report = await checkVideoCopyrightWithEngine(requestJson, {
+                    ...collectCopyrightCheckPayload(),
+                    use_ai: true,
+                });
+                if (!isCurrent()) return;
+                latestAiCopyrightReport = report;
+                renderCopyrightReport(report);
+            } finally {
+                if (isCurrent()) {
+                    copyrightScanBtn.disabled = false;
+                    copyrightScanBtn.textContent = '🔍 Quét sâu Nhạc & Hình (AI)';
+                }
+            }
+        };
+    }
+
+    if (copyrightFixBtn) {
+        copyrightFixBtn.onclick = () => {
+            mode = 'voiceover';
+            syncMode('voiceover');
+            set('processOriginalVolume', 0.05);
+            dialog.querySelector('#processOriginalVolume')?.dispatchEvent(new Event('input', { bubbles: true }));
+            dialog.querySelector('#processOriginalVolume')?.dispatchEvent(new Event('change', { bubbles: true }));
+            set('processVoiceVolume', 1.15);
+            dialog.querySelector('#processVoiceVolume')?.dispatchEvent(new Event('input', { bubbles: true }));
+            dialog.querySelector('#processVoiceVolume')?.dispatchEvent(new Event('change', { bubbles: true }));
+            const brandBlur = dialog.querySelector('#processAutoBrandBlur');
+            if (brandBlur) {
+                brandBlur.checked = true;
+                brandBlur.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            refreshCopyrightEvaluation();
+            dialog._scheduleSaveLastConfig?.();
+        };
+    }
+
+    configForm.addEventListener('change', refreshCopyrightEvaluation);
+    configForm.addEventListener('input', refreshCopyrightEvaluation);
+    refreshCopyrightEvaluation();
 
     dialog.querySelector('form').onsubmit = async event => {
         event.preventDefault();

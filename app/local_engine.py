@@ -731,6 +731,42 @@ def workspace_assistant(payload: dict, _: bool = Depends(require_token)):
         raise HTTPException(status_code=503, detail=str(error)) from error
 
 
+@app.post("/api/copyright/check")
+def copyright_check(payload: dict, _: bool = Depends(require_token)):
+    from services.copyright_checker import check_video_copyright
+
+    raw_video_id = str(payload.get("video_id") or "").strip()
+    raw_channel = str(payload.get("channel") or "default").strip() or "default"
+    mode = str(payload.get("mode") or "voiceover").strip() or "voiceover"
+    video_path = None
+    if raw_video_id:
+        try:
+            vid = validate_video_id(raw_video_id)
+            ch = validate_channel(raw_channel)
+            video_path = find_result_file(ch, vid, mode) or local_source_for_process(vid, ch)
+        except Exception:
+            video_path = None
+
+    orig_vol = payload.get("original_volume")
+    try:
+        orig_vol_float = float(orig_vol) if orig_vol is not None else (1.0 if mode == "subtitle" else 0.15)
+    except (TypeError, ValueError):
+        orig_vol_float = 0.15
+
+    return check_video_copyright(
+        video_path=video_path,
+        title=str(payload.get("title") or ""),
+        description=str(payload.get("description") or ""),
+        url=str(payload.get("url") or ""),
+        mode=mode,
+        original_volume=orig_vol_float,
+        music_url=str(payload.get("music_url") or ""),
+        auto_brand_blur=bool(payload.get("auto_brand_blur")),
+        has_blur_region=bool(payload.get("has_blur_region")),
+        use_ai=bool(payload.get("use_ai", True)),
+    )
+
+
 @app.post("/api/gemini/oauth/start")
 def gemini_oauth_start(payload: dict[str, str] | None = None, _: bool = Depends(require_token)):
     from services.gemini_oauth import start_authorization

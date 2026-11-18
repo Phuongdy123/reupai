@@ -21,6 +21,7 @@ import {
   generateAndPublishEpisode,
 } from "../lib/batch-auto-publish.js";
 import { youtubeRequest, getSignedInAccountId } from "../lib/youtube-client.js";
+import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine } from "../lib/copyright-checker.js";
 
 function threePlatformSvgs(size = 13) {
   return [
@@ -1849,6 +1850,10 @@ function buildCard(
                                 ${uiIcon('download', 16)}
                                 <span>Tải video gốc</span>
                             </button>
+                            <button type="button" class="menu-action copyright-check-btn">
+                                <span aria-hidden="true">🛡️</span>
+                                <span>Tra bản quyền Video &amp; Nhạc</span>
+                            </button>
                             <div class="menu-section">
                                 <div class="menu-section-title">Lưu vào Collections</div>
                                 <div class="collection-inline">
@@ -2033,6 +2038,14 @@ function buildCard(
             card
         );
     };
+
+    const copyrightCheckBtn = card.querySelector('.copyright-check-btn');
+    if (copyrightCheckBtn) {
+        copyrightCheckBtn.onclick = () => {
+            card.querySelector('.more-menu')?.removeAttribute('open');
+            openCopyrightReportDialog(video, card);
+        };
+    }
 
 
     card
@@ -8520,6 +8533,158 @@ async function runSelectedQueue(
     }
 }
 
+function ensureCopyrightReportDialog() {
+    let dialog = document.getElementById('copyrightReportDialog');
+    if (dialog) return dialog;
+
+    dialog = document.createElement('dialog');
+    dialog.id = 'copyrightReportDialog';
+    dialog.className = 'copyright-report-dialog';
+    dialog.innerHTML = `
+        <div class="copyright-report-shell">
+            <header class="batch-ap-header">
+                <div class="batch-ap-header-copy">
+                    <small class="batch-ap-eyebrow">KIỂM TRA CONTENT ID YOUTUBE</small>
+                    <h2>🛡️ Tra cứu Bản quyền Video &amp; Nhạc</h2>
+                    <p id="crDialogTitle"></p>
+                </div>
+                <button type="button" class="batch-ap-close-btn" id="crDialogCloseBtn" aria-label="Đóng">×</button>
+            </header>
+            <div class="copyright-report-body">
+                <div class="copyright-report-top">
+                    <span class="process-copyright-badge" id="crOverallBadge">Đang kiểm tra…</span>
+                    <span class="process-copyright-pill" id="crMusicPill">🎵 Nhạc: --</span>
+                    <span class="process-copyright-pill" id="crVisualPill">🎬 Hình ảnh: --</span>
+                </div>
+                <div class="copyright-report-music-box" id="crDetectedMusic"></div>
+                <div class="copyright-report-section">
+                    <h4>⚠️ Cảnh báo &amp; Nguy cơ phát hiện</h4>
+                    <ul id="crWarningsList"></ul>
+                </div>
+                <div class="copyright-report-section">
+                    <h4>💡 Khuyến nghị xử lý để né Bản quyền YouTube</h4>
+                    <ul id="crRecommendationsList"></ul>
+                </div>
+            </div>
+            <footer class="batch-ap-footer">
+                <span id="crFooterStatus">Phân tích dựa trên metadata, cấu hình âm thanh và AI kiểm tra mẫu nhạc/hình.</span>
+                <div class="batch-ap-footer-btns">
+                    <button type="button" class="btn secondary" id="crDeepScanBtn">🔍 Quét sâu Nhạc &amp; Hình (AI)</button>
+                    <button type="button" class="btn primary" id="crOpenSafeConfigBtn">⚡ Mở thiết lập Né Bản Quyền</button>
+                </div>
+            </footer>
+        </div>
+    `;
+    document.body.appendChild(dialog);
+    return dialog;
+}
+
+async function openCopyrightReportDialog(video, card) {
+    if (!video) return;
+    const dialog = ensureCopyrightReportDialog();
+    const titleEl = dialog.querySelector('#crDialogTitle');
+    const overallBadge = dialog.querySelector('#crOverallBadge');
+    const musicPill = dialog.querySelector('#crMusicPill');
+    const visualPill = dialog.querySelector('#crVisualPill');
+    const detectedMusicEl = dialog.querySelector('#crDetectedMusic');
+    const warningsList = dialog.querySelector('#crWarningsList');
+    const recsList = dialog.querySelector('#crRecommendationsList');
+    const footerStatus = dialog.querySelector('#crFooterStatus');
+    const deepScanBtn = dialog.querySelector('#crDeepScanBtn');
+    const openSafeBtn = dialog.querySelector('#crOpenSafeConfigBtn');
+    const closeBtn = dialog.querySelector('#crDialogCloseBtn');
+
+    titleEl.textContent = video.title || video.video_id;
+
+    const currentSavedCfg = resolveSavedBatchProcessConfig();
+    const buildPayload = () => ({
+        video_id: video.video_id,
+        channel: video.channel_key || 'default',
+        title: video.title || video.video_id || '',
+        description: video.description || '',
+        url: video.url || '',
+        track: video.track || video.music_title || '',
+        artist: video.artist || video.music_author || '',
+        license: video.license || '',
+        mode: 'voiceover',
+        original_volume: Number(currentSavedCfg.original_volume ?? 0.15),
+        music_url: currentSavedCfg.music_url || '',
+        auto_brand_blur: Boolean(currentSavedCfg.auto_brand_blur),
+        has_blur_region: Boolean(currentSavedCfg.blur_region),
+    });
+
+    const renderReport = (report) => {
+        const riskVi = (level) => (level === 'high' ? 'Nguy cơ cao' : level === 'medium' ? 'Cần lưu ý' : 'An toàn');
+        overallBadge.textContent = report.badge_label || '🟢 An toàn';
+        overallBadge.dataset.risk = report.overall_risk || 'low';
+        musicPill.textContent = `🎵 Bản quyền Nhạc: ${riskVi(report.music_risk)} (${report.music_score || 0}%)`;
+        musicPill.dataset.risk = report.music_risk || 'low';
+        visualPill.textContent = `🎬 Bản quyền Hình: ${riskVi(report.visual_risk)} (${report.visual_score || 0}%)`;
+        visualPill.dataset.risk = report.visual_risk || 'low';
+        detectedMusicEl.textContent = `Nhận diện âm thanh/nhạc: ${report.detected_music || 'Chưa phát hiện nhạc thương mại rủi ro cao'}`;
+
+        warningsList.replaceChildren();
+        const wItems = [
+            ...(Array.isArray(report.warnings) ? report.warnings : []),
+            ...(Array.isArray(report.music_reasons) ? report.music_reasons : []),
+            ...(Array.isArray(report.visual_reasons) ? report.visual_reasons : []),
+        ];
+        wItems.forEach((msg) => {
+            const li = document.createElement('li');
+            li.textContent = msg;
+            warningsList.appendChild(li);
+        });
+
+        recsList.replaceChildren();
+        (Array.isArray(report.recommendations) ? report.recommendations : []).forEach((msg) => {
+            const li = document.createElement('li');
+            li.textContent = msg;
+            recsList.appendChild(li);
+        });
+
+        footerStatus.textContent = report.ai_scanned
+            ? '✓ Đã quét sâu âm thanh & khung hình bằng AI Gemini.'
+            : 'Đã kiểm tra nhanh thông tin nguồn. Bấm "Quét sâu Nhạc & Hình (AI)" để phân tích sâu mẫu âm thanh.';
+    };
+
+    renderReport(analyzeVideoCopyrightRisk(buildPayload()));
+
+    closeBtn.onclick = () => dialog.close();
+    dialog.onclick = (ev) => {
+        if (ev.target === dialog) dialog.close();
+    };
+
+    deepScanBtn.onclick = async () => {
+        deepScanBtn.disabled = true;
+        deepScanBtn.textContent = '⏳ Đang quét Nhạc & Hình…';
+        try {
+            const reqJson = (path, opts) => window.reupEngineClient.json(path, opts);
+            const report = await checkVideoCopyrightWithEngine(reqJson, {
+                ...buildPayload(),
+                use_ai: true,
+            });
+            renderReport(report);
+        } finally {
+            deepScanBtn.disabled = false;
+            deepScanBtn.textContent = '🔍 Quét sâu Nhạc & Hình (AI)';
+        }
+    };
+
+    openSafeBtn.onclick = async () => {
+        dialog.close();
+        const targetCard = card || document.querySelector(
+            `.compact-video-card[data-video-id="${CSS.escape(String(video.video_id))}"]`,
+        );
+        if (targetCard) {
+            await openProcessConfig(video, targetCard, 'voiceover');
+            const cfgDialog = document.getElementById('processConfigDialog');
+            cfgDialog?.querySelector('#processCopyrightFixBtn')?.click();
+        }
+    };
+
+    if (!dialog.open) dialog.showModal();
+}
+
 let batchAutoPublishStopRequested = false;
 
 function ensureBatchAutoPublishDialog() {
@@ -8650,6 +8815,9 @@ function ensureBatchAutoPublishDialog() {
                             <p>Kéo thả <code>⋮⋮</code> giữa các dòng để đổi/thay thế Tập, hoặc kéo video từ kho nguồn thả vào Tập bất kỳ.</p>
                         </div>
                         <div class="batch-ap-thumb-actions">
+                            <button type="button" class="btn secondary" id="batchApCheckCopyrightBtn" title="Kiểm tra bản quyền Video & Nhạc cho toàn bộ danh sách tập">
+                                🛡️ Tra bản quyền
+                            </button>
                             <button type="button" class="btn secondary" id="batchApToggleSourcePoolBtn" title="Mở kho video nguồn để kéo thả thay thế cho bất kỳ tập nào">
                                 🔄 Kho video nguồn
                             </button>
@@ -8923,6 +9091,11 @@ async function openBatchAutoPublishDialog() {
         epCountEl.textContent = String(ordered.length);
         epListEl.innerHTML = '';
 
+        const currentResolvedCfg = resolveSavedBatchProcessConfig(
+            presetSelect.value === '__open_custom__' ? '' : presetSelect.value,
+        );
+        const currentBatchMode = modeSelect.value || 'voiceover';
+
         ordered.forEach((video, idx) => {
             const epNum = startEp + idx;
             const expectedTopic = formatEpisodeTopic(basePrompt, epNum, video.title || video.video_id);
@@ -8934,6 +9107,22 @@ async function openBatchAutoPublishDialog() {
                 text: 'Chờ chạy',
                 links: [],
             };
+            const crReport = analyzeVideoCopyrightRisk({
+                title: video.title || video.video_id || '',
+                description: video.description || '',
+                url: video.url || '',
+                track: video.track || video.music_title || '',
+                artist: video.artist || video.music_author || '',
+                license: video.license || '',
+                mode: currentBatchMode,
+                original_volume: Number(currentResolvedCfg.original_volume ?? 0.15),
+                music_url: currentResolvedCfg.music_url || '',
+                auto_brand_blur: Boolean(currentResolvedCfg.auto_brand_blur),
+                has_blur_region: Boolean(currentResolvedCfg.blur_region),
+            });
+            const crShortLabel = crReport.overall_risk === 'high'
+                ? '🔴 Cảnh báo Bản quyền'
+                : (crReport.overall_risk === 'medium' ? '🟡 Lưu ý nhạc/logo' : '🟢 Bản quyền: An toàn');
 
             const row = document.createElement('div');
             row.className = `batch-ap-ep-row is-${stateInfo.status}`;
@@ -8967,6 +9156,9 @@ async function openBatchAutoPublishDialog() {
                     ${linksHtml}
                 </div>
                 <div class="batch-ap-ep-status">
+                    <button type="button" class="batch-ap-cr-pill" data-risk="${escapeHtml(crReport.overall_risk)}" title="${escapeHtml((crReport.warnings[0] || 'Bấm để xem chi tiết kiểm tra bản quyền Video & Nhạc'))}">
+                        ${escapeHtml(crShortLabel)}
+                    </button>
                     <div class="batch-ap-ep-move-btns">
                         <button type="button" class="batch-ap-move-btn" data-dir="-1" title="Đưa lên Tập ${epNum - 1}" ${idx === 0 || batchRunning ? 'disabled' : ''}>↑</button>
                         <button type="button" class="batch-ap-move-btn" data-dir="1" title="Đưa xuống Tập ${epNum + 1}" ${idx === ordered.length - 1 || batchRunning ? 'disabled' : ''}>↓</button>
@@ -8974,6 +9166,13 @@ async function openBatchAutoPublishDialog() {
                     <span class="batch-ap-status-pill is-${stateInfo.status}">${escapeHtml(stateInfo.text)}</span>
                 </div>
             `;
+
+            const crPillBtn = row.querySelector('.batch-ap-cr-pill');
+            if (crPillBtn) {
+                crPillBtn.onclick = () => {
+                    openCopyrightReportDialog(video, null);
+                };
+            }
 
             const singleInput = row.querySelector('input[type="file"]');
             if (singleInput) {
@@ -9140,12 +9339,62 @@ async function openBatchAutoPublishDialog() {
         renderEpisodeRows();
         if (!poolWrapEl?.hidden) renderSourcePool();
     };
-    modeSelect.onchange = persistCurrentPrefs;
+    modeSelect.onchange = () => {
+        persistCurrentPrefs();
+        renderEpisodeRows();
+    };
     useAiInput.onchange = persistCurrentPrefs;
     platYtInput.onchange = persistCurrentPrefs;
     ytPrivacySelect.onchange = persistCurrentPrefs;
     platFbInput.onchange = persistCurrentPrefs;
     platTtInput.onchange = persistCurrentPrefs;
+
+    const checkBatchCopyrightBtn = dialog.querySelector('#batchApCheckCopyrightBtn');
+    if (checkBatchCopyrightBtn) {
+        checkBatchCopyrightBtn.onclick = async () => {
+            const ordered = getOrderedVideos();
+            if (!ordered.length) return;
+            checkBatchCopyrightBtn.disabled = true;
+            checkBatchCopyrightBtn.textContent = '⏳ Đang tra bản quyền…';
+            try {
+                const currentResolvedCfg = resolveSavedBatchProcessConfig(
+                    presetSelect.value === '__open_custom__' ? '' : presetSelect.value,
+                );
+                const currentBatchMode = modeSelect.value || 'voiceover';
+                let highCount = 0;
+                let medCount = 0;
+                ordered.forEach((video) => {
+                    const rep = analyzeVideoCopyrightRisk({
+                        title: video.title || video.video_id || '',
+                        description: video.description || '',
+                        url: video.url || '',
+                        track: video.track || video.music_title || '',
+                        artist: video.artist || video.music_author || '',
+                        license: video.license || '',
+                        mode: currentBatchMode,
+                        original_volume: Number(currentResolvedCfg.original_volume ?? 0.15),
+                        music_url: currentResolvedCfg.music_url || '',
+                        auto_brand_blur: Boolean(currentResolvedCfg.auto_brand_blur),
+                        has_blur_region: Boolean(currentResolvedCfg.blur_region),
+                    });
+                    if (rep.overall_risk === 'high') highCount += 1;
+                    else if (rep.overall_risk === 'medium') medCount += 1;
+                });
+                overallStatusEl.hidden = false;
+                if (highCount > 0) {
+                    overallStatusEl.textContent = `🚨 Cảnh báo: Có ${highCount}/${ordered.length} tập có nguy cơ Bản quyền cao (Nhạc/Hình). Hãy chọn chế độ "Voice + Phụ đề" và bấm vào nhãn Bản quyền trên tập đó để xem chi tiết!`;
+                } else if (medCount > 0) {
+                    overallStatusEl.textContent = `⚠️ Lưu ý: Có ${medCount}/${ordered.length} tập cần lưu ý nhạc nền/logo gốc. Khuyên dùng Voice + Phụ đề (hạ âm gốc ≤ 8%) và bật làm mờ Logo.`;
+                } else {
+                    overallStatusEl.textContent = `🟢 Đã kiểm tra ${ordered.length}/${ordered.length} tập: Cấu hình hiện tại An toàn (Nguy cơ dính bản quyền thấp).`;
+                }
+                renderEpisodeRows();
+            } finally {
+                checkBatchCopyrightBtn.disabled = false;
+                checkBatchCopyrightBtn.textContent = '🛡️ Tra bản quyền';
+            }
+        };
+    }
 
     multiThumbInput.value = '';
     multiThumbInput.onchange = async (event) => {
