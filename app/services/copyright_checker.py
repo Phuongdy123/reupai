@@ -8,11 +8,15 @@ Combines:
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +47,7 @@ def _find_ffmpeg() -> str | None:
     return shutil.which("ffmpeg")
 
 
-def _extract_audio_sample_base64(video_path: Path, start_sec: int = 5, duration_sec: int = 15) -> str | None:
+def _extract_audio_sample_bytes(video_path: Path, start_sec: int = 5, duration_sec: int = 15) -> bytes | None:
     executable = _find_ffmpeg()
     if not executable or not video_path or not video_path.is_file():
         return None
@@ -75,11 +79,109 @@ def _extract_audio_sample_base64(video_path: Path, start_sec: int = 5, duration_
             timeout=25,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
-        if result.returncode == 0 and result.stdout and len(result.stdout) <= 1024 * 1024:
-            return base64.b64encode(result.stdout).decode("ascii")
+        if result.returncode == 0 and result.stdout and len(result.stdout) <= 2 * 1024 * 1024:
+            return result.stdout
     except Exception:
         return None
     return None
+
+
+def _extract_audio_sample_base64(video_path: Path, start_sec: int = 5, duration_sec: int = 15) -> str | None:
+    raw = _extract_audio_sample_bytes(video_path, start_sec=start_sec, duration_sec=duration_sec)
+    if raw and len(raw) <= 1024 * 1024:
+        return base64.b64encode(raw).decode("ascii")
+    return None
+
+
+def recognize_music_with_audd(audio_bytes: bytes, api_token: str) -> dict[str, Any] | None:
+    """Identify exact song title, artist, album, and record label via AudD Audio Fingerprinting."""
+    token = str(api_token or "").strip()
+    if not token or not audio_bytes:
+        return None
+    import requests
+
+    response = requests.post(
+        "https://api.audd.io/",
+        data={"api_token": token, "return": "spotify,apple_music"},
+        files={"file": ("sample.mp3", audio_bytes, "audio/mpeg")},
+        timeout=25,
+    )
+    if not response.ok:
+        return None
+    payload = response.json() if response.content else {}
+    if not isinstance(payload, dict) or payload.get("status") != "success":
+        return None
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return None
+    spotify = result.get("spotify") if isinstance(result.get("spotify"), dict) else {}
+    apple = result.get("apple_music") if isinstance(result.get("apple_music"), dict) else {}
+    external_ids = spotify.get("external_ids") if isinstance(spotify.get("external_ids"), dict) else {}
+    return {
+        "provider": "audd",
+        "title": str(result.get("title") or "").strip(),
+        "artist": str(result.get("artist") or "").strip(),
+        "album": str(result.get("album") or "").strip(),
+        "label": str(result.get("label") or apple.get("recordLabel") or "").strip(),
+        "release_date": str(result.get("release_date") or "").strip(),
+        "song_link": str(result.get("song_link") or "").strip(),
+        "isrc": str(external_ids.get("isrc") or apple.get("isrc") or "").strip(),
+    }
+
+
+def recognize_music_with_acrcloud(
+    audio_bytes: bytes,
+    *,
+    host: str,
+    access_key: str,
+    access_secret: str,
+) -> dict[str, Any] | None:
+    """Identify exact song & label via ACRCloud Audio Fingerprinting."""
+    clean_host = str(host or "").strip().removeprefix("https://").removeprefix("http://").strip("/")
+    key = str(access_key or "").strip()
+    secret = str(access_secret or "").strip()
+    if not (clean_host and key and secret and audio_bytes):
+        return None
+    import requests
+
+    timestamp = str(int(time.time()))
+    string_to_sign = "\n".join(["POST", "/v1/identify", key, "audio", "1", timestamp])
+    signature = base64.b64encode(
+        hmac.new(secret.encode("utf-8"), string_to_sign.encode("utf-8"), digestmod=hashlib.sha1).digest()
+    ).decode("ascii")
+
+    response = requests.post(
+        f"https://{clean_host}/v1/identify",
+        data={
+            "access_key": key,
+            "sample_bytes": str(len(audio_bytes)),
+            "timestamp": timestamp,
+            "signature": signature,
+            "data_type": "audio",
+            "signature_version": "1",
+        },
+        files={"sample": ("sample.mp3", audio_bytes, "audio/mpeg")},
+        timeout=25,
+    )
+    if not response.ok:
+        return None
+    payload = response.json() if response.content else {}
+    music_list = ((payload.get("metadata") or {}).get("music") or []) if isinstance(payload, dict) else []
+    if not music_list:
+        return None
+    top = music_list[0] if isinstance(music_list[0], dict) else {}
+    artists = ", ".join(str(a.get("name") or "") for a in (top.get("artists") or []) if isinstance(a, dict) and a.get("name"))
+    external_ids = top.get("external_ids") if isinstance(top.get("external_ids"), dict) else {}
+    return {
+        "provider": "acrcloud",
+        "title": str(top.get("title") or "").strip(),
+        "artist": artists,
+        "album": str(((top.get("album") or {}).get("name")) or "").strip(),
+        "label": str(top.get("label") or "").strip(),
+        "release_date": str(top.get("release_date") or "").strip(),
+        "song_link": "",
+        "isrc": str(external_ids.get("isrc") or "").strip(),
+    }
 
 
 def _extract_frame_base64(video_path: Path, seconds: int = 4) -> str | None:
@@ -277,6 +379,10 @@ def check_video_copyright(
     auto_brand_blur: bool = False,
     has_blur_region: bool = False,
     use_ai: bool = True,
+    audd_api_token: str = "",
+    acrcloud_host: str = "",
+    acrcloud_access_key: str = "",
+    acrcloud_access_secret: str = "",
 ) -> dict[str, Any]:
     result = analyze_heuristic_copyright_risk(
         title=title,
@@ -291,6 +397,67 @@ def check_video_copyright(
 
     if not use_ai:
         return result
+
+    # 1) Audio Fingerprinting (AudD / ACRCloud) to identify exact song & record label
+    audd_token = (audd_api_token or os.getenv("AUDD_API_TOKEN") or "").strip()
+    acr_host = (acrcloud_host or os.getenv("ACRCLOUD_HOST") or "").strip()
+    acr_key = (acrcloud_access_key or os.getenv("ACRCLOUD_ACCESS_KEY") or "").strip()
+    acr_secret = (acrcloud_access_secret or os.getenv("ACRCLOUD_ACCESS_SECRET") or "").strip()
+
+    recognized = None
+    if video_path and video_path.is_file() and (audd_token or (acr_host and acr_key and acr_secret)):
+        for start_s in (4, 22):
+            clip_bytes = _extract_audio_sample_bytes(video_path, start_sec=start_s, duration_sec=12)
+            if not clip_bytes:
+                continue
+            try:
+                if audd_token:
+                    recognized = recognize_music_with_audd(clip_bytes, audd_token)
+                if not recognized and acr_host and acr_key and acr_secret:
+                    recognized = recognize_music_with_acrcloud(
+                        clip_bytes,
+                        host=acr_host,
+                        access_key=acr_key,
+                        access_secret=acr_secret,
+                    )
+            except Exception:
+                recognized = None
+            if recognized:
+                break
+
+    if recognized:
+        result["recognized_track"] = recognized
+        song_title = recognized.get("title") or "Bài hát chưa rõ tên"
+        song_artist = recognized.get("artist") or "Chưa rõ nghệ sĩ"
+        song_label = recognized.get("label") or ""
+        label_suffix = f" · Hãng: {song_label}" if song_label else ""
+        result["detected_music"] = f"{song_title} — {song_artist}{label_suffix}"
+        has_major_label = bool(song_label and re.search(
+            r"(?:Sony|Universal|Warner|SME|UMG|WMG|EMI|BMG|Believe|Tencent|NetEase|Avex|Pony Canyon|Lantis|Aniplex|JVR)",
+            song_label,
+            re.IGNORECASE,
+        ))
+        high_orig = mode == "subtitle" or float(original_volume) > 0.12
+        if high_orig:
+            result["music_score"] = max(result["music_score"], 90 if has_major_label else 82)
+            result["music_risk"] = "high"
+            result["overall_score"] = max(result["overall_score"], 84)
+            result["overall_risk"] = "high"
+            result["warnings"].insert(
+                0,
+                f"Phát hiện bài hát bản quyền: \"{song_title}\" - {song_artist}{label_suffix}. Giữ âm gốc cao rất dễ dính YouTube Content ID!",
+            )
+            result["recommendations"].insert(0, "Chuyển sang Voice + Phụ đề và hạ Âm lượng audio gốc xuống 0%–5% để tránh Content ID Audio.")
+        else:
+            result["music_score"] = max(result["music_score"], 45 if has_major_label else 35)
+            if result["music_score"] >= 38 and result["music_risk"] == "low":
+                result["music_risk"] = "medium"
+            result["warnings"].insert(
+                0,
+                f"Nhận diện được nhạc nền: \"{song_title}\" - {song_artist}{label_suffix}. Đã giảm âm gốc nhưng vẫn nên giữ ≤ 5%.",
+            )
+        result["ai_scanned"] = True
+        result["scan_note"] = f"Đã nhận diện nhạc bằng {recognized.get('provider', 'fingerprint').upper()}."
 
     try:
         from services.gemini_oauth import authorized_request, get_project_id

@@ -764,6 +764,10 @@ def copyright_check(payload: dict, _: bool = Depends(require_token)):
         auto_brand_blur=bool(payload.get("auto_brand_blur")),
         has_blur_region=bool(payload.get("has_blur_region")),
         use_ai=bool(payload.get("use_ai", True)),
+        audd_api_token=str(payload.get("audd_api_token") or ""),
+        acrcloud_host=str(payload.get("acrcloud_host") or ""),
+        acrcloud_access_key=str(payload.get("acrcloud_access_key") or ""),
+        acrcloud_access_secret=str(payload.get("acrcloud_access_secret") or ""),
     )
 
 

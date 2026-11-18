@@ -194,8 +194,90 @@ export function analyzeVideoCopyrightRisk({
     };
 }
 
+const FINGERPRINT_STORAGE_KEY = 'reupai:copyright-fingerprint-config';
+
+export function readCopyrightFingerprintConfig(storage = globalThis?.localStorage) {
+    try {
+        const raw = storage?.getItem?.(FINGERPRINT_STORAGE_KEY);
+        if (!raw) return { provider: 'audd', auddApiToken: '', acrcloudHost: '', acrcloudAccessKey: '', acrcloudAccessSecret: '' };
+        const parsed = JSON.parse(raw);
+        return {
+            provider: parsed?.provider === 'acrcloud' ? 'acrcloud' : 'audd',
+            auddApiToken: String(parsed?.auddApiToken || '').trim(),
+            acrcloudHost: String(parsed?.acrcloudHost || '').trim(),
+            acrcloudAccessKey: String(parsed?.acrcloudAccessKey || '').trim(),
+            acrcloudAccessSecret: String(parsed?.acrcloudAccessSecret || '').trim(),
+        };
+    } catch {
+        return { provider: 'audd', auddApiToken: '', acrcloudHost: '', acrcloudAccessKey: '', acrcloudAccessSecret: '' };
+    }
+}
+
+export function writeCopyrightFingerprintConfig(storage = globalThis?.localStorage, config = {}) {
+    const normalized = {
+        provider: config?.provider === 'acrcloud' ? 'acrcloud' : 'audd',
+        auddApiToken: String(config?.auddApiToken || '').trim(),
+        acrcloudHost: String(config?.acrcloudHost || '').trim(),
+        acrcloudAccessKey: String(config?.acrcloudAccessKey || '').trim(),
+        acrcloudAccessSecret: String(config?.acrcloudAccessSecret || '').trim(),
+    };
+    try {
+        storage?.setItem?.(FINGERPRINT_STORAGE_KEY, JSON.stringify(normalized));
+    } catch {
+        // ignore storage quota errors
+    }
+    return normalized;
+}
+
+export function hasFingerprintCredentials(cfg = readCopyrightFingerprintConfig()) {
+    if (!cfg) return false;
+    if (cfg.provider === 'acrcloud') {
+        return Boolean(cfg.acrcloudHost && cfg.acrcloudAccessKey && cfg.acrcloudAccessSecret);
+    }
+    return Boolean(cfg.auddApiToken || (cfg.acrcloudHost && cfg.acrcloudAccessKey && cfg.acrcloudAccessSecret));
+}
+
+async function fetchMediaClipBlob(mediaUrl) {
+    if (!mediaUrl || typeof fetch !== 'function') return null;
+    try {
+        const resp = await fetch(mediaUrl, {
+            headers: { Range: 'bytes=0-2200000' },
+        });
+        if (!resp.ok && resp.status !== 206) return null;
+        const blob = await resp.blob();
+        if (!blob || !blob.size) return null;
+        return blob.size > 3.5 * 1024 * 1024 ? blob.slice(0, 3.5 * 1024 * 1024, blob.type || 'video/mp4') : blob;
+    } catch {
+        return null;
+    }
+}
+
+export async function recognizeAudioFingerprint(clipBlob, cfg = readCopyrightFingerprintConfig()) {
+    if (!clipBlob || typeof fetch !== 'function' || !hasFingerprintCredentials(cfg)) {
+        return null;
+    }
+    const form = new FormData();
+    form.append('provider', cfg.provider || 'audd');
+    if (cfg.auddApiToken) form.append('audd_api_token', cfg.auddApiToken);
+    if (cfg.acrcloudHost) form.append('acrcloud_host', cfg.acrcloudHost);
+    if (cfg.acrcloudAccessKey) form.append('acrcloud_access_key', cfg.acrcloudAccessKey);
+    if (cfg.acrcloudAccessSecret) form.append('acrcloud_access_secret', cfg.acrcloudAccessSecret);
+    form.append('file', clipBlob, 'sample.mp4');
+
+    const resp = await fetch('/api/copyright/recognize', {
+        method: 'POST',
+        body: form,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data?.ok) {
+        throw new Error(data?.error || 'Không thể nhận diện nhạc từ đoạn âm thanh.');
+    }
+    return data.matched && data.track ? data.track : { matched: false, provider: data.provider || cfg.provider };
+}
+
 export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
     const localReport = analyzeVideoCopyrightRisk(payload);
+    const fpConfig = payload.fingerprintConfig || readCopyrightFingerprintConfig();
     if (typeof requestJson !== 'function') {
         return {
             ...localReport,
@@ -210,7 +292,7 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
             ...remote,
             overall_risk: overallRisk,
             badge_label: riskLabelFromLevel(overallRisk),
-            scan_note: remote.scan_note || fallbackNote || (remote.ai_scanned ? 'Đã quét sâu Nhạc & Hình bằng AI Gemini.' : ''),
+            scan_note: remote.scan_note || fallbackNote || (remote.ai_scanned ? 'Đã quét sâu Nhạc & Hình bằng AI.' : ''),
         };
     };
 
@@ -222,6 +304,10 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
             body: JSON.stringify({
                 ...payload,
                 use_ai: payload.use_ai !== false,
+                audd_api_token: fpConfig.auddApiToken || undefined,
+                acrcloud_host: fpConfig.acrcloudHost || undefined,
+                acrcloud_access_key: fpConfig.acrcloudAccessKey || undefined,
+                acrcloud_access_secret: fpConfig.acrcloudAccessSecret || undefined,
             }),
         });
         if (remote && typeof remote === 'object') {
@@ -238,12 +324,63 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
         }
     }
 
-    // Fallback for Local Engine 0.2.55 which already has /api/assistant (with Gemini OAuth + image_data)
+    // Fallback for Local Engine 0.2.55:
+    // 1) Audio Fingerprinting via /api/copyright/recognize (AudD / ACRCloud) if configured & media clip available
+    let recognizedTrack = null;
+    let fingerprintNote = '';
+    if (hasFingerprintCredentials(fpConfig)) {
+        const clipBlob = payload.audio_clip_blob || (payload.preview_url ? await fetchMediaClipBlob(payload.preview_url) : null);
+        if (clipBlob) {
+            try {
+                const fpRes = await recognizeAudioFingerprint(clipBlob, fpConfig);
+                if (fpRes && fpRes.title) {
+                    recognizedTrack = fpRes;
+                } else {
+                    fingerprintNote = 'Đã dò vân tay âm thanh: chưa thấy trùng bài hát thương mại trong đoạn đầu.';
+                }
+            } catch (fpErr) {
+                fingerprintNote = `Lỗi dò nhạc (${fpErr?.message || 'AudD/ACRCloud'}).`;
+            }
+        } else {
+            fingerprintNote = 'Hãy bấm "Tải video để xem trước" trước để cắt âm thanh dò chính xác tên bài hát.';
+        }
+    }
+
+    let enrichedReport = { ...localReport };
+    if (recognizedTrack) {
+        const labelSuffix = recognizedTrack.label ? ` · Hãng: ${recognizedTrack.label}` : '';
+        const detectedStr = `${recognizedTrack.title} — ${recognizedTrack.artist || 'Chưa rõ nghệ sĩ'}${labelSuffix}`;
+        const majorLabel = Boolean(recognizedTrack.label && /(?:Sony|Universal|Warner|SME|UMG|WMG|EMI|BMG|Believe|Tencent|NetEase|Avex|Pony Canyon|Lantis|Aniplex|JVR)/i.test(recognizedTrack.label));
+        const highOrig = payload.mode === 'subtitle' || Number(payload.original_volume ?? 0.15) > 0.12;
+        const musicScore = highOrig ? (majorLabel ? 92 : 84) : (majorLabel ? 46 : 35);
+        const musicRisk = musicScore >= 65 ? 'high' : musicScore >= 38 ? 'medium' : 'low';
+        const overallScore = Math.round(Math.max(musicScore, localReport.visual_score) * 0.7 + Math.min(musicScore, localReport.visual_score) * 0.3);
+        const overallRisk = overallScore >= 65 ? 'high' : overallScore >= 38 ? 'medium' : 'low';
+        const trackWarning = highOrig
+            ? `Phát hiện bài hát bản quyền: "${recognizedTrack.title}" - ${recognizedTrack.artist || 'Chưa rõ'}${labelSuffix}. Rất dễ dính YouTube Content ID!`
+            : `Nhận diện được nhạc: "${recognizedTrack.title}" - ${recognizedTrack.artist || 'Chưa rõ'}${labelSuffix}. Đã giảm âm gốc nhưng vẫn nên giữ ≤ 5%.`;
+        enrichedReport = {
+            ...localReport,
+            recognized_track: recognizedTrack,
+            music_score: musicScore,
+            music_risk: musicRisk,
+            overall_score: overallScore,
+            overall_risk: overallRisk,
+            badge_label: riskLabelFromLevel(overallRisk),
+            detected_music: detectedStr,
+            warnings: [trackWarning, ...localReport.warnings.filter((w) => w !== trackWarning)].slice(0, 4),
+            ai_scanned: true,
+            scan_note: `Đã nhận diện nhạc (${recognizedTrack.provider?.toUpperCase() || 'Audio Fingerprint'}).`,
+        };
+    }
+
+    // 2) Gemini visual + context check via /api/assistant (available on Engine 0.2.55)
     try {
         const promptLines = [
             'Hãy đánh giá nguy cơ bản quyền YouTube Content ID (Nhạc & Hình ảnh) cho video này và trả lời ngắn gọn bằng tiếng Việt:',
             `- Tiêu đề: ${String(payload.title || '').slice(0, 180)}`,
-            payload.track ? `- Nhạc/Track: ${String(payload.track).slice(0, 120)}` : '',
+            recognizedTrack ? `- Bài hát vừa nhận diện được từ âm thanh: ${recognizedTrack.title} - ${recognizedTrack.artist} (Hãng: ${recognizedTrack.label || 'Chưa rõ'})` : '',
+            payload.track ? `- Nhạc/Track nguồn: ${String(payload.track).slice(0, 120)}` : '',
             payload.artist ? `- Nghệ sĩ: ${String(payload.artist).slice(0, 100)}` : '',
             payload.url ? `- Nguồn: ${String(payload.url).slice(0, 180)}` : '',
             `- Chế độ xử lý dự kiến: ${payload.mode === 'subtitle' ? 'Chỉ Phụ đề (giữ tiếng gốc)' : 'Voice + Phụ đề'}`,
@@ -273,8 +410,8 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
         const answer = String(assistantRes?.answer || '').trim();
         if (answer) {
             const lower = answer.toLowerCase();
-            let musicScore = localReport.music_score;
-            let visualScore = localReport.visual_score;
+            let musicScore = enrichedReport.music_score;
+            let visualScore = enrichedReport.visual_score;
             if (/(nguy cơ cao|dễ dính bản quyền|content id|bản quyền nặng|commercial|ost gốc|nhạc có lời)/.test(lower)) {
                 musicScore = Math.max(musicScore, 72);
             }
@@ -288,29 +425,38 @@ export async function checkVideoCopyrightWithEngine(requestJson, payload = {}) {
             const overallRisk = level(overallScore);
 
             return mergeRemoteReport({
+                ...enrichedReport,
                 overall_risk: overallRisk,
                 overall_score: overallScore,
                 music_risk: musicRisk,
                 music_score: musicScore,
                 visual_risk: visualRisk,
                 visual_score: visualScore,
-                detected_music: payload.image_data
-                    ? 'AI Gemini đã phân tích khung hình & thông tin nguồn'
-                    : 'AI Gemini đã phân tích thông tin nguồn',
-                warnings: [answer, ...localReport.warnings.filter((w) => w !== answer)].slice(0, 4),
+                detected_music: enrichedReport.recognized_track
+                    ? enrichedReport.detected_music
+                    : (payload.image_data ? 'AI Gemini đã phân tích khung hình & thông tin nguồn' : 'AI Gemini đã phân tích thông tin nguồn'),
+                warnings: [
+                    ...(enrichedReport.recognized_track ? enrichedReport.warnings.slice(0, 1) : []),
+                    answer,
+                    ...localReport.warnings.filter((w) => w !== answer),
+                ].slice(0, 4),
                 ai_scanned: true,
-                scan_note: 'Đã quét sâu bằng AI Gemini.',
+                scan_note: recognizedTrack
+                    ? `Đã dò nhạc (${recognizedTrack.title}) + quét khung hình bằng AI Gemini.`
+                    : (fingerprintNote ? `${fingerprintNote} · Đã quét AI Gemini.` : 'Đã quét sâu bằng AI Gemini.'),
             });
         }
     } catch (fallbackErr) {
         return {
-            ...localReport,
-            scan_note: fallbackErr?.message || 'Chưa kết nối Gemini trong Cài đặt nên đang dùng đánh giá nhanh.',
+            ...enrichedReport,
+            scan_note: recognizedTrack
+                ? enrichedReport.scan_note
+                : (fingerprintNote || fallbackErr?.message || 'Chưa kết nối Gemini trong Cài đặt nên đang dùng đánh giá nhanh.'),
         };
     }
 
     return {
-        ...localReport,
-        scan_note: 'Đã kiểm tra nhanh theo thông tin nguồn và cấu hình hiện tại.',
+        ...enrichedReport,
+        scan_note: recognizedTrack ? enrichedReport.scan_note : (fingerprintNote || 'Đã kiểm tra nhanh theo thông tin nguồn.'),
     };
 }

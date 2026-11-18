@@ -8675,8 +8675,17 @@ async function openCopyrightReportDialog(video, card) {
         footerStatus.textContent = 'Đang gửi AI Gemini phân tích bản quyền Video & Nhạc…';
         try {
             const reqJson = (path, opts) => window.reupEngineClient.json(path, opts);
+            let previewUrl = '';
+            if (video.downloaded && window.reupEngineClient?.mediaUrl) {
+                try {
+                    previewUrl = await window.reupEngineClient.mediaUrl(
+                        `/api/preview/source/${encodeURIComponent(video.video_id)}?channel=${encodeURIComponent(video.channel || video.channel_key || 'default')}`,
+                    );
+                } catch {}
+            }
             const report = await checkVideoCopyrightWithEngine(reqJson, {
                 ...buildPayload(),
+                preview_url: previewUrl,
                 use_ai: true,
             });
             renderReport(report);

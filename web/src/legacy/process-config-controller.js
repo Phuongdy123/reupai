@@ -3,7 +3,14 @@ import { bindProcessInspectorTabs } from './process-inspector-tabs.js';
 import { bindProcessOutputSummary } from './process-output-summary.js';
 import { defaultVoiceForLanguage, isVoiceCompatibleWithLanguage, playVoicePreview, renderVoiceOptionsHtml } from '../lib/tts-voices.js';
 import { getSubtitlePreviewData, sampleLinesForLanguage } from '../lib/subtitle-style-previews.js';
-import { analyzeVideoCopyrightRisk, checkVideoCopyrightWithEngine, copyrightIconSvg } from '../lib/copyright-checker.js';
+import {
+    analyzeVideoCopyrightRisk,
+    checkVideoCopyrightWithEngine,
+    copyrightIconSvg,
+    hasFingerprintCredentials,
+    readCopyrightFingerprintConfig,
+    writeCopyrightFingerprintConfig,
+} from '../lib/copyright-checker.js';
 import {
     clearLastConfig,
     mergeSectionIntoConfig,
@@ -2479,7 +2486,65 @@ export async function openProcessConfig(video, card, mode, dependencies) {
     const copyrightWarnings = dialog.querySelector('#processCopyrightWarnings');
     const copyrightScanBtn = dialog.querySelector('#processCopyrightScanBtn');
     const copyrightFixBtn = dialog.querySelector('#processCopyrightFixBtn');
+    const copyrightFpBtn = dialog.querySelector('#processCopyrightFpBtn');
+    const copyrightFpPanel = dialog.querySelector('#processCopyrightFpPanel');
+    const copyrightFpProvider = dialog.querySelector('#processCopyrightFpProvider');
+    const copyrightAuddToken = dialog.querySelector('#processCopyrightAuddToken');
+    const copyrightAcrFields = dialog.querySelector('#processCopyrightAcrFields');
+    const copyrightAcrHost = dialog.querySelector('#processCopyrightAcrHost');
+    const copyrightAcrKey = dialog.querySelector('#processCopyrightAcrKey');
+    const copyrightAcrSecret = dialog.querySelector('#processCopyrightAcrSecret');
+    const copyrightFpSaveBtn = dialog.querySelector('#processCopyrightFpSaveBtn');
+    const copyrightFpStatus = dialog.querySelector('#processCopyrightFpStatus');
     let latestAiCopyrightReport = null;
+
+    const syncFingerprintPanelFields = () => {
+        const cfg = readCopyrightFingerprintConfig(localStorage);
+        if (copyrightFpProvider) copyrightFpProvider.value = cfg.provider || 'audd';
+        if (copyrightAuddToken) copyrightAuddToken.value = cfg.auddApiToken || '';
+        if (copyrightAcrHost) copyrightAcrHost.value = cfg.acrcloudHost || '';
+        if (copyrightAcrKey) copyrightAcrKey.value = cfg.acrcloudAccessKey || '';
+        if (copyrightAcrSecret) copyrightAcrSecret.value = cfg.acrcloudAccessSecret || '';
+        const isAcr = (copyrightFpProvider?.value || 'audd') === 'acrcloud';
+        if (copyrightAcrFields) copyrightAcrFields.hidden = !isAcr;
+        if (copyrightAuddToken) copyrightAuddToken.hidden = isAcr;
+        if (copyrightFpStatus) {
+            copyrightFpStatus.textContent = hasFingerprintCredentials(cfg)
+                ? `Đã lưu key dò nhạc (${cfg.provider === 'acrcloud' ? 'ACRCloud' : 'AudD'}). Bấm "Quét sâu Nhạc & Hình (AI)" để nhận diện tên bài hát.`
+                : 'Dán AudD API Token (audd.io) để cắt đoạn âm thanh dò chính xác tên bài hát, ca sĩ & hãng thu âm.';
+        }
+    };
+    syncFingerprintPanelFields();
+
+    if (copyrightFpBtn && copyrightFpPanel) {
+        copyrightFpBtn.onclick = () => {
+            copyrightFpPanel.hidden = !copyrightFpPanel.hidden;
+            if (!copyrightFpPanel.hidden) syncFingerprintPanelFields();
+        };
+    }
+    if (copyrightFpProvider) {
+        copyrightFpProvider.onchange = () => {
+            const isAcr = copyrightFpProvider.value === 'acrcloud';
+            if (copyrightAcrFields) copyrightAcrFields.hidden = !isAcr;
+            if (copyrightAuddToken) copyrightAuddToken.hidden = isAcr;
+        };
+    }
+    if (copyrightFpSaveBtn) {
+        copyrightFpSaveBtn.onclick = () => {
+            const saved = writeCopyrightFingerprintConfig(localStorage, {
+                provider: copyrightFpProvider?.value || 'audd',
+                auddApiToken: copyrightAuddToken?.value || '',
+                acrcloudHost: copyrightAcrHost?.value || '',
+                acrcloudAccessKey: copyrightAcrKey?.value || '',
+                acrcloudAccessSecret: copyrightAcrSecret?.value || '',
+            });
+            if (copyrightFpStatus) {
+                copyrightFpStatus.textContent = hasFingerprintCredentials(saved)
+                    ? `Đã lưu key ${saved.provider === 'acrcloud' ? 'ACRCloud' : 'AudD'}. Bấm "Quét sâu Nhạc & Hình (AI)" ngay để dò nhạc!`
+                    : 'Đã xóa key dò nhạc.';
+            }
+        };
+    }
 
     const captureCopyrightPreviewFrame = () => {
         if (!preview || !preview.videoWidth || !preview.videoHeight) return null;
@@ -2519,6 +2584,8 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             width: preview.videoWidth || sourceWidth || undefined,
             height: preview.videoHeight || sourceHeight || undefined,
             image_data: includeFrame ? captureCopyrightPreviewFrame() : null,
+            preview_url: includeFrame ? (preview?.currentSrc || preview?.src || '') : '',
+            fingerprintConfig: readCopyrightFingerprintConfig(localStorage),
         };
     };
 
