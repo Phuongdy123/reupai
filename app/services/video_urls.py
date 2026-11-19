@@ -212,7 +212,7 @@ def normalize_source_url(value, *, resolve_short=False, allow_generic=False):
             raise ValueError('Không tìm thấy mã video Bilibili đầy đủ. Link kênh/playlist không phải link một video.')
         identifier = 'BV' + identifier[2:] if identifier[:2].lower() == 'bv' else identifier.lower()
         prefix = parsed.path.split('/video/',1)[0] if match else ''
-        if prefix and not re.fullmatch(r'/[a-z]{2}(?:-[a-z]{2})?', prefix, re.I):
+        if prefix and not re.fullmatch(r'/[a-z]{2}(?:-[a-z]{2,4})?(?:-[a-z]{2})?', prefix, re.I):
             raise ValueError('Đường dẫn video Bilibili không hợp lệ.')
         kept = {}
         for key in ('p','t'):
@@ -223,7 +223,7 @@ def normalize_source_url(value, *, resolve_short=False, allow_generic=False):
                 continue
             if math.isfinite(number) and (key == 'p' and item.isdecimal() and 1 <= number <= 10000 or key == 't' and 0 <= number <= 2592000):
                 kept[key] = item
-        return urlunsplit(('https', parsed.hostname.lower(), f'{prefix}/video/{identifier}/', urlencode(kept), ''))
+        return urlunsplit(('https', parsed.hostname.lower(), f'/video/{identifier}/', urlencode(kept), ''))
     if re.search(r'/note/\d+',parsed.path):
         raise ValueError('Link này là bài ảnh Douyin; hãy chọn link video.')
     match = re.search(r'/(?:share/)?video/(\d{10,25})(?:/|$)', parsed.path)

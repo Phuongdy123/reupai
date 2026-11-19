@@ -29,8 +29,10 @@ export function prepareSourceInput(value) {
   if (primaryLinks.length === 1) text = primaryLinks[0];
   else if (allLinks.length === 1) text = allLinks[0];
   if (BARE_SOURCE_HOST.test(text)) text = `https://${text}`;
-  const biliSpace = text.match(/^https?:\/\/(?:space\.bilibili\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?|m\.bilibili\.com\/space\/)(\d+)(?:\/.*)?(?:\?.*)?$/i);
+  const biliSpace = text.match(/^https?:\/\/(?:space\.bilibili\.com\/(?:[a-z]{2}(?:-[a-z]{2,4})?\/)?|m\.bilibili\.com\/space\/)(\d+)(?:\/.*)?(?:\?.*)?$/i);
   if (biliSpace) return `https://space.bilibili.com/${biliSpace[1]}`;
+  const biliLocaleVideo = text.match(/^https?:\/\/((?:www\.|m\.)?bilibili\.com)\/[a-z]{2}(?:-[a-z]{2,4})?(?:-[a-z]{2})?(\/video\/(?:BV[\da-z]{10}|av\d+).*)$/i);
+  if (biliLocaleVideo) return `https://${biliLocaleVideo[1]}${biliLocaleVideo[2]}`;
   return text;
 }
 
