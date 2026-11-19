@@ -1730,6 +1730,39 @@ def translate_all(
             0.05
         )
 
+    # Second-pass guard: retry any empty line or line still containing CJK characters
+    effective_target = str(target_language or TARGET_LANGUAGE or "vi").strip().lower()
+    if effective_target not in ("zh", "ja"):
+        cjk_re = re.compile(r"[\u4e00-\u9fff]")
+        broken = [
+            {
+                "id": int(item["id"]),
+                "start": item["start"],
+                "end": item["end"],
+                "text": item["original_text"],
+            }
+            for item in translated
+            if not str(item.get("translated_text") or "").strip()
+            or cjk_re.search(str(item.get("translated_text") or ""))
+        ]
+        if broken:
+            print(f"[TRANSLATE REPAIR] Retrying {len(broken)} untranslated/CJK line(s)...")
+            try:
+                repaired = translate_batch(
+                    broken[:25],
+                    "",
+                    translation_model=translation_model,
+                    target_language=target_language,
+                )
+                repaired_map = {int(r["id"]): str(r["text"]).strip() for r in repaired if str(r.get("text") or "").strip()}
+                for item in translated:
+                    sid = int(item["id"])
+                    if sid in repaired_map and not cjk_re.search(repaired_map[sid]):
+                        item["translated_text"] = repaired_map[sid]
+                save_checkpoint(translated, source_hash)
+            except Exception as repair_err:
+                print(f"[TRANSLATE REPAIR WARN] {repair_err}")
+
     return translated
 
 

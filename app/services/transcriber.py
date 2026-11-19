@@ -240,7 +240,11 @@ def _run_transcription(
         "best_of": 1,
         "condition_on_previous_text": False,
         "vad_filter": True,
-        "vad_parameters": {"min_silence_duration_ms": 450},
+        "vad_parameters": {
+            "threshold": 0.28,
+            "min_silence_duration_ms": 280,
+            "speech_pad_ms": 250,
+        },
     }
     if language:
         options["language"] = language

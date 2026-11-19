@@ -3951,6 +3951,60 @@ def pipeline(
                 chinese_srt.write_text("", encoding="utf-8")
                 vietnamese_srt.write_text("", encoding="utf-8")
 
+            # Auto OCR Gap-Filler: catch burned-in subtitles that Whisper missed in silent/music gaps
+            if config.get("source_subtitle_mode", "auto") != "none":
+                try:
+                    from services import transcriber as _tr_gap
+                    from services.subtitle_ocr import extract_subtitle_srt
+                    existing_segs = _tr_gap.read_srt(rel(chinese_srt)) if file_ok(chinese_srt) else []
+                    from services.tts import get_video_duration_ms
+                    vid_ms = get_video_duration_ms(rel(source_video))
+                    vid_sec = (vid_ms / 1000.0) if vid_ms else (existing_segs[-1]["end"] + 5.0 if existing_segs else 0.0)
+                    has_large_gap = no_speech or not existing_segs
+                    if not has_large_gap and existing_segs:
+                        if existing_segs[0]["start"] > 3.5:
+                            has_large_gap = True
+                        elif vid_sec > 0 and (vid_sec - existing_segs[-1]["end"]) > 3.5:
+                            has_large_gap = True
+                        else:
+                            for i in range(1, len(existing_segs)):
+                                if (existing_segs[i]["start"] - existing_segs[i - 1]["end"]) > 3.5:
+                                    has_large_gap = True
+                                    break
+                    if has_large_gap:
+                        gap_ocr_srt = chinese_srt.with_suffix(".gap_ocr.srt")
+                        extract_subtitle_srt(
+                            source_video,
+                            gap_ocr_srt,
+                            language=config.get("ocr_language", "auto"),
+                            fps=max(1.5, float(config.get("ocr_fps", 2.0))),
+                            min_confidence=min(0.38, float(config.get("ocr_min_confidence", 0.45))),
+                            parallelism=int(config.get("ocr_parallelism", 2)),
+                            use_gpu=bool(config.get("ocr_use_gpu", False)),
+                            merge_similar=bool(config.get("ocr_merge_similar", True)),
+                            similarity_threshold=float(config.get("ocr_similarity_threshold", 0.82)),
+                        )
+                        ocr_segs = _tr_gap.read_srt(rel(gap_ocr_srt)) if file_ok(gap_ocr_srt) else []
+                        if ocr_segs:
+                            merged = list(existing_segs)
+                            added_count = 0
+                            for oseg in ocr_segs:
+                                o_mid = (oseg["start"] + oseg["end"]) / 2.0
+                                overlaps = any(
+                                    (es["start"] - 0.3) <= o_mid <= (es["end"] + 0.3)
+                                    for es in existing_segs
+                                )
+                                if not overlaps:
+                                    merged.append(oseg)
+                                    added_count += 1
+                            if added_count > 0:
+                                merged.sort(key=lambda s: (s["start"], s["end"]))
+                                _tr_gap.save_srt(merged, rel(chinese_srt))
+                                no_speech = False
+                                print(f"[OCR GAP-FILLER] Merged {added_count} missed on-screen subtitle line(s) into {chinese_srt.name}.")
+                except Exception as gap_err:
+                    print(f"[OCR GAP-FILLER WARN] {gap_err}")
+
         transcription_signature_path.write_text(transcription_signature, encoding="utf-8")
         _record_stage_checkpoint(job_dir, "transcript", {"chinese_srt": rel(chinese_srt), "no_speech": no_speech})
 
