@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import json
 import os
+import shutil
 import re
 import threading
 import time
@@ -74,6 +75,7 @@ API_KEY = os.getenv("GEMINI_API_KEY")
 SOURCE_LANGUAGE = "auto"
 TARGET_LANGUAGE = "vi"
 GLOSSARY_TEXT = ""
+PROGRESS_CALLBACK = None
 OAUTH_CREDENTIALS = get_credentials() if not API_KEY else None
 
 
@@ -1388,108 +1390,105 @@ def translate_batch(
 # CHECKPOINT
 # =========================================================
 
-def load_checkpoint(
-    source_hash
-):
-    if not os.path.exists(
-        CHECKPOINT_FILE
-    ):
-        return []
-
+def _read_checkpoint_json(path):
+    if not path or not os.path.exists(path):
+        return None
     try:
-        with open(
-            CHECKPOINT_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
-            data = json.load(
-                file
-            )
-
+        with open(path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+        return data if isinstance(data, dict) else None
     except Exception as error:
-        print(
-            "Checkpoint loi -> bo qua:"
-        )
-        print(
-            error
-        )
+        print(f"Checkpoint doc loi ({path}): {error}")
+        return None
+
+
+def load_checkpoint(
+    source_hash,
+    subtitles=None,
+    target_language=None,
+):
+    data = _read_checkpoint_json(CHECKPOINT_FILE)
+    if data is None:
+        bak_path = f"{CHECKPOINT_FILE}.bak"
+        data = _read_checkpoint_json(bak_path)
+        if data is not None:
+            print(f"[CHECKPOINT RECOVERY] Phuc hoi tu ban sao luu: {bak_path}")
+    if data is None:
         return []
 
-    if not isinstance(
-        data,
-        dict
-    ):
-        print(
-            "Checkpoint cu -> reset."
-        )
+    effective_target = str(target_language or TARGET_LANGUAGE or "vi").strip().lower()
+    saved_target = str(data.get("target_language") or "").strip().lower()
+    if saved_target and saved_target != effective_target:
+        print(f"Ngon ngu dich thay doi ({saved_target} -> {effective_target}) -> tao checkpoint moi.")
         return []
 
-    if (
-        data.get(
-            "source_hash"
-        )
-        != source_hash
-    ):
-        print(
-            "Input SRT da thay doi "
-            "-> reset checkpoint."
-        )
+    items = data.get("translations", [])
+    if not isinstance(items, list) or not items:
         return []
 
-    items = (
-        data.get(
-            "translations",
-            []
-        )
-    )
+    if data.get("source_hash") == source_hash:
+        print(f"Checkpoint hop le (khop hash): {len(items)} cau")
+        return items
 
-    if not isinstance(
-        items,
-        list
-    ):
-        return []
+    # Smart partial recovery: keep every previously translated line whose original_text matches!
+    if subtitles:
+        by_text = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            orig = " ".join(str(item.get("original_text") or "").strip().split())
+            trans = str(item.get("translated_text") or "").strip()
+            if orig and trans:
+                by_text[orig] = trans
+        recovered = []
+        for sub in subtitles:
+            orig = " ".join(str(sub.get("text") or "").strip().split())
+            if orig in by_text:
+                recovered.append({
+                    "id": int(sub["id"]),
+                    "start": sub["start"],
+                    "end": sub["end"],
+                    "original_text": sub["text"],
+                    "translated_text": by_text[orig],
+                })
+        if recovered:
+            print(f"[CHECKPOINT SMART RESUME] Giu lai {len(recovered)}/{len(subtitles)} cau da dich truoc do.")
+            return recovered
 
-    print(
-        f"Checkpoint hop le: "
-        f"{len(items)} cau"
-    )
-
-    return items
+    print("Input SRT da thay doi va khong co cau trung -> tao checkpoint moi.")
+    return []
 
 
 def save_checkpoint(
     translations,
-    source_hash
+    source_hash,
+    target_language=None,
 ):
     ensure_parent(
         CHECKPOINT_FILE
     )
 
+    effective_target = str(target_language or TARGET_LANGUAGE or "vi").strip().lower()
     data = {
-        "job":
-            JOB_NAME,
-
-        "source_file":
-            INPUT_SRT,
-
-        "source_hash":
-            source_hash,
-
-        "model":
-            "mixed-fallback",
-
-        "gemini_models":
-            GEMINI_MODELS,
-
-        "local_fallback":
-            LOCAL_FALLBACK_ENABLED,
-
-        "translations":
-            translations,
+        "job": JOB_NAME,
+        "source_file": INPUT_SRT,
+        "source_hash": source_hash,
+        "target_language": effective_target,
+        "model": "mixed-fallback",
+        "gemini_models": GEMINI_MODELS,
+        "local_fallback": LOCAL_FALLBACK_ENABLED,
+        "translations": translations,
     }
 
-    # Write-then-replace keeps the last good checkpoint intact if the engine is
-    # killed mid-write; compact JSON keeps the per-batch save cheap.
+    # Backup previous valid checkpoint before replacing (survives power cut)
+    bak_file = f"{CHECKPOINT_FILE}.bak"
+    if os.path.isfile(CHECKPOINT_FILE) and os.path.getsize(CHECKPOINT_FILE) > 10:
+        try:
+            shutil.copy2(CHECKPOINT_FILE, bak_file)
+        except OSError:
+            pass
+
+    # Write + flush + fsync + atomic replace so sudden PC shutdown never corrupts progress
     temporary_file = f"{CHECKPOINT_FILE}.tmp"
     with open(
         temporary_file,
@@ -1502,6 +1501,11 @@ def save_checkpoint(
             ensure_ascii=False,
             separators=(",", ":")
         )
+        file.flush()
+        try:
+            os.fsync(file.fileno())
+        except OSError:
+            pass
 
     os.replace(
         temporary_file,
@@ -1546,7 +1550,9 @@ def translate_all(
 
     translated = (
         load_checkpoint(
-            source_hash
+            source_hash,
+            subtitles=subtitles,
+            target_language=target_language,
         )
     )
 
@@ -1714,8 +1720,14 @@ def translate_all(
         # Save sau moi batch de co the resume.
         save_checkpoint(
             translated,
-            source_hash
+            source_hash,
+            target_language=target_language,
         )
+        if callable(PROGRESS_CALLBACK):
+            try:
+                PROGRESS_CALLBACK(len(translated), total)
+            except Exception:
+                pass
 
         print(
             f"Tien do: "

@@ -1044,7 +1044,13 @@ def _record_stage_checkpoint(job_dir: Path, stage: str, details: dict | None = N
     }
     tmp = path.with_name(path.name + ".tmp")
     try:
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
         os.replace(tmp, path)
     except OSError:
         tmp.unlink(missing_ok=True)
@@ -1753,6 +1759,7 @@ def translate_srt(
     translation_model="gemini-3.1-flash-lite",
     target_language="vi",
     glossary=None,
+    on_progress=None,
 
 ):
 
@@ -1842,6 +1849,7 @@ def translate_srt(
         pass
     translator.SOURCE_LANGUAGE = source_language
     translator.TARGET_LANGUAGE = target_language
+    translator.PROGRESS_CALLBACK = on_progress
     if isinstance(glossary, list):
         glossary_lines = [
             f"{item.get('source', '').strip()} => {item.get('target', '').strip()}"
@@ -3384,8 +3392,9 @@ def pipeline(
     transcription_changed = transcription_signature != previous_transcription_signature
     transcription_force = force or language_force or transcription_changed
     translation_force = force or language_force or target_language_force or transcription_changed
-    if translation_force:
+    if target_language_force:
         translation_checkpoint.unlink(missing_ok=True)
+        translation_checkpoint.with_name(translation_checkpoint.name + ".bak").unlink(missing_ok=True)
 
 
 
@@ -4097,6 +4106,14 @@ def pipeline(
             translation_model=config.get("translation_model", "gemini-3.1-flash-lite"),
             target_language=target_language,
             glossary=config.get("glossary"),
+            on_progress=lambda done, total: write_progress(
+                job_dir,
+                stage="translate",
+                percent=45 + min(19, int(19 * done / max(1, total))),
+                status="running",
+                message=f"Đang dịch {done}/{total} câu (đã lưu checkpoint an toàn)…",
+                mode=mode,
+            ),
 
             )
             source_language_path.write_text(source_language, encoding="utf-8")

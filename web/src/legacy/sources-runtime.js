@@ -13949,6 +13949,8 @@ document.addEventListener(
         ) {
 
             saveUiState();
+        } else if (document.visibilityState === 'visible') {
+            scheduleResumeActiveJobs();
         }
     }
 );
