@@ -3095,6 +3095,8 @@ async function pollProcess(
         )
     );
 
+    let consecutivePollErrors = 0;
+
     while (true) {
 
         await new Promise(
@@ -3111,27 +3113,21 @@ async function pollProcess(
             + `&mode=${encodeURIComponent(mode)}`
         );
 
-        const response = (
-            await window.reupEngineClient.request(
-                url
-            )
-        );
-
-        const data = (
-            await response.json()
-        );
-
-        if (
-            !response.ok
-        ) {
-
-            throw new Error(
-                data.detail
-                || (
-                    'Không đọc '
-                    + 'được tiến độ.'
-                )
-            );
+        let response;
+        let data;
+        try {
+            response = await window.reupEngineClient.request(url);
+            data = await response.json();
+            if (!response.ok) {
+                throw new Error(data?.detail || 'Không đọc được tiến độ.');
+            }
+            consecutivePollErrors = 0;
+        } catch (pollErr) {
+            consecutivePollErrors += 1;
+            if (consecutivePollErrors <= 15) {
+                continue;
+            }
+            throw pollErr;
         }
 
         const percent = (
