@@ -4211,8 +4211,10 @@ def pipeline(
             # voice and speed still match the configuration that made them.
             write_cache_fingerprint(tts_in_progress_fingerprint_path, tts_fingerprint)
             last_tts_percent = 68
+            last_tts_report_time = 0.0
+            last_tts_step = -1
             def on_voice_progress(phase, current, total):
-                nonlocal last_tts_percent
+                nonlocal last_tts_percent, last_tts_report_time, last_tts_step
                 if total <= 0:
                     return
                 fraction = min(1.0, max(0.0, current / total))
@@ -4225,15 +4227,19 @@ def pipeline(
                 else:
                     percent = 75 + int(2 * fraction)
                     label = "Đang tạo track giọng nói"
-                if percent <= last_tts_percent:
+                step = int(fraction * 100)
+                now = time.monotonic()
+                if percent <= last_tts_percent and step <= last_tts_step and (now - last_tts_report_time) < 3.0 and current < total:
                     return
-                last_tts_percent = percent
+                last_tts_percent = max(last_tts_percent, percent)
+                last_tts_step = step
+                last_tts_report_time = now
                 write_progress(
                     job_dir,
                     stage="tts",
-                    percent=percent,
+                    percent=last_tts_percent,
                     status="running",
-                    message=f"{label}: {fraction:.0%}.",
+                    message=f"{label}: {current}/{total} ({fraction:.0%}).",
                     mode=mode,
                 )
             voice_path = create_voice(
