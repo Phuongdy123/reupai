@@ -372,8 +372,9 @@ def _is_model_exhausted(model_name: str) -> bool:
     return False
 
 
-def _mark_model_exhausted(model_name: str, ttl: int = MODEL_EXHAUSTED_TTL_SECONDS) -> None:
-    DISABLED_MODELS.add(model_name)
+def _mark_model_exhausted(model_name: str, ttl: int = MODEL_EXHAUSTED_TTL_SECONDS, *, permanent: bool = False) -> None:
+    if permanent:
+        DISABLED_MODELS.add(model_name)
     with _MODEL_COOLDOWN_LOCK:
         _MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
 
@@ -1155,6 +1156,7 @@ def translate_batch(
     source_language=None,
     translation_model=None,
     target_language=None,
+    _cooldown_round=0,
 ):
     effective_source = source_language or SOURCE_LANGUAGE
     effective_target = target_language or TARGET_LANGUAGE
@@ -1186,7 +1188,7 @@ def translate_batch(
 
     last_error = None
 
-    selected_models = list(dict.fromkeys([translation_model, "gemini-3.1-flash-lite"])) if translation_model else GEMINI_MODELS
+    selected_models = list(dict.fromkeys([translation_model, *GEMINI_MODELS])) if translation_model else list(GEMINI_MODELS)
     for model_name in selected_models:
         if _is_model_exhausted(model_name):
             continue
@@ -1305,16 +1307,16 @@ def translate_batch(
                     ) from error
 
                 # Model khong ton tai / project khong duoc dung model.
-                # Khong retry cung model, ghi nho da het/khong kha dung -> chuyen model tiep theo ngay.
+                # Khong retry cung model, ghi nho khong kha dung -> chuyen model tiep theo ngay.
                 if _is_model_unavailable_error(error):
-                    _mark_model_exhausted(model_name)
+                    _mark_model_exhausted(model_name, permanent=True)
                     print(f"[MODEL OFF] {model_name} khong kha dung -> chuyen ngay sang model du phong.")
                     break
 
-                # Quota / 429: ghi nho model da het va chuyen ngay sang model du phong (khong lap lai).
+                # Quota / 429 RPM: cooldown tam 45s (khong cam vinh vien) de tu hoi phuc tren video dai 2h+.
                 if _is_quota_error(error):
-                    _mark_model_exhausted(model_name)
-                    print(f"[QUOTA] {model_name} da het -> ghi nho va chuyen ngay sang model du phong.")
+                    _mark_model_exhausted(model_name, ttl=45, permanent=False)
+                    print(f"[QUOTA 429] {model_name} cham gioi han phut -> tam nghi 45s va chuyen model du phong.")
                     break
 
                 # Loi 5xx / timeout: retry cung model, sau do fallback.
@@ -1364,6 +1366,24 @@ def translate_batch(
                     "khong dung duoc -> model tiep theo."
                 )
                 break
+
+    # If models were only temporarily rate-limited (429 RPM), wait for minute bucket reset and retry
+    recoverable_models = [m for m in selected_models if m not in DISABLED_MODELS]
+    if recoverable_models and _cooldown_round < 2 and (last_error is None or _is_quota_error(last_error) or _is_transient_error(last_error)):
+        wait_sec = 30 * (_cooldown_round + 1)
+        print(f"[COOLDOWN] Tat ca model Gemini tam cham gioi han phut -> cho {wait_sec}s roi tu dong dich tiep (vong {_cooldown_round + 1}/2)...")
+        time.sleep(wait_sec)
+        with _MODEL_COOLDOWN_LOCK:
+            for m in recoverable_models:
+                _MODEL_COOLDOWN_UNTIL.pop(m, None)
+        return translate_batch(
+            batch,
+            previous_context=previous_context,
+            source_language=effective_source,
+            translation_model=translation_model,
+            target_language=effective_target,
+            _cooldown_round=_cooldown_round + 1,
+        )
 
     if _local_fallback_active():
         print(
@@ -1735,11 +1755,11 @@ def translate_all(
             f"{total}"
         )
 
-        # Khong sleep 1 giay/batch.
+        # Khong spam qua nhanh gay 429 RPM tren video dai 2h+.
         if batch_number % 20 == 0:
             gc.collect()
         time.sleep(
-            0.05
+            0.35
         )
 
     # Second-pass guard: retry any empty line or line still containing CJK characters
