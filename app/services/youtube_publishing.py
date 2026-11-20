@@ -657,14 +657,18 @@ def check_video_copyright_status(owner: str, youtube_video_id: str) -> dict:
     proc = item.get("processingDetails") or {}
     content = item.get("contentDetails") or {}
     snippet = item.get("snippet") or {}
+    rejection_reason = str(status.get("rejectionReason") or "")
+    licensed = bool(content.get("licensedContent"))
+    region_blocked = bool((content.get("regionRestriction") or {}).get("blocked"))
     return {
         "id": vid,
         "title": snippet.get("title") or "",
         "privacy_status": status.get("privacyStatus") or "",
         "upload_status": status.get("uploadStatus") or "",
-        "rejection_reason": status.get("rejectionReason") or "",
+        "rejection_reason": rejection_reason,
         "processing_status": proc.get("processingStatus") or "",
-        "licensed_content": bool(content.get("licensedContent")),
+        "licensed_content": licensed,
+        "has_copyright_restriction": bool(licensed or rejection_reason.lower() == "copyright" or region_blocked),
         "studio_url": f"https://studio.youtube.com/video/{vid}/copyright",
         "watch_url": f"https://www.youtube.com/watch?v={vid}",
     }

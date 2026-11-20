@@ -42,6 +42,7 @@ def separate_vocals_preserve_sfx(source_media: Path, output_dir: Path) -> Path |
                 check=True,
                 capture_output=True,
                 timeout=600,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
             found = next((output_dir / "demucs_tmp").rglob("no_vocals.wav"), None)
             if found and found.is_file():
@@ -72,6 +73,7 @@ def separate_vocals_preserve_sfx(source_media: Path, output_dir: Path) -> Path |
             check=True,
             capture_output=True,
             timeout=180,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return target_wav if target_wav.is_file() else None
     except Exception:

@@ -70,6 +70,7 @@ def generate_hook_thumbnail(
             check=True,
             capture_output=True,
             timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         with Image.open(temp_jpg) as img:
             canvas = img.convert("RGBA")

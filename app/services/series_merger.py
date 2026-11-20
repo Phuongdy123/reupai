@@ -97,6 +97,7 @@ def merge_series_videos(
                 check=True,
                 capture_output=True,
                 timeout=900,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except subprocess.CalledProcessError:
             subprocess.run(
@@ -115,6 +116,7 @@ def merge_series_videos(
                 check=True,
                 capture_output=True,
                 timeout=1800,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
     finally:
         try:

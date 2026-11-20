@@ -8948,7 +8948,7 @@ async function openShortsHighlightDialog(video, card) {
             if (copyHookBtn) {
                 copyHookBtn.onclick = async () => {
                     try {
-                        await navigator.clipboard.writeText(String(clip.hook_title || ''));
+                        await window.navigator.clipboard.writeText(String(clip.hook_title || ''));
                         copyHookBtn.textContent = '✓ Đã copy';
                         setTimeout(() => { copyHookBtn.textContent = 'Copy Hook'; }, 1500);
                     } catch {}
@@ -9894,7 +9894,7 @@ async function openBatchAutoPublishDialog() {
                 if (copyChapBtn) {
                     copyChapBtn.onclick = async () => {
                         try {
-                            await navigator.clipboard.writeText(String(res.chapters_text || ''));
+                            await window.navigator.clipboard.writeText(String(res.chapters_text || ''));
                             copyChapBtn.textContent = '✓ Đã copy Chapters';
                             setTimeout(() => { copyChapBtn.textContent = 'Copy Chapters'; }, 1800);
                         } catch {}
@@ -10631,7 +10631,7 @@ function bindV13Manager() {
 
     document.addEventListener('pointerdown', (event) => {
         const target = event.target;
-        if (!(target instanceof Element)) return;
+        if (!(target instanceof window.Element)) return;
         if (target.closest('#v13Manager .compact-popover') || target.closest('#sourceSeriesBtn')) return;
         for (const details of document.querySelectorAll('#v13Manager .compact-popover[open]')) {
             details.open = false;

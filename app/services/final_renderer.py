@@ -6242,28 +6242,6 @@ def build_video_filter(
 
     parts = []
     input_stream = "0:v"
-    if ANTI_REUSE_ENABLED:
-        pre_ops = []
-        try:
-            zoom = float(ANTI_REUSE_ZOOM or 1.0)
-        except (TypeError, ValueError):
-            zoom = 1.0
-        zoom = max(1.0, min(1.25, zoom))
-        if zoom > 1.001:
-            zw = max(2, int(round(video_width / zoom)) & ~1)
-            zh = max(2, int(round(video_height / zoom)) & ~1)
-            zx = max(0, (video_width - zw) // 2)
-            zy = max(0, (video_height - zh) // 2)
-            pre_ops.append(f"crop={zw}:{zh}:{zx}:{zy}")
-            pre_ops.append(f"scale={video_width}:{video_height}:flags=lanczos")
-        if ANTI_REUSE_MIRROR:
-            pre_ops.append("hflip")
-        if ANTI_REUSE_COLOR:
-            pre_ops.append("eq=contrast=1.03:saturation=1.06:brightness=0.01")
-        if pre_ops:
-            parts.append(f"[0:v]{','.join(pre_ops)}[ar_in]")
-            input_stream = "ar_in"
-
     erase_mode = str(BLUR_MODE or "blur").strip().lower()
 
     # 1) Blur / Erase subtitle Trung goc
@@ -6347,6 +6325,30 @@ def build_video_filter(
         ])
         current = out_label
 
+    # 2c) Anti-Reused Content transforms (AFTER blur/watermark so coordinates match original preview, BEFORE logo/subtitles!)
+    if ANTI_REUSE_ENABLED or ANTI_REUSE_MIRROR or ANTI_REUSE_COLOR:
+        ar_ops = []
+        if ANTI_REUSE_ENABLED:
+            try:
+                zoom = float(ANTI_REUSE_ZOOM or 1.0)
+            except (TypeError, ValueError):
+                zoom = 1.0
+            zoom = max(1.0, min(1.25, zoom))
+            if zoom > 1.001:
+                zw = max(2, int(round(video_width / zoom)) & ~1)
+                zh = max(2, int(round(video_height / zoom)) & ~1)
+                zx = max(0, (video_width - zw) // 2)
+                zy = max(0, (video_height - zh) // 2)
+                ar_ops.append(f"crop={zw}:{zh}:{zx}:{zy}")
+                ar_ops.append(f"scale={video_width}:{video_height}:flags=lanczos")
+        if ANTI_REUSE_MIRROR:
+            ar_ops.append("hflip")
+        if ANTI_REUSE_COLOR:
+            ar_ops.append("eq=contrast=1.03:saturation=1.06:brightness=0.01")
+        if ar_ops:
+            parts.append(f"[{current}]{','.join(ar_ops)}[ar_clean]")
+            current = "ar_clean"
+
     # 3) Chen logo kenh (hinh chu nhat / vuong / tron tuy chon)
     if logo_input_index is not None:
         lx = int(logo_layout["x"])
@@ -6424,11 +6426,14 @@ def build_video_filter(
         cta_raw = str(OUTRO_CTA_TEXT or "Đăng ký kênh để xem tập tiếp theo!").strip() or "Đăng ký kênh để xem tập tiếp theo!"
         cta_esc = cta_raw.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         cta_start = max(0.0, float(OUTRO_CTA_START))
+        cta_font = min(30, max(16, int(round(video_height * 0.032))))
+        cta_box_h = cta_font + 24
+        cta_y = max(20, int(round(video_height * 0.045)))
         font_esc = ffmpeg_filter_path(r"C:\Windows\Fonts\arialbd.ttf") if Path(r"C:\Windows\Fonts\arialbd.ttf").is_file() else ""
         font_arg = f"fontfile='{font_esc}':" if font_esc else ""
         parts.append(
-            f"[{subtitle_label}]drawbox=x=iw*0.14:y=ih-96:w=iw*0.72:h=54:color=0x0f172a@0.82:t=fill:enable='gte(t,{cta_start:.2f})',"
-            f"drawtext={font_arg}text='{cta_esc}':fontcolor=0xfde047:fontsize=24:x=(w-text_w)/2:y=h-80:enable='gte(t,{cta_start:.2f})'[with_cta]"
+            f"[{subtitle_label}]drawbox=x=iw*0.12:y={cta_y}:w=iw*0.76:h={cta_box_h}:color=0x0f172a@0.84:t=fill:enable='gte(t,{cta_start:.2f})',"
+            f"drawtext={font_arg}text='{cta_esc}':fontcolor=0xfde047:fontsize={cta_font}:x=(w-text_w)/2:y={cta_y + 12}:enable='gte(t,{cta_start:.2f})'[with_cta]"
         )
         subtitle_label = "with_cta"
 

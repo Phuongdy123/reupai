@@ -118,7 +118,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.57"
+ENGINE_VERSION = "0.2.59"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -878,9 +878,13 @@ def series_merge(payload: dict, _: bool = Depends(require_token)):
 
 @app.get("/api/series/file/{channel}/{filename}")
 def series_merged_download(channel: str, filename: str, _: bool = Depends(require_token)):
+    return _serve_series_file(channel, filename)
+
+
+def _serve_series_file(channel: str, filename: str):
     ch = validate_channel(channel)
     safe_name = Path(filename).name
-    target = job_dir_for(ch, "placeholder").parent / "_series_merged" / safe_name
+    target = (get_runtime_root() / "channels" / ch / "jobs" / "_series_merged" / safe_name).resolve()
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Không tìm thấy file Full Bộ đã gộp.")
     return FileResponse(str(target), filename=safe_name, media_type="video/mp4")
@@ -934,15 +938,30 @@ def music_presets(_: bool = Depends(require_token)):
 
 @app.get("/api/music/preset/{mood}")
 def music_preset_audio(mood: str, _: bool = Depends(require_token)):
+    return _serve_bgm_preset(mood)
+
+
+def _serve_bgm_preset(mood: str):
     from services.bgm_library import get_or_generate_bgm_preset
-    cache_dir = job_dir_for("default", "placeholder").parent / "_bgm_cache"
+    cache_dir = get_runtime_root() / "channels" / "default" / "jobs" / "_bgm_cache"
     wav_path = get_or_generate_bgm_preset(mood, cache_dir)
     return FileResponse(str(wav_path), media_type="audio/wav", filename=wav_path.name)
 
 
 @app.post("/api/youtube/seo-trends")
-def youtube_seo_trends(payload: dict, owner: str = Depends(youtube_owner)):
+def youtube_seo_trends(
+    payload: dict,
+    x_reupai_account: Annotated[str | None, Header()] = None,
+    _: bool = Depends(require_token),
+):
     from services.youtube_seo import analyze_youtube_seo_trends
+    owner = ""
+    if x_reupai_account:
+        try:
+            from services.social_identity import account_for_token
+            owner = account_for_token(x_reupai_account)
+        except Exception:
+            owner = ""
     try:
         return analyze_youtube_seo_trends(str(payload.get("query") or ""), owner=owner)
     except ValueError as err:
@@ -1650,7 +1669,7 @@ def create_media_ticket(payload: dict[str, str], authorization: Annotated[str | 
         raise HTTPException(status_code=403, detail="Media yêu cầu browser session đúng origin.")
     path = str(payload.get("path", ""))
     parsed = urlsplit(path)
-    if parsed.scheme or parsed.netloc or not path.startswith(("/api/files/", "/api/cover?", "/api/preview/source/", "/api/stream/", "/api/result/", "/library/source/")):
+    if parsed.scheme or parsed.netloc or not path.startswith(("/api/files/", "/api/cover?", "/api/preview/source/", "/api/stream/", "/api/result/", "/library/source/", "/api/shorts/file/", "/api/series/file/", "/api/music/preset/")):
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
     download = str(payload.get("download", "")).lower() in {"1", "true", "yes"}
     requested_name = str(payload.get("filename", "")).replace("\\", "/").rsplit("/", 1)[-1].replace("\r", "").replace("\n", "").strip()
@@ -1691,6 +1710,24 @@ def ticket_media(ticket: str, origin: Annotated[str | None, Header()] = None):
         handler = api_stream if path.startswith("/api/stream/") else api_result
         options = {"output_format": query.get("output_format", ["video"])[0]} if handler is api_result else {}
         response = handler(video_id=path.rsplit("/", 1)[-1], channel=query.get("channel", ["default"])[0], mode=query.get("mode", ["subtitle"])[0], **options)
+    elif path.startswith("/api/shorts/file/"):
+        parts = path[len("/api/shorts/file/"):].split("/", 2)
+        if len(parts) != 3:
+            raise HTTPException(status_code=400, detail="Đường dẫn Short không hợp lệ.")
+        ch = validate_channel(parts[0])
+        vid = validate_video_id(parts[1])
+        safe_name = Path(parts[2]).name
+        target = job_dir_for(ch, vid) / "shorts" / safe_name
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="Không tìm thấy file Short.")
+        response = FileResponse(str(target), filename=safe_name, media_type="video/mp4")
+    elif path.startswith("/api/series/file/"):
+        parts = path[len("/api/series/file/"):].split("/", 1)
+        if len(parts) != 2:
+            raise HTTPException(status_code=400, detail="Đường dẫn Full Bộ không hợp lệ.")
+        response = _serve_series_file(parts[0], parts[1])
+    elif path.startswith("/api/music/preset/"):
+        response = _serve_bgm_preset(path[len("/api/music/preset/"):].strip("/"))
     else:
         raise HTTPException(status_code=400, detail="Media path không hợp lệ.")
     response.headers["Cache-Control"] = "private, no-store"

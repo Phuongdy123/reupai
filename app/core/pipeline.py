@@ -4192,6 +4192,8 @@ def pipeline(
                 "voice": effective_voice or "default",
                 "target_language": target_language,
                 "speed": float(config.get("tts_speed") or 1.00),
+                "multi_voice": bool(config.get("multi_voice", False)),
+                "secondary_voice": str(config.get("secondary_voice") or "") if config.get("multi_voice") else "",
             })
             tts_force = bool(
                 force

@@ -26,6 +26,7 @@ def _probe_duration(path: Path) -> float:
             [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
             text=True,
             timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         return max(0.0, float(json.loads(out or "{}").get("format", {}).get("duration") or 0.0))
     except Exception:
@@ -59,6 +60,7 @@ def trim_video_silence(
         capture_output=True,
         text=True,
         timeout=180,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     stderr = detect.stderr or ""
     silences: list[tuple[float, float]] = []
@@ -104,22 +106,31 @@ def trim_video_silence(
         concat_inputs.append(f"[v{idx}][a{idx}]")
     filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(keep)}:v=1:a=1[vout][aout]")
 
-    subprocess.run(
-        [
-            ffmpeg, "-y",
-            "-i", str(source_video),
-            "-filter_complex", ";".join(filter_parts),
-            "-map", "[vout]",
-            "-map", "[aout]",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "18",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            str(output_video),
-        ],
-        check=True,
-        capture_output=True,
-        timeout=600,
-    )
+    script_file = output_video.with_suffix(".silence_filter.txt")
+    script_file.write_text(";\n".join(filter_parts), encoding="utf-8")
+    try:
+        subprocess.run(
+            [
+                ffmpeg, "-y",
+                "-i", str(source_video),
+                "-filter_complex_script", str(script_file),
+                "-map", "[vout]",
+                "-map", "[aout]",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "18",
+                "-c:a", "aac",
+                "-b:a", "192k",
+                str(output_video),
+            ],
+            check=True,
+            capture_output=True,
+            timeout=600,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    finally:
+        try:
+            script_file.unlink(missing_ok=True)
+        except OSError:
+            pass
     return output_video if output_video.is_file() else source_video

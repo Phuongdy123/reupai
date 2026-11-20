@@ -79,24 +79,29 @@ def suggest_viral_highlights(
                         json=body,
                         timeout=35,
                     )
-                    if resp.status_code in {404, 429}:
+                    if resp.status_code == 404:
                         mark_model_exhausted(model)
+                        continue
+                    if resp.status_code == 429:
                         continue
                     if resp.ok:
                         raw_txt = "".join(p.get("text", "") for p in resp.json()["candidates"][0]["content"]["parts"])
                         parsed = json.loads(raw_txt)
                         if isinstance(parsed, list) and parsed:
                             cleaned: list[dict[str, Any]] = []
-                            for item in parsed[:max_clips]:
+                            for rank, item in enumerate(parsed[:max_clips]):
                                 if not isinstance(item, dict):
                                     continue
                                 s = max(0.0, float(item.get("start") or 0.0))
                                 e = max(s + 10.0, float(item.get("end") or (s + 30.0)))
                                 if e - s > 59.0:
                                     e = s + 55.0
+                                raw_score = item.get("score")
+                                score = int(raw_score) if isinstance(raw_score, (int, float)) and 50 <= raw_score <= 100 else max(78, 95 - rank * 4)
                                 cleaned.append({
                                     "start": round(s, 2),
                                     "end": round(e, 2),
+                                    "score": score,
                                     "hook_title": str(item.get("hook_title") or "Đoạn cao trào cực cuốn").strip()[:80],
                                     "reason": str(item.get("reason") or "Nhịp nhanh, giữ chân người xem tốt").strip()[:180],
                                 })
@@ -142,7 +147,7 @@ def cut_short_highlight_clip(
     vf = (
         "split=2[bg][fg];"
         "[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=28:2[bgb];"
-        "[fg]scale=1080:-2:force_original_aspect_ratio=decrease[fgs];"
+        "[fg]scale=1080:1920:force_original_aspect_ratio=decrease[fgs];"
         "[bgb][fgs]overlay=(W-w)/2:(H-h)/2,format=yuv420p"
     )
     res = subprocess.run(

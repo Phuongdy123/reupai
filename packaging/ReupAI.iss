@@ -1,5 +1,5 @@
 #define MyAppName "ReupAI Local Engine"
-#define MyAppVersion "0.2.57"
+#define MyAppVersion "0.2.59"
 #define MyAppPublisher "ReupAI"
 #define MyAppURL "https://www.reupai.cloud"
 #define MyAppExeName "ReupAI.exe"

@@ -88,5 +88,10 @@ def inpaint_video_regions(
         "-c:a", "copy",
         str(output_video),
     ])
-    subprocess.run(cmd, check=True, capture_output=True)
+    subprocess.run(
+        cmd,
+        check=True,
+        capture_output=True,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
     return output_video

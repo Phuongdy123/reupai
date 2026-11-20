@@ -26,6 +26,7 @@ let logoSessionEnabled = false;
 
 export async function openProcessConfig(video, card, mode, dependencies) {
     const { document, downloadVideo, ensureProcessConfigDialog, formatDuration, formatVideoRatio, localStorage, processConfigDefaults, processVideo, uiIcon, window, runtimeSignal } = dependencies;
+    const { setTimeout, clearTimeout, setInterval, clearInterval } = window;
     const dialog = await ensureProcessConfigDialog();
     dialog._configAbort?.abort();
     const resetScrollPositions = () => {
@@ -2144,6 +2145,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             set('processOutroCtaText', '');
             set('processEraseMode', 'blur');
             set('processGlossary', '');
+            dialog._syncEraseChips?.('blur');
             set('processBlurPreset', '');
             ['processBlurX', 'processBlurY', 'processBlurWidth', 'processBlurHeight',
                 'processCustomBlurX', 'processCustomBlurY', 'processCustomBlurWidth', 'processCustomBlurHeight',
@@ -2353,6 +2355,7 @@ export async function openProcessConfig(video, card, mode, dependencies) {
             }
             outputSummary.refresh();
             dialog._renderSubtitleStylePreview?.();
+            dialog._syncEraseChips?.();
         } finally {
             dialog.dataset.presetApplying = '0';
         }

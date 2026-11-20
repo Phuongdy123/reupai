@@ -1161,6 +1161,9 @@ def create_tts_clips(
     sec_voice = normalize_voice_name(SECONDARY_VOICE) if SECONDARY_VOICE else None
     use_multi_voice = bool(sec_voice and sec_voice != VOICE and len(subtitles) > 1 and edge_tts is not None)
     if use_multi_voice:
+        sec_slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(sec_voice)).strip("_").lower() or "sec"
+        voice_slug = f"{voice_slug}_mv_{sec_slug}"
+    if use_multi_voice:
         sec_pending = []
         primary_indices = []
         turn = 0
