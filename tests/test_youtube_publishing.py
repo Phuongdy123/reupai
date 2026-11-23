@@ -34,8 +34,12 @@ class YoutubePublishingTests(unittest.TestCase):
             self.assertIn("/v1beta/", request.call_args.args[1])
             response.ok, response.status_code = False, 400
             response.json.return_value = {"error": {"message": "Billing must be enabled"}}
-            with self.assertRaisesRegex(RuntimeError, "thanh toán"):
-                youtube.generate_thumbnail_artwork("reference", "Poster")
+            with patch.object(youtube, "_generate_free_pollinations_thumbnail", side_effect=RuntimeError("offline")):
+                with self.assertRaisesRegex(RuntimeError, "thanh toán"):
+                    youtube.generate_thumbnail_artwork("reference", "Poster")
+            with patch.object(youtube, "_generate_free_pollinations_thumbnail", return_value={"image": "data:image/jpeg;base64,YWJj", "model": "pollinations-flux-free"}):
+                fallback = youtube.generate_thumbnail_artwork("reference", "Poster")
+                self.assertEqual(fallback["model"], "pollinations-flux-free")
 
     def payload(self, **values):
         return {"request_id": str(uuid.uuid4()), "confirmed": True, "title": "Video thử",

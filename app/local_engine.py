@@ -118,7 +118,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.59"
+ENGINE_VERSION = "0.2.60"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -1471,10 +1471,33 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
                 task["lines"].append({"id": len(task["lines"]) + 1, "start": start, "end": end, "text": text})
                 task["line_count"] = len(task["lines"])
 
+    should_unlink = True
     try:
         audio_path.parent.mkdir(parents=True, exist_ok=True)
-        update(phase="extracting_audio", message="Đang tách âm thanh từ video…")
-        extract_audio(source_path, audio_path, force=True)
+        # Reclaim stale preview WAVs left behind by earlier cancelled/interrupted scans.
+        stale_cutoff = time.time() - 600
+        for stale in audio_path.parent.glob(".transcript-preview-*.wav"):
+            if stale == audio_path:
+                continue
+            try:
+                if stale.is_file() and stale.stat().st_mtime < stale_cutoff:
+                    stale.unlink(missing_ok=True)
+            except OSError:
+                pass
+        existing_audio = audio_path.parent / "source_16k.wav"
+        try:
+            if (
+                existing_audio.is_file()
+                and existing_audio.stat().st_size > 1024
+                and existing_audio.stat().st_mtime >= source_path.stat().st_mtime
+            ):
+                audio_path = existing_audio
+                should_unlink = False
+        except OSError:
+            pass
+        if should_unlink:
+            update(phase="extracting_audio", message="Đang tách âm thanh từ video…")
+            extract_audio(source_path, audio_path, force=True)
         update(phase="recognizing", progress=0, message="Đang nhận diện lời thoại bằng Whisper…")
         lines = transcribe(str(audio_path), language=None if language == "auto" else language,
                            on_progress=on_progress, on_segment=on_segment)
@@ -1485,7 +1508,8 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
         update(status="complete", phase="complete", progress=100,
                message="Đã nhận diện xong lời thoại.", line_count=len(_transcript_preview_jobs.get(task_id, {}).get("lines", [])))
     finally:
-        audio_path.unlink(missing_ok=True)
+        if should_unlink:
+            audio_path.unlink(missing_ok=True)
 
 
 def _prune_transcript_preview_jobs():

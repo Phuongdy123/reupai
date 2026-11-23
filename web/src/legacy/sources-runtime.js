@@ -2514,10 +2514,20 @@ function friendlyProcessStage(message, isError) {
     if (/không tìm thấy video|file.*(?:not found|không tồn tại)/i.test(value)) {
         return 'Không tìm thấy video trên máy. Hãy tải lại video nguồn.';
     }
-    if (/Traceback|(?:Runtime|Value|Import|FileNotFound|Permission)Error|CalledProcessError|exit code|COMMAND:/i.test(value)) {
+    const cleanMessage = value.replace(/^(?:(?:Runtime|Value|DownloadStorage|OS|Permission|FileNotFound)Error):\s*/i, '').trim();
+    if (/không đủ dung lượng|ổ đĩa.*đầy|no space left/i.test(cleanMessage)) {
+        return cleanMessage.length > 220 ? `${cleanMessage.slice(0, 217)}…` : cleanMessage;
+    }
+    if (/Traceback|File\s+"|CalledProcessError|exit code|COMMAND:|(?:Import|Type|Attribute|Key|Index|ZeroDivision)Error/i.test(value)) {
         return 'Xử lý gặp sự cố. Hãy bấm Tiếp tục hoặc thử lại.';
     }
-    return value.length > 180 ? `${value.slice(0, 177)}…` : value;
+    if (cleanMessage && /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(cleanMessage)) {
+        return cleanMessage.length > 220 ? `${cleanMessage.slice(0, 217)}…` : cleanMessage;
+    }
+    if (/(?:Runtime|Value|FileNotFound|Permission)Error/i.test(value)) {
+        return 'Xử lý gặp sự cố. Hãy bấm Tiếp tục hoặc thử lại.';
+    }
+    return cleanMessage.length > 180 ? `${cleanMessage.slice(0, 177)}…` : cleanMessage;
 }
 
 function syncProcessDetailsPopup(

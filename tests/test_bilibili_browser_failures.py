@@ -23,6 +23,9 @@ class BrowserFailureTests(unittest.TestCase):
         patch('playwright.sync_api.sync_playwright', return_value=manager).start()
         patch.object(source, '_browser_executable', return_value='fixture-browser').start()
         patch.object(source, 'ensure_download_space').start()
+        patch.object(source, '_direct_public_playinfo', return_value={}).start()
+        patch.object(source, '_bilibili_profile_dir', return_value=Path(self.temp.name) / 'no-profile').start()
+        patch.object(source, '_open_persistent_bilibili_page', side_effect=source.BilibiliAccessError(412)).start()
         self.cookies = patch.object(source, '_bilibili_cookies', return_value=([], 'empty')).start()
 
     def test_412_429_and_deleted_videos_close_browser_without_attempting_stream_transfer(self):
@@ -62,7 +65,8 @@ class BrowserFailureTests(unittest.TestCase):
         api.json.return_value = {'code': 0, 'data': {'durl': [{'url': 'https://cdn.example.test/media'}]}}
         def transfer(url, destination, referer, **kwargs):
             destination.write_bytes(b'v' * 2048)
-        with patch.object(source, '_download', side_effect=transfer):
+        with patch.object(source, '_public_playinfo', return_value={}), \
+             patch.object(source, '_download', side_effect=transfer):
             result = source.download_video('https://www.bilibili.com/vi/video/BV1S7446fEFw/?p=2', self.output)
         self.assertEqual(result, self.output)
         self.assertEqual(api.json.call_count, 1)

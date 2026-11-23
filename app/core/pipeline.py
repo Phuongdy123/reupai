@@ -30,6 +30,8 @@ import subprocess
 
 import sys
 
+import time
+
 from urllib.parse import urlparse
 
 
@@ -317,14 +319,10 @@ def rel(path: Path) -> str:
 
 
 
-def file_ok(path: Path) -> bool:
-
-
-
+def file_ok(path: Path | None) -> bool:
+    if not path:
+        return False
     path = Path(path)
-
-
-
     return path.exists() and path.is_file() and path.stat().st_size > 0
 
 
@@ -1106,6 +1104,15 @@ def build_ytdlp_command(
             ),
         ])
 
+    # yt-dlp's BiliBiliIE only recognizes /video/BV... without locale prefixes
+    # such as /vi/ or /zh-Hans/, so strip only the locale prefix for yt-dlp.
+    ytdlp_url = re.sub(
+        r"^(https?://(?:www\.|m\.)?bilibili\.com)/[a-z]{2}(?:-[a-z]{2,4})?(?:-[a-z]{2})?(/video/(?:BV[0-9A-Za-z]{10}|av\d+))",
+        r"\1\2",
+        str(url),
+        flags=re.IGNORECASE,
+    )
+
     command.extend([
         "-f",
         "bv*[height<=720]+ba/b",
@@ -1114,7 +1121,7 @@ def build_ytdlp_command(
         "--no-playlist",
         "-o",
         output_template,
-        url,
+        ytdlp_url,
     ])
 
     return command
@@ -1460,9 +1467,23 @@ def check_processing_storage(
     if not 0 < duration_seconds < 1_000_000:
         return
 
+    # Reclaim stale transcript-preview WAV files (can be 200+ MB each on long
+    # videos) before checking available workspace disk space.
+    try:
+        stale_cutoff = time.time() - 300
+        for preview_wav in job_dir.glob(".transcript-preview-*.wav"):
+            try:
+                if preview_wav.is_file() and preview_wav.stat().st_mtime < stale_cutoff:
+                    preview_wav.unlink(missing_ok=True)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
     source_size = source_video.stat().st_size
-    # 16 kHz mono source WAV: 32,000 bytes/s.  Voice timeline retains the
-    # existing 44.1 kHz stereo PCM format: 176,400 bytes/s.
+    # 16 kHz mono source WAV: 32,000 bytes/s. Voice timeline uses 44.1 kHz
+    # stereo WAV (~176.4 KB/s) under 3.8 GB and automatically switches to FLAC
+    # (~55 KB/s) on multi-hour videos (>= 3h / > 3.8 GB PCM).
     source_audio_bytes = (
         0 if not include_audio or (file_ok(audio_path) and not force_audio)
         else int(duration_seconds * 32_000)
@@ -1470,23 +1491,46 @@ def check_processing_storage(
     voice_needed = include_render and include_voice and mode == "voiceover" and (
         force_voice or voice_path is None or not file_ok(voice_path)
     )
-    voice_bytes = int(duration_seconds * 176_400) if voice_needed else 0
-    # Raw and fitted TTS clips coexist until the job completes. Dense speech
-    # can occupy about another timeline's worth of temporary PCM data.
-    clip_bytes = int(duration_seconds * 200_000) if voice_needed else 0
-    if voice_bytes > 4 * 1024**3 - 128:
-        raise RuntimeError(
-            "Video quá dài cho định dạng WAV của track lồng tiếng (giới hạn khoảng 6 giờ). "
-            "Hãy chia video thành các phần ngắn hơn trước khi xử lý Voice."
+    raw_voice_bytes = int(duration_seconds * 176_400) if voice_needed else 0
+    uses_flac = bool(
+        voice_needed
+        and (
+            (voice_path is not None and voice_path.suffix.lower() == ".flac")
+            or raw_voice_bytes >= 3_800_000_000
         )
+    )
+    voice_bytes = (
+        int(duration_seconds * 55_000) + 350 * 1024**2
+        if uses_flac
+        else raw_voice_bytes
+    )
+    # Raw and fitted TTS clips coexist until the job completes. Subtract clips
+    # already generated on disk when resuming so we do not double-charge them.
+    existing_tts_bytes = 0
+    if voice_needed and not force_voice:
+        tts_dir = job_dir / "tts"
+        if tts_dir.is_dir():
+            try:
+                existing_tts_bytes = sum(
+                    item.stat().st_size for item in tts_dir.iterdir() if item.is_file()
+                )
+            except OSError:
+                existing_tts_bytes = 0
+    clip_bytes = (
+        max(0, int(duration_seconds * 120_000) - existing_tts_bytes)
+        if voice_needed
+        else 0
+    )
     render_duration = (
         min(duration_seconds, preview_seconds)
         if preview_seconds is not None and preview_seconds > 0
         else duration_seconds
     )
+    # Estimate render + segmented concat working space proportional to source
+    # bitrate (with a realistic ~2 Mbps floor rather than assuming 12 Mbps).
     render_bytes = max(
-        int(source_size * render_duration / duration_seconds * 2),
-        int(render_duration * 1_500_000),
+        int(source_size * render_duration / duration_seconds * 2.5),
+        int(render_duration * 250_000),
     ) if include_render else 0
     reserve_bytes = 512 * 1024**2
     required = source_audio_bytes + voice_bytes + clip_bytes + render_bytes + reserve_bytes
@@ -1860,151 +1904,47 @@ def translate_srt(
     else:
         translator.GLOSSARY_TEXT = str(glossary or "").strip()
 
+    try:
+        if hasattr(translator, "JOB_NAME"):
+            translator.JOB_NAME = job_id
 
+        if hasattr(translator, "INPUT_SRT"):
+            translator.INPUT_SRT = rel(chinese_srt)
 
+        if hasattr(translator, "OUTPUT_SRT"):
+            translator.OUTPUT_SRT = rel(vietnamese_srt)
 
+        translator.CHECKPOINT_FILE = rel(checkpoint_path)
 
+        if hasattr(translator, "DEBUG_FILE"):
+            translator.DEBUG_FILE = rel(debug_path)
 
+        subtitles = translator.read_srt(rel(chinese_srt))
 
-    if hasattr(translator, "JOB_NAME"):
+        if not subtitles:
+            raise RuntimeError("Transcript phụ đề rỗng.")
 
+        if hasattr(translator, "get_file_hash"):
+            source_hash = translator.get_file_hash(rel(chinese_srt))
+            if target_language != "vi":
+                source_hash = f"{source_hash}_{target_language}"
+            translated = translator.translate_all(subtitles, source_hash, translation_model=translation_model, target_language=target_language)
+        else:
+            translated = translator.translate_all(subtitles, translation_model=translation_model, target_language=target_language)
 
+        if len(translated) != len(subtitles):
+            raise RuntimeError("So cau dich khong khop source.")
 
-        translator.JOB_NAME = job_id
+        translator.save_srt(translated, rel(vietnamese_srt))
 
+        if hasattr(translator, "save_json"):
+            translator.save_json(translated, rel(debug_path))
 
-
-
-
-
-
-    if hasattr(translator, "INPUT_SRT"):
-
-
-
-        translator.INPUT_SRT = rel(chinese_srt)
-
-
-
-
-
-
-
-    if hasattr(translator, "OUTPUT_SRT"):
-
-
-
-        translator.OUTPUT_SRT = rel(vietnamese_srt)
-
-
-
-
-
-
-
-    translator.CHECKPOINT_FILE = rel(checkpoint_path)
-
-
-
-
-
-
-
-    if hasattr(translator, "DEBUG_FILE"):
-
-
-
-        translator.DEBUG_FILE = rel(debug_path)
-
-
-
-
-
-
-
-    subtitles = translator.read_srt(rel(chinese_srt))
-
-
-
-
-
-
-
-    if not subtitles:
-
-
-
-        raise RuntimeError("Transcript phụ đề rỗng.")
-
-
-
-
-
-
-
-    if hasattr(translator, "get_file_hash"):
-
-
-
-        source_hash = translator.get_file_hash(rel(chinese_srt))
-        if target_language != "vi":
-            source_hash = f"{source_hash}_{target_language}"
-
-
-
-        translated = translator.translate_all(subtitles, source_hash, translation_model=translation_model, target_language=target_language)
-
-
-
-    else:
-
-
-
-        translated = translator.translate_all(subtitles, translation_model=translation_model, target_language=target_language)
-
-
-
-
-
-
-
-    if len(translated) != len(subtitles):
-
-
-
-        raise RuntimeError("So cau dich khong khop source.")
-
-
-
-
-
-
-
-    translator.save_srt(translated, rel(vietnamese_srt))
-
-
-
-
-
-
-
-    if hasattr(translator, "save_json"):
-
-
-
-        translator.save_json(translated, rel(debug_path))
-
-
-
-
-
-
-
-    if not file_ok(vietnamese_srt):
-
-
-
-        raise RuntimeError("Khong tao duoc vietnamese.srt.")
+        if not file_ok(vietnamese_srt):
+            raise RuntimeError("Khong tao duoc vietnamese.srt.")
+    finally:
+        translator.PROGRESS_CALLBACK = None
+        translator.GLOSSARY_TEXT = ""
 
 
 
@@ -2162,71 +2102,35 @@ def create_voice(
     if voice_name:
         tts.set_voice(voice_name)
     tts.SECONDARY_VOICE = secondary_voice if secondary_voice else None
+    tts.BASE_TTS_SPEED = max(0.5, min(float(speed), 2.0)) if speed is not None else 1.0
 
-    if speed is not None:
-        tts.BASE_TTS_SPEED = max(0.5, min(float(speed), 2.0))
+    try:
+        subtitles = tts.read_srt(rel(vietnamese_srt))
 
+        if not subtitles:
+            raise RuntimeError("Vietnamese SRT rong.")
 
+        manifest = tts.create_tts_clips(
+            subtitles, reuse_fitted=not force, on_progress=on_progress,
+        )
 
+        video_duration = tts.get_video_duration_ms(rel(source_video))
 
+        if video_duration is None:
+            video_duration = subtitles[-1]["end_ms"] + 1000
 
+        actual_voice = tts.build_voice_timeline(
+            manifest, video_duration, on_progress=on_progress,
+        )
+        resolved_voice_path = Path(actual_voice) if actual_voice else voice_path
 
+        if not file_ok(resolved_voice_path):
+            raise RuntimeError(f"Khong tao duoc {resolved_voice_path.name}.")
 
-    subtitles = tts.read_srt(rel(vietnamese_srt))
-
-
-
-
-
-
-
-    if not subtitles:
-
-
-
-        raise RuntimeError("Vietnamese SRT rong.")
-
-
-
-
-
-
-
-    manifest = tts.create_tts_clips(
-        subtitles, reuse_fitted=not force, on_progress=on_progress,
-    )
-
-
-
-    video_duration = tts.get_video_duration_ms(rel(source_video))
-
-
-
-
-
-
-
-    if video_duration is None:
-
-
-
-        video_duration = subtitles[-1]["end_ms"] + 1000
-
-
-
-
-
-
-
-    actual_voice = tts.build_voice_timeline(
-        manifest, video_duration, on_progress=on_progress,
-    )
-    resolved_voice_path = Path(actual_voice) if actual_voice else voice_path
-
-    if not file_ok(resolved_voice_path):
-        raise RuntimeError(f"Khong tao duoc {resolved_voice_path.name}.")
-
-    return resolved_voice_path
+        return resolved_voice_path
+    finally:
+        tts.SECONDARY_VOICE = None
+        tts.BASE_TTS_SPEED = 1.0
 
 
 
@@ -3008,8 +2912,8 @@ def rerender_existing_output(
         # speaker or pace, regenerate TTS locally from the existing Vietnamese
         # subtitle and keep every other pipeline stage untouched.
         if mode == "voiceover" and not no_speech and config.get("regenerate_voice"):
-            write_progress(job_dir, stage="tts", percent=24, status="running", message="Dang tao lai giong Viet da chon.", mode=mode)
-            create_voice(
+            write_progress(job_dir, stage="tts", percent=24, status="running", message="Đang tạo lại giọng Việt đã chọn.", mode=mode)
+            voice_path = create_voice(
                 source_video,
                 vietnamese_srt,
                 voice_path,
@@ -3018,7 +2922,12 @@ def rerender_existing_output(
                 force=True,
                 voice_name=config.get("voice"),
                 speed=config.get("tts_speed"),
-            )
+                secondary_voice=(
+                    config.get("secondary_voice")
+                    if config.get("multi_voice")
+                    else None
+                ),
+            ) or voice_path
             if not file_ok(voice_path):
                 raise RuntimeError("Khong tao duoc file voice moi.")
 
@@ -3059,6 +2968,9 @@ def rerender_existing_output(
             "subtitle_style": config.get("subtitle_style", "minimal"),
             "aspect_ratio": config.get("aspect_ratio"),
             "logo_size": config.get("logo_size"),
+            "logo_width": config.get("logo_width"),
+            "logo_height": config.get("logo_height"),
+            "logo_shape": config.get("logo_shape", "rect"),
             "logo_x": config.get("logo_x"),
             "logo_y": config.get("logo_y"),
             "logo_mode": config.get("logo_mode", "none"),
@@ -3068,6 +2980,19 @@ def rerender_existing_output(
             "music_path": config.get("music_path"),
             "music_volume": normalize_music_volume(config.get("music_volume", 0.25)),
             "auto_brand_blur": bool(config.get("auto_brand_blur", False)),
+            "secondary_sub_region": config.get("secondary_sub_region"),
+            "secondary_sub_blur": bool(config.get("secondary_sub_blur", True)),
+            "secondary_sub_style": config.get("secondary_sub_style", "box"),
+            "secondary_sub_font_size": config.get("secondary_sub_font_size"),
+            "secondary_subtitles": config.get("secondary_subtitles") or [],
+            "anti_reuse_enabled": bool(config.get("anti_reuse_enabled", False)),
+            "anti_reuse_speed": config.get("anti_reuse_speed", 1.0),
+            "anti_reuse_zoom": config.get("anti_reuse_zoom", 1.0),
+            "anti_reuse_mirror": bool(config.get("anti_reuse_mirror", False)),
+            "anti_reuse_color": bool(config.get("anti_reuse_color", False)),
+            "blur_mode": str(config.get("blur_mode") or "blur"),
+            "outro_cta_enabled": bool(config.get("outro_cta_enabled", False)),
+            "outro_cta_text": config.get("outro_cta_text"),
             "force": True,
         }
         if mode == "voiceover" and not no_speech:
@@ -4421,22 +4346,30 @@ def pipeline(
 
 
 
-        last_render_percent = 80
+        last_render_percent = -1
+        last_render_report_time = 0.0
         def on_render_progress(done_seconds, total_seconds):
-            nonlocal last_render_percent
+            nonlocal last_render_percent, last_render_report_time
             if total_seconds <= 0:
                 return
             fraction = min(1.0, max(0.0, done_seconds / total_seconds))
             percent = 80 + min(18, int(18 * fraction))
-            if percent <= last_render_percent:
+            display_pct = min(100, max(0, int(round(fraction * 100))))
+            now = time.monotonic()
+            if (
+                display_pct <= last_render_percent
+                and done_seconds < total_seconds
+                and (now - last_render_report_time) < 3.0
+            ):
                 return
-            last_render_percent = percent
+            last_render_percent = display_pct
+            last_render_report_time = now
             write_progress(
                 job_dir,
                 stage="render",
                 percent=percent,
                 status="running",
-                message=f"Dang render tung doan co checkpoint: {done_seconds / 60:.0f}/{total_seconds / 60:.0f} phut ({fraction:.0%}).",
+                message=f"Đang render từng đoạn có checkpoint: {done_seconds / 60:.1f}/{total_seconds / 60:.1f} phút ({display_pct}%).",
                 mode=mode,
             )
 

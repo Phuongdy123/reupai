@@ -6297,6 +6297,38 @@ def build_video_filter(
             ])
             current = out_label
 
+    # 2a) Blur / Erase secondary subtitle region (e.g. top-screen Chinese captions)
+    if SECONDARY_SUB_BLUR and isinstance(SECONDARY_SUB_REGION, dict) and erase_mode != "inpaint":
+        try:
+            sbx = float(SECONDARY_SUB_REGION.get("x", 0))
+            sby = float(SECONDARY_SUB_REGION.get("y", 0))
+            sbw = float(SECONDARY_SUB_REGION.get("width", 0))
+            sbh = float(SECONDARY_SUB_REGION.get("height", 0))
+            if 0 <= sbx <= 1.0 and 0 <= sby <= 1.0 and 0 < sbw <= 1.0 and 0 < sbh <= 1.0:
+                sbx *= video_width
+                sby *= video_height
+                sbw *= video_width
+                sbh *= video_height
+            sbx_i = max(0, int(round(sbx)))
+            sby_i = max(0, int(round(sby)))
+            sbw_i = min(video_width - sbx_i, max(0, int(round(sbw))))
+            sbh_i = min(video_height - sby_i, max(0, int(round(sbh))))
+        except (TypeError, ValueError):
+            sbx_i = sby_i = sbw_i = sbh_i = 0
+        if sbw_i > 2 and sbh_i > 2:
+            if erase_mode == "delogo" and (dl := _delogo_expr(sbx_i, sby_i, sbw_i, sbh_i, video_width, video_height)):
+                parts.append(f"[{current}]{dl}[sec_sub_out]")
+                current = "sec_sub_out"
+            else:
+                parts.extend([
+                    f"[{current}]split=2[sec_sub_src][sec_sub_crop]",
+                    f"[sec_sub_crop]crop={sbw_i}:{sbh_i}:{sbx_i}:{sby_i},"
+                    f"{_safe_boxblur_filter(sbw_i, sbh_i, BLUR_RADIUS, BLUR_POWER)},format=yuv420p[sec_sub_blur]",
+                    f"[sec_sub_src]format=yuv420p[sec_sub_src_420]",
+                    f"[sec_sub_src_420][sec_sub_blur]overlay={sbx_i}:{sby_i}:format=yuv420[sec_sub_out]",
+                ])
+                current = "sec_sub_out"
+
     # 2b) Additional blur-only intervals selected in the web editor.
     for interval_index, interval in enumerate(BLUR_INTERVALS or [], start=1):
         try:
@@ -6422,20 +6454,6 @@ def build_video_filter(
     parts.append(
         f"[{current}]subtitles=filename='{ass}'[{subtitle_label}]"
     )
-    if OUTRO_CTA_ENABLED and OUTRO_CTA_START is not None:
-        cta_raw = str(OUTRO_CTA_TEXT or "Đăng ký kênh để xem tập tiếp theo!").strip() or "Đăng ký kênh để xem tập tiếp theo!"
-        cta_esc = cta_raw.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-        cta_start = max(0.0, float(OUTRO_CTA_START))
-        cta_font = min(30, max(16, int(round(video_height * 0.032))))
-        cta_box_h = cta_font + 24
-        cta_y = max(20, int(round(video_height * 0.045)))
-        font_esc = ffmpeg_filter_path(r"C:\Windows\Fonts\arialbd.ttf") if Path(r"C:\Windows\Fonts\arialbd.ttf").is_file() else ""
-        font_arg = f"fontfile='{font_esc}':" if font_esc else ""
-        parts.append(
-            f"[{subtitle_label}]drawbox=x=iw*0.12:y={cta_y}:w=iw*0.76:h={cta_box_h}:color=0x0f172a@0.84:t=fill:enable='gte(t,{cta_start:.2f})',"
-            f"drawtext={font_arg}text='{cta_esc}':fontcolor=0xfde047:fontsize={cta_font}:x=(w-text_w)/2:y={cta_y + 12}:enable='gte(t,{cta_start:.2f})'[with_cta]"
-        )
-        subtitle_label = "with_cta"
 
     needs_output_resize = (
         target_width
@@ -6446,6 +6464,7 @@ def build_video_filter(
         )
     )
 
+    stage_label = subtitle_label
     if needs_output_resize:
         target_ratio = target_width / target_height
         source_ratio = video_width / video_height
@@ -6459,18 +6478,34 @@ def build_video_filter(
             crop_height = int(video_width / target_ratio)
             crop_x = 0
             crop_y = max(0, (video_height - crop_height) // 2)
-        speed = _anti_reuse_speed_factor()
-        speed_suffix = f",setpts=PTS/{speed:.4f}" if abs(speed - 1.0) > 0.001 else ""
         parts.append(
-            f"[{subtitle_label}]crop={crop_width}:{crop_height}:{crop_x}:{crop_y},"
-            f"scale={target_width}:{target_height}{speed_suffix}[vout]"
+            f"[{stage_label}]crop={crop_width}:{crop_height}:{crop_x}:{crop_y},"
+            f"scale={target_width}:{target_height}[resized]"
         )
+        stage_label = "resized"
+
+    # Outro CTA runs AFTER output crop/scale so 9:16 vertical Shorts never chop off the banner.
+    if OUTRO_CTA_ENABLED and OUTRO_CTA_START is not None:
+        out_h = int(target_height) if needs_output_resize else int(video_height)
+        cta_raw = str(OUTRO_CTA_TEXT or "Đăng ký kênh để xem tập tiếp theo!").strip() or "Đăng ký kênh để xem tập tiếp theo!"
+        cta_esc = cta_raw.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+        cta_start = max(0.0, float(OUTRO_CTA_START))
+        cta_font = min(32, max(16, int(round(out_h * 0.028))))
+        cta_box_h = cta_font + 24
+        cta_y = max(20, int(round(out_h * 0.045)))
+        font_esc = ffmpeg_filter_path(r"C:\Windows\Fonts\arialbd.ttf") if Path(r"C:\Windows\Fonts\arialbd.ttf").is_file() else ""
+        font_arg = f"fontfile='{font_esc}':" if font_esc else ""
+        parts.append(
+            f"[{stage_label}]drawbox=x=iw*0.08:y={cta_y}:w=iw*0.84:h={cta_box_h}:color=0x0f172a@0.84:t=fill:enable='gte(t,{cta_start:.2f})',"
+            f"drawtext={font_arg}text='{cta_esc}':fontcolor=0xfde047:fontsize={cta_font}:x=(w-text_w)/2:y={cta_y + 12}:enable='gte(t,{cta_start:.2f})'[with_cta]"
+        )
+        stage_label = "with_cta"
+
+    speed = _anti_reuse_speed_factor()
+    if abs(speed - 1.0) > 0.001:
+        parts.append(f"[{stage_label}]setpts=PTS/{speed:.4f}[vout]")
     else:
-        speed = _anti_reuse_speed_factor()
-        if abs(speed - 1.0) > 0.001:
-            parts.append(f"[{subtitle_label}]setpts=PTS/{speed:.4f}[vout]")
-        else:
-            parts.append(f"[{subtitle_label}]null[vout]")
+        parts.append(f"[{stage_label}]null[vout]")
 
     print()
     print("==================================")
@@ -7261,7 +7296,7 @@ def _render_checkpoint_signature(region, mode: str, use_voice: bool, use_music: 
         pass
 
     payload = {
-        "schema": 1,
+        "schema": 2,
         "video": _file_sig(VIDEO_PATH),
         "voice": _file_sig(VOICE_PATH) if use_voice else "",
         "music": _file_sig(MUSIC_PATH) if use_music else "",
@@ -7273,6 +7308,17 @@ def _render_checkpoint_signature(region, mode: str, use_voice: bool, use_music: 
         "voice_vol": float(VOICE_VOLUME),
         "music_vol": float(MUSIC_VOLUME),
         "blur_intervals": BLUR_INTERVALS or [],
+        "blur_mode": str(BLUR_MODE or "blur"),
+        "secondary_sub_region": SECONDARY_SUB_REGION,
+        "secondary_sub_blur": bool(SECONDARY_SUB_BLUR),
+        "anti_reuse_enabled": bool(ANTI_REUSE_ENABLED),
+        "anti_reuse_speed": float(_anti_reuse_speed_factor()),
+        "anti_reuse_zoom": float(ANTI_REUSE_ZOOM or 1.0),
+        "anti_reuse_mirror": bool(ANTI_REUSE_MIRROR),
+        "anti_reuse_color": bool(ANTI_REUSE_COLOR),
+        "outro_cta_enabled": bool(OUTRO_CTA_ENABLED),
+        "outro_cta_text": str(OUTRO_CTA_TEXT or ""),
+        "outro_cta_start": OUTRO_CTA_START,
         "auto_brand": bool(AUTO_BRAND_BLUR_ENABLED),
         "logo_mode": LOGO_MODE,
         "logo_shape": LOGO_SHAPE,
@@ -7309,7 +7355,7 @@ def _render_segmented_long_video(
     output_path: Path,
 ) -> bool:
     """Render long multi-hour videos in resumable segments and stream-concat at the end."""
-    global ASS_PATH, BLUR_INTERVALS
+    global ASS_PATH, BLUR_INTERVALS, OUTRO_CTA_START
 
     chunk_dir = output_path.with_name(f"{output_path.stem}.render_chunks")
     ckpt_path = chunk_dir / "checkpoint.json"
@@ -7339,6 +7385,7 @@ def _render_segmented_long_video(
     source_has_audio = _probe_has_audio(VIDEO_PATH)
     orig_ass_path = ASS_PATH
     orig_blur_intervals = list(BLUR_INTERVALS or [])
+    orig_outro_cta_start = OUTRO_CTA_START
 
     print()
     print("==================================")
@@ -7382,6 +7429,11 @@ def _render_segmented_long_video(
 
             ASS_PATH = str(seg_ass)
             BLUR_INTERVALS = shifted_intervals
+            if OUTRO_CTA_ENABLED and orig_outro_cta_start is not None:
+                cta_abs = float(orig_outro_cta_start)
+                OUTRO_CTA_START = max(0.0, cta_abs - seg_start) if cta_abs < seg_end else None
+            else:
+                OUTRO_CTA_START = None
 
             logo_input_index = ((2 if use_voice else 1) + (1 if use_music else 0)) if use_logo else None
             seg_video_filter = build_video_filter(
@@ -7406,17 +7458,26 @@ def _render_segmented_long_video(
             atempo_suffix = f",{atempo}" if atempo else ""
             if seg_use_voice:
                 music_index = 2
-                music_filter = (
-                    f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-                    f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                    if use_music
-                    else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                )
-                audio_part = (
-                    f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
-                    f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
-                    + music_filter
-                )
+                if source_has_audio:
+                    music_filter = (
+                        f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                        f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                        if use_music
+                        else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                    )
+                    audio_part = (
+                        f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
+                        f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                        + music_filter
+                    )
+                else:
+                    audio_part = (
+                        f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                        f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                        f"[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                        if use_music
+                        else f"[1:a]volume={float(VOICE_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
+                    )
                 filter_complex = f"{seg_video_filter};{audio_part}"
             elif use_music:
                 music_filter = (
@@ -7456,8 +7517,9 @@ def _render_segmented_long_video(
             if seg_use_voice or source_has_audio:
                 cmd.extend(["-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2"])
 
+            seg_out_dur = seg_dur / _anti_reuse_speed_factor()
             cmd.extend([
-                "-t", f"{seg_dur:.3f}",
+                "-t", f"{seg_out_dur:.3f}",
                 "-video_track_timescale", "90000",
                 str(seg_tmp),
             ])
@@ -7475,6 +7537,7 @@ def _render_segmented_long_video(
     finally:
         ASS_PATH = orig_ass_path
         BLUR_INTERVALS = orig_blur_intervals
+        OUTRO_CTA_START = orig_outro_cta_start
 
     concat_list = chunk_dir / "concat.txt"
     concat_list.write_text(
@@ -7956,125 +8019,46 @@ def render_final(region):
 
 
 
-    if use_voice:
-
-
-
-
-
-
-
-        atempo = _anti_reuse_atempo_filter()
-        atempo_suffix = f",{atempo}" if atempo else ""
-        music_index = 2 if use_voice else 1
-        music_filter = (
-            f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-            f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-            if use_music
-            else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-        )
-        filter_complex = (
-
-
-
-            video_filter
-
-
-
-            + ";"
-
-
-
-
-
-
-
-            f"[0:a]"
-
-
-
-            f"volume="
-
-
-
-            f"{float(ORIGINAL_VOLUME)}"
-
-
-
-            f"[original];"
-
-
-
-
-
-
-
-            f"[1:a]"
-
-
-
-            f"volume="
-
-
-
-            f"{float(VOICE_VOLUME)}"
-
-
-
-            f"[voice];"
-
-
-
-
-
-
-
-            + music_filter
-
-
-
-        )
-
-
-
-
-
-
-
-    else:
-
-
-
-
-
-
-
-        filter_complex = (
-
-
-
-            video_filter
-
-
-
-        )
-
-
-
-
-
-
-
+    source_has_audio = _probe_has_audio(VIDEO_PATH)
     atempo = _anti_reuse_atempo_filter()
     atempo_suffix = f",{atempo}" if atempo else ""
-    if use_music and not use_voice:
-        filter_complex = (
-            video_filter
-            + ";[1:a]volume="
-            + str(float(MUSIC_VOLUME))
-            + f"[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+
+    if use_voice:
+        music_index = 2
+        if source_has_audio:
+            music_filter = (
+                f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                if use_music
+                else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+            )
+            filter_complex = (
+                video_filter
+                + ";"
+                + f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
+                + f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                + music_filter
+            )
+        else:
+            audio_part = (
+                f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                f"[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                if use_music
+                else f"[1:a]volume={float(VOICE_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
+            )
+            filter_complex = video_filter + ";" + audio_part
+    elif use_music:
+        music_filter = (
+            f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
+            f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+            if source_has_audio
+            else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
         )
+        filter_complex = video_filter + ";" + music_filter
         use_voice = True
+    else:
+        filter_complex = video_filter
 
     command.extend([
 

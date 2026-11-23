@@ -301,25 +301,51 @@ def _open_persistent_bilibili_page(playwright, browser_path: str, url: str):
     last_status = response.status if response is not None else None
     announced = False
     while time.monotonic() < deadline:
-        current_url = str(page.url or '')
+        try:
+            if hasattr(page, 'is_closed') and page.is_closed():
+                context.close()
+                raise BilibiliAccessError(last_status if isinstance(last_status, int) and last_status >= 400 else 412)
+            current_url = str(page.url or '')
+        except BilibiliAccessError:
+            raise
+        except Exception as err:
+            try:
+                context.close()
+            except Exception:
+                pass
+            raise BilibiliAccessError(412) from err
         if 'passport.bilibili.com' in current_url:
             if not announced:
                 print('[bilibili] if requested by the source, sign in or complete verification in the opened browser; waiting up to 3 minutes')
                 announced = True
-            page.wait_for_timeout(1_000)
+            try:
+                page.wait_for_timeout(1_000)
+            except Exception as err:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+                raise BilibiliAccessError(401) from err
             continue
         if last_status == 412:
             if not announced:
                 print('[bilibili] complete any verification in the opened browser; waiting up to 3 minutes')
                 announced = True
-            page.wait_for_timeout(8_000)
+            try:
+                page.wait_for_timeout(8_000)
+            except Exception as err:
+                try:
+                    context.close()
+                except Exception:
+                    pass
+                raise BilibiliAccessError(412) from err
             try:
                 response = page.reload(wait_until='domcontentloaded', timeout=20_000)
                 last_status = response.status if response is not None else None
             except Exception:
                 last_status = 412
             continue
-        if last_status is not None and last_status >= 400:
+        if isinstance(last_status, int) and last_status >= 400:
             context.close()
             raise BilibiliAccessError(last_status)
         return context, page
@@ -523,6 +549,11 @@ def download_video(url: str, output_path: Path) -> Path:
                             headless=True,
                             viewport={"width": 1365, "height": 900},
                         )
+                        if cookies:
+                            try:
+                                context.add_cookies(cookies)
+                            except Exception:
+                                pass
                     except Exception:
                         context = None
                 if context is None:
@@ -550,7 +581,15 @@ def download_video(url: str, output_path: Path) -> Path:
                     if browser is not None:
                         browser.close()
                         browser = None
-                    context, page = _open_persistent_bilibili_page(playwright, browser_path, url)
+                    try:
+                        context, page = _open_persistent_bilibili_page(playwright, browser_path, url)
+                    except (BilibiliAccessError, RuntimeError) as err:
+                        if session_state == 'unavailable':
+                            raise RuntimeError(
+                                'Bilibili trả HTTP 412 và ReupAI chưa đọc được phiên trình duyệt đã chọn. '
+                                'Kiểm tra đúng hồ sơ Chrome/Edge và tài khoản Windows hoặc hoàn tất xác minh trong cửa sổ ReupAI rồi thử lại.'
+                            ) from err
+                        raise
                     user_agent = page.evaluate('() => navigator.userAgent')
                 if "passport.bilibili.com" in page.url:
                     raise BilibiliAccessError(401)
