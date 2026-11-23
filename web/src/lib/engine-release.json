@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.55",
+    "version": "0.2.60",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.55/ReupAI-Setup-0.2.55.exe",
-    "sha256": "e29050636ecba018d5e07d9a7a4ae1c755dd4489bd8a47f478d98842305548f4",
-    "size": 468317094,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.60/ReupAI-Setup-0.2.60.exe",
+    "sha256": "7aa37d464da58908397385c164adfcd36e05199c4d388b3043d8088dd092e9c3",
+    "size": 468399672,
     "notes": [
-      "Cố định cỡ chữ phụ đề dịch và tự chia trang nhanh khi câu dài.",
-      "Khôi phục đa luồng mặc định cho TTS/Whisper/FFmpeg và song song hóa fit audio để tăng tốc xử lý.",
-      "Đồng bộ Saved Series/Collections, tối ưu đăng nhập Douyin tab mới và ổn định Local Engine."
+      "Khắc phục hoàn toàn lỗi ước tính ổ đĩa trên video dài (>6 giờ dùng FLAC tự động) và tự dọn file preview bị rò rỉ.",
+      "Hỗ trợ link Bilibili đa ngôn ngữ (/zh-Hans/, /zh-Hant/, /vi/), tách lỗi quota 429 tạm thời của Gemini và checkpoint chống mất tiến độ có bản sao lưu .bak.",
+      "Sửa thứ tự filter render (delogo trước hflip, Outro CTA sau crop 9:16), cập nhật tiến độ ghép giọng & render mượt và kiểm thử 100% (189 Python + 61 Node tests)."
     ],
-    "publishedAt": "2026-11-16T10:04:46+00:00"
+    "publishedAt": "2026-11-23T14:21:02+00:00"
   },
-  "signature": "DWfhk6aASOmRFqU68Lb0XkSla+C3XirAuo5J5+qYgz2Z0GrOM3XFL0Lnjw9wovbnFTWPU5lHFNsS7P6AgYtlBA=="
+  "signature": "YazEqC08QpDyUf1cucBBnAQiYkvMMY00jYhQ2j5LljeuIrYlTP54ZY577GYQdXev0iHmjnFrVNUyaxcShz5CAA=="
 }
