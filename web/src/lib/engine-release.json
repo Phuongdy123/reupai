@@ -1,18 +1,18 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.60",
+    "version": "0.2.61",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.60/ReupAI-Setup-0.2.60.exe",
-    "sha256": "7aa37d464da58908397385c164adfcd36e05199c4d388b3043d8088dd092e9c3",
-    "size": 468399672,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.61/ReupAI-Setup-0.2.61.exe",
+    "sha256": "f25ac672302452dcc2504431823ba476ff554474b23b3985e724550c7439243f",
+    "size": 468447103,
     "notes": [
-      "Khắc phục hoàn toàn lỗi ước tính ổ đĩa trên video dài (>6 giờ dùng FLAC tự động) và tự dọn file preview bị rò rỉ.",
-      "Hỗ trợ link Bilibili đa ngôn ngữ (/zh-Hans/, /zh-Hant/, /vi/), tách lỗi quota 429 tạm thời của Gemini và checkpoint chống mất tiến độ có bản sao lưu .bak.",
-      "Sửa thứ tự filter render (delogo trước hflip, Outro CTA sau crop 9:16), cập nhật tiến độ ghép giọng & render mượt và kiểm thử 100% (189 Python + 61 Node tests)."
+      "Sửa dứt điểm lỗi Edge-TTS WSServerHandshakeError 403 bằng chuẩn DRM v2 (edge-tts 7.3.1 + SentenceBoundary + FFmpeg prosody).",
+      "Tự động chuyển sang giọng VieNeu offline trên máy (Trúc Ly / Hải Đăng) khi máy chủ Microsoft bị gián đoạn và cập nhật tiến độ % từng câu.",
+      "Tối ưu ước tính dung lượng ổ đĩa cho video dài (>6 giờ dùng FLAC tự động) và tự dọn file preview bị rò rỉ."
     ],
-    "publishedAt": "2026-11-23T14:21:02+00:00"
+    "publishedAt": "2026-11-24T11:47:04+00:00"
   },
-  "signature": "YazEqC08QpDyUf1cucBBnAQiYkvMMY00jYhQ2j5LljeuIrYlTP54ZY577GYQdXev0iHmjnFrVNUyaxcShz5CAA=="
+  "signature": "2/H2UITqHmi4bZ5z72+Lafbf4yFYBzLP5hVTE+rC7A3FE4jhH2xbCuGCKRwdNvaQfNFJcmtz/ahaeeXyjvi5Bg=="
 }
