@@ -15,7 +15,7 @@ colorama==0.4.6
 cryptography==50.0.1
 ctranslate2==4.8.2
 distro==1.9.0
-edge-tts==7.2.8
+edge-tts==7.3.1
 fastapi==0.141.1
 faster-whisper==1.2.1
 filelock==3.32.5

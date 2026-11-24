@@ -284,6 +284,37 @@ class V060RegressionTests(unittest.TestCase):
                 local_engine._browser_sessions.clear()
                 local_engine._browser_sessions.update(sessions_before)
 
+    def test_edge_tts_uses_v2_sec_ms_gec_drm_and_falls_back_to_local_vieneu_on_403(self):
+        import edge_tts.constants as edge_constants
+
+        self.assertTrue(
+            str(edge_constants.SEC_MS_GEC_VERSION).startswith("2-"),
+            f"Expected edge-tts >= 7.3.1 with v2 DRM, got {edge_constants.SEC_MS_GEC_VERSION}",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_wav = Path(tmp) / "clip.wav"
+            used_voices = []
+
+            def fake_vieneu(text, output_path, engine=None, voice_override=None):
+                used_voices.append(voice_override)
+                Path(output_path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+            orig_voice = tts.VOICE
+            try:
+                tts._DEAD_EDGE_VOICES.clear()
+                tts.set_voice("vi-VN-NamMinhNeural")
+                with patch.object(tts, "generate_edge_fallback", side_effect=RuntimeError("WSServerHandshakeError: 403")), \
+                     patch.object(tts, "generate_vieneu_tts", side_effect=fake_vieneu), \
+                     patch.object(tts, "_get_parallel_vieneu_engine", return_value="dummy-engine"):
+                    tts.generate_tts("Xin chào các bạn", str(out_wav))
+                self.assertTrue(out_wav.is_file())
+                self.assertEqual(used_voices, ["Hải Đăng"])
+                self.assertIn("vi-VN-NamMinhNeural", tts._DEAD_EDGE_VOICES)
+            finally:
+                tts._DEAD_EDGE_VOICES.clear()
+                tts.VOICE = orig_voice
+
 
 if __name__ == "__main__":
     unittest.main()

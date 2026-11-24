@@ -2514,6 +2514,9 @@ function friendlyProcessStage(message, isError) {
     if (/không tìm thấy video|file.*(?:not found|không tồn tại)/i.test(value)) {
         return 'Không tìm thấy video trên máy. Hãy tải lại video nguồn.';
     }
+    if (/WSServerHandshakeError|speech\.platform\.bing\.com/i.test(value)) {
+        return 'Microsoft Edge TTS từ chối kết nối (403). Hãy cập nhật ReupAI Local Engine lên bản mới nhất hoặc chọn giọng Trúc Ly / Hải Đăng (offline).';
+    }
     const cleanMessage = value.replace(/^(?:(?:Runtime|Value|DownloadStorage|OS|Permission|FileNotFound)Error):\s*/i, '').trim();
     if (/không đủ dung lượng|ổ đĩa.*đầy|no space left/i.test(cleanMessage)) {
         return cleanMessage.length > 220 ? `${cleanMessage.slice(0, 217)}…` : cleanMessage;

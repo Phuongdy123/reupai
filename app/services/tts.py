@@ -248,7 +248,8 @@ VOICE = normalize_voice_name(
 )
 
 # Edge fallback only. VieNeu remains primary.
-EDGE_VOICE = "vi-VN-NamMinhNeural"
+EDGE_VOICE = "vi-VN-HoaiMyNeural"
+_DEAD_EDGE_VOICES = set()
 SECONDARY_VOICE = None
 EDGE_RATE = "+0%"
 EDGE_PITCH = "+0Hz"
@@ -324,9 +325,22 @@ def _create_vieneu_engine():
     return Vieneu(**kwargs)
 
 
-def _get_vieneu_engine():
+def _vieneu_fallback_voice_for_edge(voice_key):
+    """Map Vietnamese Edge-TTS profiles to local offline VieNeu ONNX voices."""
+    key = str(voice_key or "").strip()
+    lower = key.lower()
+    if lower in {"trúc ly", "truc ly", "truc_ly"} or lower.startswith("vi-vn-hoaimy") or lower.startswith("hoai_my"):
+        return "Trúc Ly"
+    if lower in {"hải đăng", "hai dang", "hai_dang", "nam minh", "nam_minh"} or lower.startswith("vi-vn-namminh") or lower.startswith("nam_minh"):
+        return "Hải Đăng"
+    return None
+
+
+def _get_vieneu_engine(voice_name=None):
     global _VIENEU_ENGINE
     global _VIENEU_VOICE_IDS
+
+    target_voice = voice_name or VOICE
 
     if _VIENEU_ENGINE is not None:
         return _VIENEU_ENGINE
@@ -365,7 +379,7 @@ def _get_vieneu_engine():
 
     if (
         _VIENEU_VOICE_IDS
-        and VOICE
+        and target_voice
         not in _VIENEU_VOICE_IDS
     ):
         available = ", ".join(
@@ -375,12 +389,12 @@ def _get_vieneu_engine():
         )
 
         raise RuntimeError(
-            f"VieNeu khong co voice '{VOICE}'. "
+            f"VieNeu khong co voice '{target_voice}'. "
             f"Available: {available}"
         )
 
     print(
-        f"[VieNeu] Voice: {VOICE}"
+        f"[VieNeu] Voice: {target_voice}"
     )
 
     print(
@@ -625,12 +639,14 @@ def generate_vieneu_tts(
     text,
     output_path,
     engine=None,
+    voice_override=None,
 ):
-    engine = engine or _get_vieneu_engine()
+    target_voice = normalize_voice_name(voice_override) if voice_override else VOICE
+    engine = engine or _get_vieneu_engine(voice_name=target_voice)
 
     audio = engine.infer(
         text=str(text).strip(),
-        voice=VOICE,
+        voice=target_voice,
         temperature=
             VIENEU_TEMPERATURE,
     )
@@ -667,6 +683,30 @@ def generate_vieneu_tts(
 # EDGE FALLBACK
 # =========================================================
 
+_EDGE_PACE_LOCK = threading.Lock()
+_LAST_EDGE_REQ_AT = 0.0
+
+
+def _edge_local_prosody_filter(edge_pitch: str, edge_rate: str) -> str:
+    """Apply preset pitch/rate locally via FFmpeg so Microsoft's v2 SSML endpoint never rejects custom prosody."""
+    pitch_factor = 1.0
+    rate_factor = 1.0
+    m_pitch = re.fullmatch(r"([+-]?\d+(?:\.\d+)?)Hz", str(edge_pitch or "").strip(), re.IGNORECASE)
+    if m_pitch:
+        hz = float(m_pitch.group(1))
+        if abs(hz) > 0.1:
+            pitch_factor = max(0.85, min(1.18, 1.0 + hz * 0.0065))
+    m_rate = re.fullmatch(r"([+-]?\d+(?:\.\d+)?)%", str(edge_rate or "").strip())
+    if m_rate:
+        pct = float(m_rate.group(1))
+        if abs(pct) > 0.1:
+            rate_factor = max(0.75, min(1.35, 1.0 + pct / 100.0))
+    if abs(pitch_factor - 1.0) < 0.005 and abs(rate_factor - 1.0) < 0.005:
+        return ""
+    tempo = max(0.5, min(2.0, rate_factor / pitch_factor))
+    return f"asetrate={int(round(24000 * pitch_factor))},aresample=48000,atempo={tempo:.4f}"
+
+
 async def _generate_edge_mp3_once(
     text,
     output_path,
@@ -679,14 +719,12 @@ async def _generate_edge_mp3_once(
 
     target_key = normalize_voice_name(voice_override) if voice_override else VOICE
     profile = EDGE_VOICE_PROFILES.get(target_key)
-    edge_voice, edge_pitch, edge_rate = profile or (EDGE_VOICE, EDGE_PITCH, EDGE_RATE)
-    communicate = (
-        edge_tts.Communicate(
-            text=text,
-            voice=edge_voice,
-            rate=edge_rate,
-            pitch=edge_pitch,
-        )
+    edge_voice = profile[0] if profile else EDGE_VOICE
+    clean_text = str(text or "").strip() or "."
+    communicate = edge_tts.Communicate(
+        text=clean_text,
+        voice=edge_voice,
+        boundary="SentenceBoundary",
     )
 
     await communicate.save(
@@ -699,14 +737,21 @@ def generate_edge_fallback(
     output_wav,
     voice_override=None,
 ):
-    output_wav = str(
-        output_wav
-    )
+    global _LAST_EDGE_REQ_AT
+    output_wav = str(output_wav)
+    temp_mp3 = output_wav + ".edge.mp3"
 
-    temp_mp3 = (
-        output_wav
-        + ".edge.mp3"
-    )
+    target_key = normalize_voice_name(voice_override) if voice_override else VOICE
+    profile = EDGE_VOICE_PROFILES.get(target_key)
+    _, edge_pitch, edge_rate = profile or (EDGE_VOICE, EDGE_PITCH, EDGE_RATE)
+    prosody_af = _edge_local_prosody_filter(edge_pitch, edge_rate)
+
+    with _EDGE_PACE_LOCK:
+        now = time.monotonic()
+        wait = 0.12 - (now - _LAST_EDGE_REQ_AT)
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_EDGE_REQ_AT = time.monotonic()
 
     try:
         asyncio.run(
@@ -717,23 +762,27 @@ def generate_edge_fallback(
             )
         )
 
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-nostdin",
+            "-y",
+            "-i",
+            temp_mp3,
+        ]
+        if prosody_af:
+            ffmpeg_cmd.extend(["-af", prosody_af])
+        ffmpeg_cmd.extend([
+            "-ar",
+            "48000",
+            "-ac",
+            "1",
+            output_wav,
+        ])
+
         subprocess.run(
-            [
-                "ffmpeg",
-                "-nostdin",
-                "-y",
-                "-i",
-                temp_mp3,
-                "-ar",
-                "48000",
-                "-ac",
-                "1",
-                output_wav,
-            ],
-            stdout=
-                subprocess.DEVNULL,
-            stderr=
-                subprocess.DEVNULL,
+            ffmpeg_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             check=True,
             stdin=subprocess.DEVNULL,
             creationflags=MEDIA_CREATIONFLAGS,
@@ -741,12 +790,8 @@ def generate_edge_fallback(
 
     finally:
         try:
-            if os.path.exists(
-                temp_mp3
-            ):
-                os.remove(
-                    temp_mp3
-                )
+            if os.path.exists(temp_mp3):
+                os.remove(temp_mp3)
         except OSError:
             pass
 
@@ -759,8 +804,21 @@ def generate_tts(
     text,
     output_path,
     engine=None,
+    voice_override=None,
 ):
-    provider = _effective_tts_provider()
+    active_voice = normalize_voice_name(voice_override) if voice_override else VOICE
+    provider = "edge" if active_voice in EDGE_VOICE_PROFILES else TTS_PROVIDER
+    profile = EDGE_VOICE_PROFILES.get(active_voice)
+    edge_backend_voice = profile[0] if profile else EDGE_VOICE
+
+    # If Microsoft's backend for a specific Vietnamese Edge voice (e.g. NamMinhNeural)
+    # was already detected as offline/NoAudioReceived in this session, route directly
+    # to the matching local VieNeu voice without wasting retries per sentence.
+    if provider == "edge" and edge_backend_voice in _DEAD_EDGE_VOICES:
+        local_vn = _vieneu_fallback_voice_for_edge(active_voice)
+        if local_vn:
+            provider = "vieneu"
+            active_voice = local_vn
 
     if provider not in {
         "vieneu",
@@ -783,11 +841,13 @@ def generate_tts(
                     text,
                     output_path,
                     engine=engine,
+                    voice_override=active_voice,
                 )
             else:
                 generate_edge_fallback(
                     text,
                     output_path,
+                    voice_override=active_voice,
                 )
 
             if (
@@ -825,6 +885,7 @@ def generate_tts(
                     generate_edge_fallback(
                         text,
                         output_path,
+                        voice_override=active_voice,
                     )
 
                     if (
@@ -844,6 +905,28 @@ def generate_tts(
                             fallback_error
                         )
                     )
+            elif provider == "edge":
+                local_vn_voice = _vieneu_fallback_voice_for_edge(active_voice)
+                err_name = type(error).__name__
+                is_voice_dead = (
+                    "403" in str(error)
+                    or err_name in {"WSServerHandshakeError", "NoAudioReceived"}
+                )
+                if local_vn_voice and (is_voice_dead or attempt >= MAX_RETRIES):
+                    if is_voice_dead:
+                        _DEAD_EDGE_VOICES.add(edge_backend_voice)
+                    print(f"[TTS] Edge-TTS ({edge_backend_voice}) bi chan/loi -> tu dong chuyen sang VieNeu offline ({local_vn_voice})...")
+                    try:
+                        generate_vieneu_tts(
+                            text,
+                            output_path,
+                            engine=engine or _get_parallel_vieneu_engine(),
+                            voice_override=local_vn_voice,
+                        )
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                            return
+                    except Exception as vn_error:
+                        print(f"[TTS] VieNeu offline fallback loi: {vn_error}")
 
             if attempt >= MAX_RETRIES:
                 raise last_error
@@ -1180,9 +1263,18 @@ def create_tts_clips(
             else:
                 primary_indices.append(idx)
         if sec_pending:
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=min(4, len(sec_pending))) as pool:
-                list(pool.map(lambda item: generate_edge_fallback(item[0], item[1], voice_override=sec_voice), sec_pending))
+            workers = 3
+            with ThreadPoolExecutor(max_workers=min(workers, len(sec_pending))) as pool:
+                sec_futures = [
+                    pool.submit(generate_tts, item[0], item[1], voice_override=sec_voice)
+                    for item in sec_pending
+                ]
+                sec_done = 0
+                for fut in as_completed(sec_futures):
+                    fut.result()
+                    sec_done += 1
+                    if on_progress is not None:
+                        on_progress("raw", sec_done, len(sec_pending))
 
     # Auto mode enables two workers only when the CPU and free-memory budget
     # can support them; REUP_TTS_ONNX_WORKERS=1 keeps a low-memory fallback.
@@ -1196,15 +1288,26 @@ def create_tts_clips(
         _generate_parallel_raw_tts(pending, on_progress=on_progress)
     elif _effective_tts_provider() == "edge" and len(subtitles) > 1:
         pending_edge = []
+        already_done = 0
         for subtitle in subtitles:
             raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
-            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+            if os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44:
+                already_done += 1
+            else:
                 pending_edge.append((subtitle["text"], raw_wav))
         if pending_edge:
-            from concurrent.futures import ThreadPoolExecutor
-            workers = 6 if os.getenv("REUP_BOOST_GPU", "").strip() == "1" else 4
+            workers = 3
             with ThreadPoolExecutor(max_workers=min(workers, len(pending_edge))) as pool:
-                list(pool.map(lambda item: generate_edge_fallback(item[0], item[1]), pending_edge))
+                edge_futures = [
+                    pool.submit(generate_tts, item[0], item[1])
+                    for item in pending_edge
+                ]
+                edge_done = already_done
+                for fut in as_completed(edge_futures):
+                    fut.result()
+                    edge_done += 1
+                    if on_progress is not None:
+                        on_progress("raw", edge_done, total)
 
     fit_cache = {}
     if not _is_stability_mode() and len(subtitles) > 1:
