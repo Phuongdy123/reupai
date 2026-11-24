@@ -4201,7 +4201,7 @@ def pipeline(
 
                 speed=config.get("tts_speed"),
                 secondary_voice=(
-                    (config.get("secondary_voice") or ("Nam Minh" if "Trúc" in str(effective_voice) else "Trúc Ly"))
+                    (config.get("secondary_voice") or ("Hải Đăng" if "Trúc" in str(effective_voice) else "Trúc Ly"))
                     if config.get("multi_voice")
                     else None
                 ),

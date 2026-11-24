@@ -315,6 +315,23 @@ class V060RegressionTests(unittest.TestCase):
                 tts._DEAD_EDGE_VOICES.clear()
                 tts.VOICE = orig_voice
 
+    def test_nam_minh_alias_routes_to_local_hai_dang_without_edge_retry_loop(self):
+        self.assertEqual(tts.normalize_voice_name("Nam Minh"), "Hải Đăng")
+        self.assertEqual(tts.normalize_voice_name("nam_minh"), "Hải Đăng")
+        with tempfile.TemporaryDirectory() as tmp:
+            out_wav = Path(tmp) / "sec.wav"
+            called = []
+
+            def fake_vieneu(text, output_path, engine=None, voice_override=None):
+                called.append(voice_override)
+                Path(output_path).write_bytes(b"RIFF" + b"\x00" * 100)
+
+            with patch.object(tts, "generate_vieneu_tts", side_effect=fake_vieneu), \
+                 patch.object(tts, "generate_edge_fallback") as edge_mock:
+                tts.generate_tts("Chào bạn", str(out_wav), voice_override="Nam Minh")
+            self.assertEqual(called, ["Hải Đăng"])
+            edge_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

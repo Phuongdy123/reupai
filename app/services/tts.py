@@ -159,8 +159,9 @@ VOICE_ALIASES = {
     "truc_ly": "Trúc Ly",
     "truc ly": "Trúc Ly",
     "trúc ly": "Trúc Ly",
+    "nam_minh": "Hải Đăng",
+    "nam minh": "Hải Đăng",
     "hoai_my": "vi-VN-HoaiMyNeural",
-    "nam_minh": "vi-VN-NamMinhNeural",
 }
 
 EDGE_VOICE_PROFILES = {
@@ -837,6 +838,10 @@ def generate_tts(
     ):
         try:
             if provider == "vieneu":
+                if _VIENEU_VOICE_IDS and active_voice not in _VIENEU_VOICE_IDS:
+                    mapped_vn = _vieneu_fallback_voice_for_edge(active_voice)
+                    if mapped_vn and mapped_vn in _VIENEU_VOICE_IDS:
+                        active_voice = mapped_vn
                 generate_vieneu_tts(
                     text,
                     output_path,
@@ -1174,7 +1179,12 @@ def _parallel_onnx_enabled():
     )
 
 
-def _generate_parallel_raw_tts(pending, on_progress=None):
+def _generate_parallel_raw_tts(
+    pending,
+    on_progress=None,
+    total_count=None,
+    already_done=0,
+):
     """Generate independent subtitle lines concurrently with separate ONNX engines.
 
     Each worker owns an engine because the ONNX engine serializes its sessions.
@@ -1184,36 +1194,47 @@ def _generate_parallel_raw_tts(pending, on_progress=None):
     if not pending:
         return
 
-    total = len(pending)
+    total = total_count or (len(pending) + already_done)
     print(
-        f"\n[TTS Turbo] Tao {total} cau bang {TTS_ONNX_WORKERS} ONNX engines "
+        f"\n[TTS Turbo] Tao {len(pending)} cau bang {TTS_ONNX_WORKERS} ONNX engines "
         f"({VIENEU_THREADS or 'auto'} luong/engine)."
     )
 
-    def run_one(text, output_path):
+    def run_one(text, output_path, voice_name=None):
         generate_tts(
             text,
             output_path,
             engine=_get_parallel_vieneu_engine(),
+            voice_override=voice_name,
         )
         return output_path
 
-    with ThreadPoolExecutor(max_workers=TTS_ONNX_WORKERS) as executor:
-        futures = {
-            executor.submit(run_one, text, output_path): (index, subtitle_id)
-            for index, subtitle_id, text, output_path in pending
-        }
+    executor = ThreadPoolExecutor(max_workers=TTS_ONNX_WORKERS)
+    try:
+        futures = {}
+        for item in pending:
+            if len(item) >= 5:
+                index, subtitle_id, text, output_path, voice_name = item[:5]
+            else:
+                index, subtitle_id, text, output_path = item[:4]
+                voice_name = None
+            futures[executor.submit(run_one, text, output_path, voice_name)] = (index, subtitle_id)
         completed = 0
         for future in as_completed(futures):
             index, subtitle_id = futures[future]
             future.result()
             completed += 1
             if on_progress is not None:
-                on_progress("raw", completed, total)
+                on_progress("raw", already_done + completed, total)
             print(
-                f"[TTS Turbo] {completed}/{total} xong "
+                f"[TTS Turbo] {completed}/{len(pending)} xong "
                 f"(subtitle {index}, ID {subtitle_id})."
             )
+    except Exception:
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        executor.shutdown(wait=True)
 
 
 # =========================================================
@@ -1242,13 +1263,13 @@ def create_tts_clips(
 
     # Optional 2-voice dialogue alternation when SECONDARY_VOICE is enabled
     sec_voice = normalize_voice_name(SECONDARY_VOICE) if SECONDARY_VOICE else None
-    use_multi_voice = bool(sec_voice and sec_voice != VOICE and len(subtitles) > 1 and edge_tts is not None)
+    use_multi_voice = bool(sec_voice and sec_voice != VOICE and len(subtitles) > 1)
     if use_multi_voice:
         sec_slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(sec_voice)).strip("_").lower() or "sec"
         voice_slug = f"{voice_slug}_mv_{sec_slug}"
+
+    line_voices = []
     if use_multi_voice:
-        sec_pending = []
-        primary_indices = []
         turn = 0
         for idx, subtitle in enumerate(subtitles):
             txt = str(subtitle.get("text") or "").strip()
@@ -1257,14 +1278,25 @@ def create_tts_clips(
             else:
                 turn = 0
             if turn == 1:
-                raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
-                if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
-                    sec_pending.append((txt.lstrip("-— ").strip() or txt, raw_wav))
+                line_voices.append((txt.lstrip("-— ").strip() or txt, sec_voice))
             else:
-                primary_indices.append(idx)
+                line_voices.append((subtitle["text"], VOICE))
+    else:
+        line_voices = [(subtitle["text"], VOICE) for subtitle in subtitles]
+
+    # Run Edge-only secondary lines in parallel only when sec_voice is an Edge profile.
+    if use_multi_voice and sec_voice in EDGE_VOICE_PROFILES:
+        sec_pending = []
+        for idx, subtitle in enumerate(subtitles):
+            line_text, line_voice = line_voices[idx]
+            if line_voice != sec_voice:
+                continue
+            raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
+            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
+                sec_pending.append((line_text, raw_wav))
         if sec_pending:
-            workers = 3
-            with ThreadPoolExecutor(max_workers=min(workers, len(sec_pending))) as pool:
+            pool = ThreadPoolExecutor(max_workers=min(3, len(sec_pending)))
+            try:
                 sec_futures = [
                     pool.submit(generate_tts, item[0], item[1], voice_override=sec_voice)
                     for item in sec_pending
@@ -1275,31 +1307,46 @@ def create_tts_clips(
                     sec_done += 1
                     if on_progress is not None:
                         on_progress("raw", sec_done, len(sec_pending))
+            except Exception:
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
+            else:
+                pool.shutdown(wait=True)
 
     # Auto mode enables two workers only when the CPU and free-memory budget
     # can support them; REUP_TTS_ONNX_WORKERS=1 keeps a low-memory fallback.
     if _parallel_onnx_enabled():
         pending = []
+        already_done = 0
         for index, subtitle in enumerate(subtitles, start=1):
             subtitle_id = subtitle["id"]
             raw_wav, _ = _tts_file_paths(subtitle_id, voice_slug)
-            if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
-                pending.append((index, subtitle_id, subtitle["text"], raw_wav))
-        _generate_parallel_raw_tts(pending, on_progress=on_progress)
+            if os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44:
+                already_done += 1
+            else:
+                line_text, line_voice = line_voices[index - 1]
+                pending.append((index, subtitle_id, line_text, raw_wav, line_voice))
+        _generate_parallel_raw_tts(
+            pending,
+            on_progress=on_progress,
+            total_count=total,
+            already_done=already_done,
+        )
     elif _effective_tts_provider() == "edge" and len(subtitles) > 1:
         pending_edge = []
         already_done = 0
-        for subtitle in subtitles:
+        for idx, subtitle in enumerate(subtitles):
             raw_wav, _ = _tts_file_paths(subtitle["id"], voice_slug)
             if os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44:
                 already_done += 1
             else:
-                pending_edge.append((subtitle["text"], raw_wav))
+                line_text, line_voice = line_voices[idx]
+                pending_edge.append((line_text, raw_wav, line_voice))
         if pending_edge:
-            workers = 3
-            with ThreadPoolExecutor(max_workers=min(workers, len(pending_edge))) as pool:
+            pool = ThreadPoolExecutor(max_workers=min(3, len(pending_edge)))
+            try:
                 edge_futures = [
-                    pool.submit(generate_tts, item[0], item[1])
+                    pool.submit(generate_tts, item[0], item[1], voice_override=item[2])
                     for item in pending_edge
                 ]
                 edge_done = already_done
@@ -1308,6 +1355,11 @@ def create_tts_clips(
                     edge_done += 1
                     if on_progress is not None:
                         on_progress("raw", edge_done, total)
+            except Exception:
+                pool.shutdown(wait=False, cancel_futures=True)
+                raise
+            else:
+                pool.shutdown(wait=True)
 
     fit_cache = {}
     if not _is_stability_mode() and len(subtitles) > 1:
@@ -1375,12 +1427,11 @@ def create_tts_clips(
             print(
                 "Dang tao voice..."
             )
-
+            line_text, line_voice = line_voices[index - 1]
             generate_tts(
-                subtitle[
-                    "text"
-                ],
+                line_text,
                 raw_wav,
+                voice_override=line_voice,
             )
 
         else:
