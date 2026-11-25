@@ -2652,9 +2652,16 @@ function updateInlineProcessStatus(
 
 
 function processVideo(video, card, mode, config = {}) {
-    if (video.processing) return Promise.resolve();
-    // Downloading from the dialog can rebuild the cards underneath it.
     const currentCard = document.querySelector(`[data-video-id="${CSS.escape(video.video_id)}"]`) || card;
+    if (video.processing) {
+        const channel = currentCard?.querySelector('.channel')?.value || video.active_channel || 'default';
+        const activeKey = `${channel}:${video.video_id}:${video.active_mode || mode}`;
+        const trulyRunning = activePollKeys.has(activeKey) && currentCard?.classList?.contains('is-processing');
+        if (trulyRunning) return Promise.resolve();
+        video.processing = false;
+        video.active_mode = null;
+    }
+    // Downloading from the dialog can rebuild the cards underneath it.
     if (signal?.aborted || !currentCard.isConnected) return Promise.resolve();
     currentCard._lastProcessRetry = { video, mode, config };
     return runAction(`process:${video.video_id}`, () => performProcessVideo(video, currentCard, mode, config));

@@ -1045,13 +1045,20 @@ def local_video_states(video_specs):
         resolved_channel = channel_key or "default"
         for channel in _channel_candidates(channel_key):
             job_dir = CHANNELS_ROOT / channel / "jobs" / video_id
+            if not downloaded and any(
+                (job_dir / f"source.{suffix}").is_file()
+                and (job_dir / f"source.{suffix}").stat().st_size > 0
+                for suffix in ("mp4", "mkv", "webm", "mov")
+            ):
+                downloaded = True
+                resolved_channel = channel
             if (job_dir / "final_sub.mp4").is_file():
                 has_subtitle = True
                 resolved_channel = channel
             if (job_dir / "final_voice.mp4").is_file():
                 has_voice = True
                 resolved_channel = channel
-            if has_subtitle and has_voice:
+            if downloaded and has_subtitle and has_voice:
                 break
 
         db_status = job_statuses.get(video_id)
