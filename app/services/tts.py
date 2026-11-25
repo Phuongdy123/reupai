@@ -225,8 +225,42 @@ def resolve_voice_for_target_language(voice_name, target_language=None):
     return default_voice_for_language(target)
 
 
+_EDGE_PROBE_LOCK = threading.Lock()
+_EDGE_PROBE_CACHE = {"checked_at": 0.0, "ok": False}
+
+
+def _edge_tts_online_available() -> bool:
+    """Return True when internet/Edge-TTS is enabled and reachable."""
+    if _is_offline_mode() or not _edge_fallback_allowed() or edge_tts is None:
+        return False
+    now = time.monotonic()
+    with _EDGE_PROBE_LOCK:
+        if now - _EDGE_PROBE_CACHE["checked_at"] < 120.0:
+            return _EDGE_PROBE_CACHE["ok"]
+    ok = False
+    try:
+        import socket
+        with socket.create_connection(("speech.platform.bing.com", 443), timeout=2.5):
+            ok = True
+    except OSError:
+        ok = False
+    with _EDGE_PROBE_LOCK:
+        _EDGE_PROBE_CACHE["checked_at"] = now
+        _EDGE_PROBE_CACHE["ok"] = ok
+    return ok
+
+
+def resolve_auto_voice(voice_name):
+    """Resolve 'auto' to fast online Edge-TTS when online, or local VieNeu when offline."""
+    raw = str(voice_name or "").strip().lower()
+    if raw in {"auto", "tu_dong", "tự động"}:
+        return "vi-VN-HoaiMyNeural" if _edge_tts_online_available() else "Trúc Ly"
+    return normalize_voice_name(voice_name)
+
+
 def _effective_tts_provider():
-    return "edge" if VOICE in EDGE_VOICE_PROFILES else TTS_PROVIDER
+    resolved = resolve_auto_voice(VOICE)
+    return "edge" if resolved in EDGE_VOICE_PROFILES else TTS_PROVIDER
 
 
 def normalize_voice_name(value):
@@ -234,6 +268,9 @@ def normalize_voice_name(value):
 
     if not raw:
         return "Trúc Ly"
+
+    if raw.lower() in {"auto", "tu_dong", "tự động"}:
+        return "auto"
 
     return VOICE_ALIASES.get(
         raw.lower(),
@@ -421,7 +458,7 @@ def set_voice(
 ):
     global VOICE
 
-    resolved = normalize_voice_name(
+    resolved = resolve_auto_voice(
         voice_name
     )
 
@@ -807,15 +844,14 @@ def generate_tts(
     engine=None,
     voice_override=None,
 ):
-    active_voice = normalize_voice_name(voice_override) if voice_override else VOICE
+    active_voice = resolve_auto_voice(voice_override) if voice_override else resolve_auto_voice(VOICE)
     provider = "edge" if active_voice in EDGE_VOICE_PROFILES else TTS_PROVIDER
     profile = EDGE_VOICE_PROFILES.get(active_voice)
     edge_backend_voice = profile[0] if profile else EDGE_VOICE
 
-    # If Microsoft's backend for a specific Vietnamese Edge voice (e.g. NamMinhNeural)
-    # was already detected as offline/NoAudioReceived in this session, route directly
-    # to the matching local VieNeu voice without wasting retries per sentence.
-    if provider == "edge" and edge_backend_voice in _DEAD_EDGE_VOICES:
+    # If offline mode is active or Microsoft's backend for this Edge voice already
+    # failed in this session, route directly to local VieNeu without wasting retries.
+    if provider == "edge" and (_is_offline_mode() or edge_backend_voice in _DEAD_EDGE_VOICES):
         local_vn = _vieneu_fallback_voice_for_edge(active_voice)
         if local_vn:
             provider = "vieneu"
@@ -913,9 +949,13 @@ def generate_tts(
             elif provider == "edge":
                 local_vn_voice = _vieneu_fallback_voice_for_edge(active_voice)
                 err_name = type(error).__name__
+                err_msg = str(error).lower()
                 is_voice_dead = (
-                    "403" in str(error)
-                    or err_name in {"WSServerHandshakeError", "NoAudioReceived"}
+                    "403" in err_msg
+                    or "getaddrinfo" in err_msg
+                    or "cannot connect" in err_msg
+                    or "timed out" in err_msg
+                    or err_name in {"WSServerHandshakeError", "NoAudioReceived", "ClientConnectorError", "TimeoutError"}
                 )
                 if local_vn_voice and (is_voice_dead or attempt >= MAX_RETRIES):
                     if is_voice_dead:

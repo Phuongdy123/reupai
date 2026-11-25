@@ -14,7 +14,8 @@ export const TARGET_LANGUAGE_OPTIONS = [
 ];
 
 export const VIETNAMESE_TTS_VOICES = [
-  { value: "Trúc Ly", slug: "truc_ly", label: "⭐ Trúc Ly — Nữ · Bắc · Tự nhiên (Mặc định)" },
+  { value: "auto", slug: "auto", label: "⚡ Tự động — Online (nhanh 3–5x) · Offline khi mất mạng" },
+  { value: "Trúc Ly", slug: "truc_ly", label: "⭐ Trúc Ly — Nữ · Bắc · Tự nhiên (Offline)" },
   { value: "vi-VN-HoaiMyNeural", slug: "hoai_my", label: "⚡ Hoài My (Online) — Nữ · Nhanh gấp 3–5x" },
   { value: "hoai_my_tram", slug: "hoai_my_tram", label: "⚡ Hoài My Trầm (Online) — Nữ · Kể chuyện" },
   { value: "hoai_my_shorts", slug: "hoai_my_shorts", label: "⚡ Hoài My Shorts (Online) — Nữ · Nhanh & Tươi" },
@@ -82,6 +83,8 @@ export function voicesForTargetLanguage(targetLang = "vi") {
 }
 
 export function defaultVoiceForLanguage(targetLang = "vi") {
+  const code = String(targetLang || "vi").trim().toLowerCase() || "vi";
+  if (code === "vi") return "Trúc Ly";
   return voicesForTargetLanguage(targetLang)[0]?.value || "Trúc Ly";
 }
 

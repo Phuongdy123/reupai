@@ -332,6 +332,12 @@ class V060RegressionTests(unittest.TestCase):
             self.assertEqual(called, ["Hải Đăng"])
             edge_mock.assert_not_called()
 
+    def test_auto_voice_uses_online_edge_when_online_and_local_vieneu_when_offline(self):
+        with patch.object(tts, "_edge_tts_online_available", return_value=True):
+            self.assertEqual(tts.resolve_auto_voice("auto"), "vi-VN-HoaiMyNeural")
+        with patch.object(tts, "_edge_tts_online_available", return_value=False):
+            self.assertEqual(tts.resolve_auto_voice("auto"), "Trúc Ly")
+
 
 if __name__ == "__main__":
     unittest.main()
