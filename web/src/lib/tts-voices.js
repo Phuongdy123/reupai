@@ -15,6 +15,9 @@ export const TARGET_LANGUAGE_OPTIONS = [
 
 export const VIETNAMESE_TTS_VOICES = [
   { value: "Trúc Ly", slug: "truc_ly", label: "⭐ Trúc Ly — Nữ · Bắc · Tự nhiên (Mặc định)" },
+  { value: "vi-VN-HoaiMyNeural", slug: "hoai_my", label: "⚡ Hoài My (Online) — Nữ · Nhanh gấp 3–5x" },
+  { value: "hoai_my_tram", slug: "hoai_my_tram", label: "⚡ Hoài My Trầm (Online) — Nữ · Kể chuyện" },
+  { value: "hoai_my_shorts", slug: "hoai_my_shorts", label: "⚡ Hoài My Shorts (Online) — Nữ · Nhanh & Tươi" },
   { value: "Hải Đăng", slug: "hai_dang", label: "⭐ Hải Đăng — Nam · Bắc · Tự nhiên" },
   { value: "Adam bựa", slug: "adam_bua", label: "⭐ Adam bựa — Nam · Bắc · Tự nhiên hài hước" },
   { value: "Thiện Minh", slug: "thien_minh", label: "⭐ Thiện Minh — Nam · Bắc · Kể chuyện" },
