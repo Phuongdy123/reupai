@@ -76,15 +76,25 @@ def inpaint_video_regions(
     if not ffmpeg or not chain:
         return source_video
 
-    cmd = [ffmpeg, "-y"]
+    use_nvenc = False
+    try:
+        from services.final_renderer import ffmpeg_has_nvenc
+        use_nvenc = bool(ffmpeg_has_nvenc())
+    except Exception:
+        use_nvenc = False
+    video_codec_args = (
+        ["-c:v", "h264_nvenc", "-preset", "p1", "-rc", "constqp", "-qp", "21", "-pix_fmt", "yuv420p"]
+        if use_nvenc
+        else ["-c:v", "libx264", "-preset", "superfast", "-crf", "18", "-pix_fmt", "yuv420p"]
+    )
+
+    cmd = [ffmpeg, "-nostdin", "-y"]
     if preview_seconds and float(preview_seconds) > 0:
         cmd.extend(["-t", str(float(preview_seconds))])
     cmd.extend([
         "-i", str(source_video),
         "-vf", f"{chain},unsharp=3:3:0.35:3:3:0.0",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "17",
+        *video_codec_args,
         "-c:a", "copy",
         str(output_video),
     ])

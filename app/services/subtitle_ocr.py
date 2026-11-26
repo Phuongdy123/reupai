@@ -127,6 +127,14 @@ def _frame_text(ocr, frame, confidence: float, *, pre_cropped=False):
     # are retained, while avoiding OCR on most scenery and title cards.
     crop_y = 0 if pre_cropped else int(height * 0.25)
     crop = frame[crop_y:, :]
+    crop_h, crop_w = crop.shape[:2]
+    if crop_w > 960:
+        scale = 960.0 / float(crop_w)
+        crop = cv2.resize(
+            crop,
+            (960, max(16, int(round(crop_h * scale)))),
+            interpolation=cv2.INTER_AREA,
+        )
     predictions = ocr.predict(crop)
     candidates = []
     for item in predictions or []:
@@ -314,17 +322,40 @@ def extract_subtitle_srt(
         except OSError:
             pass
 
+    video_fps = max(1.0, float(cap.get(cv2.CAP_PROP_FPS) or 25.0))
     started = time.monotonic()
     last_report = started
     last_saved = start_index
     prev_thumb = None
     prev_result = None
+    current_video_frame = -1
     try:
         for index in range(start_index, total):
             timestamp = min(index * interval, max(0, duration - 0.01))
-            cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
-            ok, frame = cap.read()
-            if ok and frame is not None:
+            target_frame = max(0, int(round(timestamp * video_fps)))
+            step_frames = target_frame - current_video_frame
+            if current_video_frame >= 0 and 0 <= step_frames <= int(video_fps * 3.0):
+                ok = True
+                frame = None
+                if step_frames == 0:
+                    ok = prev_result is not None
+                else:
+                    for _ in range(step_frames - 1):
+                        if not cap.grab():
+                            ok = False
+                            break
+                    if ok:
+                        ok, frame = cap.read()
+                current_video_frame = target_frame if ok else -1
+            else:
+                cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
+                ok, frame = cap.read()
+                current_video_frame = target_frame if ok else -1
+            if ok and frame is None and prev_result is not None:
+                text, score = prev_result
+                if text:
+                    detections.append({"time": timestamp, "text": text, "confidence": score})
+            elif ok and frame is not None:
                 crop = frame[int(frame.shape[0] * 0.25):, :]
                 thumb = cv2.resize(cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY), (96, 36), interpolation=cv2.INTER_AREA)
                 if prev_thumb is not None and float(cv2.absdiff(thumb, prev_thumb).mean()) < 1.1:

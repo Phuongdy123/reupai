@@ -112,8 +112,8 @@ def _available_memory_gb():
 
 
 def _auto_tts_workers():
-    """Use two ONNX sessions only when CPU and free RAM leave room for them."""
-    if (os.cpu_count() or 1) >= 8 and _available_memory_gb() >= 8:
+    """Use two ONNX sessions when CPU and free RAM leave room (~450 MB per session)."""
+    if (os.cpu_count() or 1) >= 6 and _available_memory_gb() >= 3.5:
         return 2
     return 1
 
@@ -723,6 +723,27 @@ def generate_vieneu_tts(
 
 _EDGE_PACE_LOCK = threading.Lock()
 _LAST_EDGE_REQ_AT = 0.0
+_EDGE_LOOP_LOCK = threading.Lock()
+_EDGE_ASYNC_LOOP = None
+
+
+def _get_edge_async_loop():
+    """Maintain one persistent background asyncio loop so Edge-TTS avoids 3,000+ loop startups."""
+    global _EDGE_ASYNC_LOOP
+    with _EDGE_LOOP_LOCK:
+        if _EDGE_ASYNC_LOOP is not None and _EDGE_ASYNC_LOOP.is_running():
+            return _EDGE_ASYNC_LOOP
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=loop.run_forever, name="reup-edge-tts-loop", daemon=True)
+        thread.start()
+        _EDGE_ASYNC_LOOP = loop
+        return loop
+
+
+def _run_edge_coro(coro):
+    loop = _get_edge_async_loop()
+    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    return future.result(timeout=75)
 
 
 def _edge_local_prosody_filter(edge_pitch: str, edge_rate: str) -> str:
@@ -742,7 +763,7 @@ def _edge_local_prosody_filter(edge_pitch: str, edge_rate: str) -> str:
     if abs(pitch_factor - 1.0) < 0.005 and abs(rate_factor - 1.0) < 0.005:
         return ""
     tempo = max(0.5, min(2.0, rate_factor / pitch_factor))
-    return f"asetrate={int(round(24000 * pitch_factor))},aresample=48000,atempo={tempo:.4f}"
+    return f"asetrate={int(round(24000 * pitch_factor))},aresample=44100,atempo={tempo:.4f}"
 
 
 async def _generate_edge_mp3_once(
@@ -786,13 +807,13 @@ def generate_edge_fallback(
 
     with _EDGE_PACE_LOCK:
         now = time.monotonic()
-        wait = 0.12 - (now - _LAST_EDGE_REQ_AT)
+        wait = 0.03 - (now - _LAST_EDGE_REQ_AT)
         if wait > 0:
             time.sleep(wait)
         _LAST_EDGE_REQ_AT = time.monotonic()
 
     try:
-        asyncio.run(
+        _run_edge_coro(
             _generate_edge_mp3_once(
                 text,
                 temp_mp3,
@@ -811,9 +832,9 @@ def generate_edge_fallback(
             ffmpeg_cmd.extend(["-af", prosody_af])
         ffmpeg_cmd.extend([
             "-ar",
-            "48000",
+            "44100",
             "-ac",
-            "1",
+            "2",
             output_wav,
         ])
 
@@ -1027,20 +1048,97 @@ def build_atempo_filter(
 # FIT AUDIO TO SUBTITLE SLOT
 # =========================================================
 
+def _fast_pcm_wav_to_44k_stereo(input_file: str, output_file: str) -> tuple[float, float] | None:
+    """Convert uncompressed 16-bit PCM WAV to 44.1kHz stereo WAV in memory without spawning ffmpeg."""
+    if not str(input_file).lower().endswith(".wav"):
+        return None
+    try:
+        with wave.open(str(input_file), "rb") as src:
+            nchannels = src.getnchannels()
+            sampwidth = src.getsampwidth()
+            framerate = src.getframerate()
+            comptype = src.getcomptype()
+            nframes = src.getnframes()
+            if comptype != "NONE" or sampwidth != 2 or framerate <= 0 or nframes <= 0 or nchannels not in (1, 2):
+                return None
+            orig_duration = nframes / float(framerate)
+            partial = str(output_file) + ".partial.wav"
+            if nchannels == 2 and framerate == 44100:
+                shutil.copyfile(str(input_file), partial)
+                os.replace(partial, str(output_file))
+                return orig_duration, orig_duration
+            raw_bytes = src.readframes(nframes)
+        import numpy as np
+
+        samples = np.frombuffer(raw_bytes, dtype="<i2")
+        if samples.size == 0:
+            return None
+        if nchannels == 2:
+            frames = samples.reshape(-1, 2).astype(np.float32)
+        else:
+            frames = samples.astype(np.float32)[:, None]
+
+        if framerate != 44100:
+            out_len = max(1, int(round(frames.shape[0] * (44100.0 / float(framerate)))))
+            x_old = np.linspace(0.0, 1.0, num=frames.shape[0], endpoint=False, dtype=np.float64)
+            x_new = np.linspace(0.0, 1.0, num=out_len, endpoint=False, dtype=np.float64)
+            if frames.shape[1] == 1:
+                col = np.interp(x_new, x_old, frames[:, 0])
+                stereo = np.column_stack((col, col))
+            else:
+                left = np.interp(x_new, x_old, frames[:, 0])
+                right = np.interp(x_new, x_old, frames[:, 1])
+                stereo = np.column_stack((left, right))
+        else:
+            stereo = np.repeat(frames, 2, axis=1) if frames.shape[1] == 1 else frames
+
+        pcm_out = np.clip(np.rint(stereo), -32768, 32767).astype("<i2")
+        partial = str(output_file) + ".partial.wav"
+        with wave.open(partial, "wb") as dst:
+            dst.setnchannels(2)
+            dst.setsampwidth(2)
+            dst.setframerate(44100)
+            dst.writeframes(pcm_out.tobytes())
+        os.replace(partial, str(output_file))
+        final_dur = pcm_out.shape[0] / 44100.0
+        return orig_duration, final_dur
+    except Exception:
+        try:
+            os.remove(str(output_file) + ".partial.wav")
+        except OSError:
+            pass
+        return None
+
+
 def fit_audio(
     input_file,
     output_file,
     target_duration_seconds
 ):
+    # Toc do CO DINH.
+    # Khong tu tang toc de ep cau dai vao subtitle slot.
+    speed_ratio = BASE_TTS_SPEED
+
+    if abs(speed_ratio - 1.0) <= 0.005:
+        fast_result = _fast_pcm_wav_to_44k_stereo(str(input_file), str(output_file))
+        if fast_result is not None:
+            original_duration, final_duration = fast_result
+            overflow_seconds = max(
+                0.0,
+                final_duration - max(float(target_duration_seconds), 0.0),
+            )
+            return {
+                "original_duration": original_duration,
+                "final_duration": final_duration,
+                "speed": speed_ratio,
+                "overflow_seconds": overflow_seconds,
+            }
+
     original_duration = (
         get_audio_duration(
             input_file
         )
     )
-
-    # Toc do CO DINH.
-    # Khong tu tang toc de ep cau dai vao subtitle slot.
-    speed_ratio = BASE_TTS_SPEED
 
     atempo_filter = (
         build_atempo_filter(
@@ -1194,7 +1292,7 @@ def _is_offline_mode():
 
 
 def _is_stability_mode():
-    return str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"} or _is_offline_mode()
+    return str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _edge_fallback_allowed():
@@ -1335,7 +1433,7 @@ def create_tts_clips(
             if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
                 sec_pending.append((line_text, raw_wav))
         if sec_pending:
-            pool = ThreadPoolExecutor(max_workers=min(3, len(sec_pending)))
+            pool = ThreadPoolExecutor(max_workers=min(6, len(sec_pending)))
             try:
                 sec_futures = [
                     pool.submit(generate_tts, item[0], item[1], voice_override=sec_voice)
@@ -1383,7 +1481,7 @@ def create_tts_clips(
                 line_text, line_voice = line_voices[idx]
                 pending_edge.append((line_text, raw_wav, line_voice))
         if pending_edge:
-            pool = ThreadPoolExecutor(max_workers=min(3, len(pending_edge)))
+            pool = ThreadPoolExecutor(max_workers=min(6, len(pending_edge)))
             try:
                 edge_futures = [
                     pool.submit(generate_tts, item[0], item[1], voice_override=item[2])
@@ -1406,6 +1504,7 @@ def create_tts_clips(
         from collections import Counter
         id_counts = Counter(item["id"] for item in subtitles)
         fit_pending = []
+        already_fitted = 0
         for subtitle in subtitles:
             subtitle_id = subtitle["id"]
             if id_counts[subtitle_id] != 1:
@@ -1414,18 +1513,24 @@ def create_tts_clips(
             if not (os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44):
                 continue
             if reuse_fitted and os.path.isfile(fitted_wav) and os.path.getsize(fitted_wav) > 44:
+                already_fitted += 1
                 continue
             fit_pending.append((subtitle_id, raw_wav, fitted_wav, subtitle["duration_ms"] / 1000.0))
         if len(fit_pending) > 1:
-            workers = min(6, max(2, os.cpu_count() or 4), len(fit_pending))
+            workers = min(10, max(4, os.cpu_count() or 6), len(fit_pending))
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = {
                     executor.submit(fit_audio, r_wav, f_wav, tgt_s): sid
                     for sid, r_wav, f_wav, tgt_s in fit_pending
                 }
+                fit_done = already_fitted
                 for future in as_completed(futures):
                     fit_cache[futures[future]] = future.result()
+                    fit_done += 1
+                    if on_progress is not None:
+                        on_progress("clips", fit_done, total)
 
+    verbose_log = total <= 80
     for index, subtitle in enumerate(
         subtitles,
         start=1,
@@ -1435,47 +1540,23 @@ def create_tts_clips(
                 "id"
             ]
         )
+        should_log = verbose_log or index == 1 or index == total or index % 50 == 0
 
-        print(
-            "\n=============================="
-        )
-
-        print(
-            f"TTS {index}/{total} "
-            f"- ID {subtitle_id}"
-        )
-
-        print(
-            f"Provider: "
-            f"{TTS_PROVIDER}"
-        )
-
-        print(
-            f"Voice: {VOICE}"
-        )
-
-        print(
-            subtitle[
-                "text"
-            ]
-        )
+        if should_log:
+            print(f"\n==============================\nTTS {index}/{total} - ID {subtitle_id} ({VOICE})")
 
         raw_wav, fitted_wav = _tts_file_paths(subtitle_id, voice_slug)
 
         raw_existed = os.path.isfile(raw_wav) and os.path.getsize(raw_wav) > 44
         if not raw_existed:
-            print(
-                "Dang tao voice..."
-            )
+            if should_log:
+                print("Dang tao voice...")
             line_text, line_voice = line_voices[index - 1]
             generate_tts(
                 line_text,
                 raw_wav,
                 voice_override=line_voice,
             )
-
-        else:
-            print("Raw TTS da ton tai -> skip")
 
         target_seconds = (
             subtitle[
@@ -1495,37 +1576,17 @@ def create_tts_clips(
                     "speed": BASE_TTS_SPEED,
                     "overflow_seconds": max(0.0, final_duration - max(target_seconds, 0.0)),
                 }
-                print("Fitted TTS da ton tai -> skip FFmpeg")
             except (OSError, subprocess.CalledProcessError, ValueError):
                 fit_info = None
         if fit_info is None:
             fit_info = fit_audio(raw_wav, fitted_wav, target_seconds)
 
-        speed = (
-            fit_info[
-                "speed"
-            ]
-        )
-
-        print(
-            f"Slot: "
-            f"{target_seconds:.2f}s"
-        )
-
-        print(
-            f"TTS: "
-            f"{fit_info['original_duration']:.2f}s"
-        )
-
-        print(
-            f"Final: "
-            f"{fit_info['final_duration']:.2f}s"
-        )
-
-        print(
-            f"Speed: "
-            f"{speed:.2f}x"
-        )
+        speed = fit_info["speed"]
+        if should_log:
+            print(
+                f"Slot: {target_seconds:.2f}s | TTS: {fit_info['original_duration']:.2f}s "
+                f"| Final: {fit_info['final_duration']:.2f}s | Speed: {speed:.2f}x"
+            )
 
         warning = None
 
@@ -1541,11 +1602,8 @@ def create_tts_clips(
                 f"Cau thoai dai hon slot {overflow_seconds:.2f}s. "
                 "Giu nguyen toc do 1.10x, khong tu tang toc."
             )
-
-            print(
-                "CANH BAO: "
-                + warning
-            )
+            if should_log:
+                print("CANH BAO: " + warning)
 
         manifest.append(
             {
@@ -1618,6 +1676,27 @@ def _timeline_manifest_signature(manifest, duration_ms: int, output_suffix: str)
     return hasher.hexdigest()
 
 
+def _read_clip_pcm_44k_stereo(audio_path: str):
+    """Return int16 numpy array of shape (frames, 2) at 44.1kHz stereo."""
+    import numpy as np
+
+    if str(audio_path).lower().endswith(".wav"):
+        try:
+            with wave.open(str(audio_path), "rb") as w:
+                if (w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getcomptype()) == (2, 2, 44100, "NONE"):
+                    nframes = w.getnframes()
+                    if nframes <= 0:
+                        return np.zeros((0, 2), dtype="<i2")
+                    return np.frombuffer(w.readframes(nframes), dtype="<i2").reshape(-1, 2)
+        except (OSError, EOFError, wave.Error, ValueError):
+            pass
+    seg = AudioSegment.from_file(audio_path).set_frame_rate(44100).set_channels(2).set_sample_width(2)
+    raw = seg.raw_data
+    if not raw:
+        return np.zeros((0, 2), dtype="<i2")
+    return np.frombuffer(raw, dtype="<i2").reshape(-1, 2)
+
+
 def build_voice_timeline(
     manifest,
     total_duration_ms,
@@ -1637,8 +1716,10 @@ def build_voice_timeline(
 
     # Overlaying each line onto a full-length AudioSegment copies the entire
     # timeline per line. Assemble 30s windows inside 10-minute resumable
-    # checkpoint blocks so multi-hour/multi-dozen-hour jobs resume cleanly and
-    # use FLAC when >3.8 GB PCM would exceed WAV's 4 GB RIFF limit.
+    # checkpoint blocks using vectorized numpy PCM mixing so multi-hour jobs
+    # finish in seconds and use FLAC when >3.8 GB PCM would exceed WAV's 4 GB limit.
+    import numpy as np
+
     duration_ms = max(0, int(total_duration_ms))
     output_path = Path(OUTPUT_AUDIO)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1682,6 +1763,7 @@ def build_voice_timeline(
         except OSError:
             pass
 
+    last_clip_cache = {"path": None, "pcm": None}
     block_files: list[Path] = []
     block_starts = list(range(0, duration_ms, block_ms)) or [0]
     for block_index, block_start in enumerate(block_starts):
@@ -1717,24 +1799,33 @@ def build_voice_timeline(
                         .set_channels(2)
                         .set_sample_width(2)
                     )
-                    for clip_start, clip_end, audio_path in window_clips[window_index]:
-                        audio = AudioSegment.from_file(audio_path)
-                        audio = audio.set_frame_rate(44100).set_channels(2).set_sample_width(2)
-                        clip_offset = max(0, window_start - clip_start)
-                        clip_limit = min(len(audio), window_end - clip_start)
-                        if clip_limit <= clip_offset:
-                            continue
-                        timeline = timeline.overlay(
-                            audio[clip_offset:clip_limit],
-                            position=max(0, clip_start - window_start),
-                        )
-                    output.writeframes(timeline.raw_data)
+                    clips_in_window = window_clips[window_index]
+                    if not clips_in_window:
+                        output.writeframes(timeline.raw_data)
+                    else:
+                        win_frames = len(timeline.raw_data) // 4
+                        mix = np.zeros((win_frames, 2), dtype=np.int32)
+                        for clip_start, clip_end, audio_path in clips_in_window:
+                            if last_clip_cache["path"] == audio_path and last_clip_cache["pcm"] is not None:
+                                clip_pcm = last_clip_cache["pcm"]
+                            else:
+                                clip_pcm = _read_clip_pcm_44k_stereo(audio_path)
+                                last_clip_cache["path"] = audio_path
+                                last_clip_cache["pcm"] = clip_pcm
+                            if clip_pcm.shape[0] == 0:
+                                continue
+                            src_offset = max(0, int(round((window_start - clip_start) * 44.1)))
+                            dst_offset = max(0, int(round((clip_start - window_start) * 44.1)))
+                            if src_offset >= clip_pcm.shape[0] or dst_offset >= win_frames:
+                                continue
+                            copy_frames = min(clip_pcm.shape[0] - src_offset, win_frames - dst_offset)
+                            if copy_frames > 0:
+                                mix[dst_offset:dst_offset + copy_frames] += clip_pcm[src_offset:src_offset + copy_frames]
+                        output.writeframes(np.clip(mix, -32768, 32767).astype("<i2").tobytes())
                     if on_progress is not None:
                         on_progress("timeline", window_end, duration_ms)
-                    print(
-                        f"Voice timeline: {window_end / 1000:.0f}/"
-                        f"{duration_ms / 1000:.0f}s"
-                    )
+                    if window_index == first_w or window_end >= block_end:
+                        print(f"Voice timeline: {window_end / 1000:.0f}/{duration_ms / 1000:.0f}s")
             os.replace(block_tmp, block_path)
             block_files.append(block_path)
             gc.collect()

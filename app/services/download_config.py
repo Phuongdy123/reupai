@@ -19,20 +19,17 @@ def _bounded_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
 
 
 def is_stability_mode() -> bool:
-    return (
-        os.getenv("REUP_STABILITY_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
-        or os.getenv("REUP_OFFLINE_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
-    )
+    return os.getenv("REUP_STABILITY_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ytdlp_performance_args() -> list[str]:
-    """Return conservative yt-dlp speed options with an optional chunk override."""
+    """Return fast yt-dlp fragment options with an optional chunk override."""
     fragments = (
         1
         if is_stability_mode()
         else _bounded_int(
             "REUP_YTDLP_CONCURRENT_FRAGMENTS",
-            2,
+            4,
             minimum=1,
             maximum=8,
         )

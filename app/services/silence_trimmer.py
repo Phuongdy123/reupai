@@ -52,6 +52,8 @@ def trim_video_silence(
     detect = subprocess.run(
         [
             ffmpeg,
+            "-nostdin",
+            "-vn",
             "-i", str(source_video),
             "-af", f"silencedetect=noise={noise_db}:d={float(min_silence_duration):.2f}",
             "-f", "null",
@@ -106,19 +108,29 @@ def trim_video_silence(
         concat_inputs.append(f"[v{idx}][a{idx}]")
     filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(keep)}:v=1:a=1[vout][aout]")
 
+    use_nvenc = False
+    try:
+        from services.final_renderer import ffmpeg_has_nvenc
+        use_nvenc = bool(ffmpeg_has_nvenc())
+    except Exception:
+        use_nvenc = False
+    video_codec_args = (
+        ["-c:v", "h264_nvenc", "-preset", "p1", "-rc", "constqp", "-qp", "23", "-pix_fmt", "yuv420p"]
+        if use_nvenc
+        else ["-c:v", "libx264", "-preset", "superfast", "-crf", "20", "-pix_fmt", "yuv420p"]
+    )
+
     script_file = output_video.with_suffix(".silence_filter.txt")
     script_file.write_text(";\n".join(filter_parts), encoding="utf-8")
     try:
         subprocess.run(
             [
-                ffmpeg, "-y",
+                ffmpeg, "-nostdin", "-y",
                 "-i", str(source_video),
                 "-filter_complex_script", str(script_file),
                 "-map", "[vout]",
                 "-map", "[aout]",
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-crf", "18",
+                *video_codec_args,
                 "-c:a", "aac",
                 "-b:a", "192k",
                 str(output_video),

@@ -6246,9 +6246,8 @@ def build_video_filter(
 
     # 1) Blur / Erase subtitle Trung goc
     if layout.get("blur_enabled", True) and width > 0 and height > 0:
-        if erase_mode == "inpaint":
-            # Pre-pass inpainter already removed subtitle strokes cleanly
-            parts.append(f"[{input_stream}]format=yuv420p[clean_sub]")
+        if erase_mode == "inpaint" and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
+            parts.append(f"[{input_stream}]format=yuv420p,{dl},unsharp=3:3:0.35:3:3:0.0[clean_sub]")
             current = "clean_sub"
         elif erase_mode == "delogo" and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
             parts.append(f"[{input_stream}]format=yuv420p,{dl}[clean_sub]")
@@ -6298,7 +6297,7 @@ def build_video_filter(
             current = out_label
 
     # 2a) Blur / Erase secondary subtitle region (e.g. top-screen Chinese captions)
-    if SECONDARY_SUB_BLUR and isinstance(SECONDARY_SUB_REGION, dict) and erase_mode != "inpaint":
+    if SECONDARY_SUB_BLUR and isinstance(SECONDARY_SUB_REGION, dict):
         try:
             sbx = float(SECONDARY_SUB_REGION.get("x", 0))
             sby = float(SECONDARY_SUB_REGION.get("y", 0))
@@ -6316,7 +6315,7 @@ def build_video_filter(
         except (TypeError, ValueError):
             sbx_i = sby_i = sbw_i = sbh_i = 0
         if sbw_i > 2 and sbh_i > 2:
-            if erase_mode == "delogo" and (dl := _delogo_expr(sbx_i, sby_i, sbw_i, sbh_i, video_width, video_height)):
+            if erase_mode in ("delogo", "inpaint") and (dl := _delogo_expr(sbx_i, sby_i, sbw_i, sbh_i, video_width, video_height)):
                 parts.append(f"[{current}]{dl}[sec_sub_out]")
                 current = "sec_sub_out"
             else:
@@ -6329,7 +6328,7 @@ def build_video_filter(
                 ])
                 current = "sec_sub_out"
 
-    # 2b) Additional blur-only intervals selected in the web editor.
+    # 2b) Additional blur/delogo intervals selected in the web editor.
     for interval_index, interval in enumerate(BLUR_INTERVALS or [], start=1):
         try:
             start = max(0.0, float(interval.get("start", 0)))
@@ -6344,10 +6343,14 @@ def build_video_filter(
         bh = min(bh, video_height - by)
         if end <= start or bw <= 0 or bh <= 0:
             continue
+        out_label = f"interval_out_{interval_index}"
+        if erase_mode in ("delogo", "inpaint") and start <= 0.05 and end >= 86000 and (dl := _delogo_expr(bx, by, bw, bh, video_width, video_height)):
+            parts.append(f"[{current}]{dl}[{out_label}]")
+            current = out_label
+            continue
         src_label = f"interval_src_{interval_index}"
         crop_label = f"interval_crop_{interval_index}"
         blur_label = f"interval_blur_{interval_index}"
-        out_label = f"interval_out_{interval_index}"
         parts.extend([
             f"[{current}]split=2[{src_label}][{crop_label}]",
             f"[{crop_label}]crop={bw}:{bh}:{bx}:{by},"
@@ -7173,10 +7176,7 @@ def run_ffmpeg_with_fallback(
 
 
 def _is_stability_mode():
-    return (
-        str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
-        or str(os.getenv("REUP_OFFLINE_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
-    )
+    return str(os.getenv("REUP_STABILITY_MODE", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _probe_media_duration(path):
@@ -7491,7 +7491,7 @@ def _render_segmented_long_video(
             else:
                 filter_complex = seg_video_filter
 
-            cmd.extend(["-filter_complex", filter_complex, "-map", "[vout]"])
+            cmd.extend(["-filter_threads", "0", "-filter_complex", filter_complex, "-map", "[vout]"])
             if seg_use_voice:
                 cmd.extend(["-map", "[aout]"])
             elif source_has_audio:
@@ -7510,7 +7510,7 @@ def _render_segmented_long_video(
                     "-pix_fmt", "yuv420p",
                 ])
             else:
-                cmd.extend(["-c:v", "libx264", "-preset", "veryfast", "-crf", "19", "-pix_fmt", "yuv420p"])
+                cmd.extend(["-c:v", "libx264", "-preset", "superfast", "-crf", "21", "-pix_fmt", "yuv420p"])
                 if _is_stability_mode():
                     cmd.extend(["-threads", "4"])
 
@@ -8061,13 +8061,9 @@ def render_final(region):
         filter_complex = video_filter
 
     command.extend([
-
-
-
+        "-filter_threads",
+        "0",
         "-filter_complex",
-
-
-
         filter_complex,
 
 

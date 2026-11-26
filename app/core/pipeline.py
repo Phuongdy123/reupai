@@ -1078,21 +1078,34 @@ def build_ytdlp_command(
         "30",
     )
 
+    # yt-dlp's BiliBiliIE only recognizes /video/BV... without locale prefixes
+    # such as /vi/ or /zh-Hans/, so strip only the locale prefix for yt-dlp.
+    ytdlp_url = re.sub(
+        r"^(https?://(?:www\.|m\.)?bilibili\.com)/[a-z]{2}(?:-[a-z]{2,4})?(?:-[a-z]{2})?(/video/(?:BV[0-9A-Za-z]{10}|av\d+))",
+        r"\1\2",
+        str(url),
+        flags=re.IGNORECASE,
+    )
+    lower_url = ytdlp_url.lower()
+    is_bilibili = "bilibili.com" in lower_url or "b23.tv" in lower_url
+
     # Bilibili can advertise premium 1080p formats to anonymous users, then
-    # reject the actual transfer.  This pipeline only needs a stable source
-    # for subtitle/voice processing, so consistently request an accessible
-    # 720p-or-lower stream and keep resilient retry sleep/access flags.
-    command.extend(["--concurrent-fragments", "1"])
+    # reject concurrent fragment bursts. Keep 1 fragment on Bilibili while
+    # allowing parallel fragment downloads on all other platforms.
     perf_args = ytdlp_performance_args()
-    skip_next = False
-    for token in perf_args:
-        if skip_next:
-            skip_next = False
-            continue
-        if token == "--concurrent-fragments":
-            skip_next = True
-            continue
-        command.append(token)
+    if is_bilibili:
+        command.extend(["--concurrent-fragments", "1"])
+        skip_next = False
+        for token in perf_args:
+            if skip_next:
+                skip_next = False
+                continue
+            if token == "--concurrent-fragments":
+                skip_next = True
+                continue
+            command.append(token)
+    else:
+        command.extend(perf_args)
 
     if use_browser_cookies:
 
@@ -1103,15 +1116,6 @@ def build_ytdlp_command(
                 "chrome",
             ),
         ])
-
-    # yt-dlp's BiliBiliIE only recognizes /video/BV... without locale prefixes
-    # such as /vi/ or /zh-Hans/, so strip only the locale prefix for yt-dlp.
-    ytdlp_url = re.sub(
-        r"^(https?://(?:www\.|m\.)?bilibili\.com)/[a-z]{2}(?:-[a-z]{2,4})?(?:-[a-z]{2})?(/video/(?:BV[0-9A-Za-z]{10}|av\d+))",
-        r"\1\2",
-        str(url),
-        flags=re.IGNORECASE,
-    )
 
     command.extend([
         "-f",
@@ -1591,6 +1595,8 @@ def extract_audio(source_video: Path, audio_path: Path, force=False):
             [
                 "ffmpeg",
                 "-y",
+                "-threads",
+                "0",
                 "-i",
                 rel(source_video),
                 "-vn",
@@ -3885,8 +3891,13 @@ def pipeline(
                 chinese_srt.write_text("", encoding="utf-8")
                 vietnamese_srt.write_text("", encoding="utf-8")
 
-            # Auto OCR Gap-Filler: catch burned-in subtitles that Whisper missed in silent/music gaps
-            if config.get("source_subtitle_mode", "auto") != "none":
+            # Auto OCR Fallback / Gap-Filler:
+            # Only auto-scan burned-in subtitles when Whisper found NO speech at all
+            # (e.g. BGM-only videos with hardcoded captions) OR when ocr_gap_fill is
+            # explicitly enabled. Scanning 14,000+ frames on normal speech videos just
+            # because of a 3.5s dramatic pause wasted 30-60 minutes of CPU time.
+            ocr_gap_fill_requested = bool(config.get("ocr_gap_fill", False))
+            if config.get("source_subtitle_mode", "auto") != "none" and (no_speech or ocr_gap_fill_requested):
                 try:
                     from services import transcriber as _tr_gap
                     from services.subtitle_ocr import extract_subtitle_srt
@@ -3896,13 +3907,13 @@ def pipeline(
                     vid_sec = (vid_ms / 1000.0) if vid_ms else (existing_segs[-1]["end"] + 5.0 if existing_segs else 0.0)
                     has_large_gap = no_speech or not existing_segs
                     if not has_large_gap and existing_segs:
-                        if existing_segs[0]["start"] > 3.5:
+                        if existing_segs[0]["start"] > 5.0:
                             has_large_gap = True
-                        elif vid_sec > 0 and (vid_sec - existing_segs[-1]["end"]) > 3.5:
+                        elif vid_sec > 0 and (vid_sec - existing_segs[-1]["end"]) > 5.0:
                             has_large_gap = True
                         else:
                             for i in range(1, len(existing_segs)):
-                                if (existing_segs[i]["start"] - existing_segs[i - 1]["end"]) > 3.5:
+                                if (existing_segs[i]["start"] - existing_segs[i - 1]["end"]) > 5.0:
                                     has_large_gap = True
                                     break
                     if has_large_gap:
@@ -3911,7 +3922,7 @@ def pipeline(
                             source_video,
                             gap_ocr_srt,
                             language=config.get("ocr_language", "auto"),
-                            fps=max(1.5, float(config.get("ocr_fps", 2.0))),
+                            fps=max(1.0, float(config.get("ocr_fps", 1.5))),
                             min_confidence=min(0.38, float(config.get("ocr_min_confidence", 0.45))),
                             parallelism=int(config.get("ocr_parallelism", 2)),
                             use_gpu=bool(config.get("ocr_use_gpu", False)),
@@ -4373,73 +4384,11 @@ def pipeline(
                 mode=mode,
             )
 
+        # Single-pass render: final_renderer.build_video_filter now executes
+        # 'inpaint' (delogo + unsharp detail recovery) directly inside the main
+        # GPU/CPU render pass without writing a multi-GB intermediate MP4 first.
         render_source = source_video
         effective_blur_mode = str(config.get("blur_mode") or "blur").strip().lower() or "blur"
-        if effective_blur_mode == "inpaint":
-            try:
-                from services import final_renderer as _fr_norm
-                from services.video_inpainter import inpaint_video_regions
-                norm_layout = _fr_norm.normalize_region(region)
-                vid_info = norm_layout.get("video") or {}
-                vw = int(vid_info.get("width") or 1280)
-                vh = int(vid_info.get("height") or 720)
-                def _to_px_box(raw_box):
-                    if not isinstance(raw_box, dict):
-                        return None
-                    try:
-                        bx = float(raw_box.get("x", 0))
-                        by = float(raw_box.get("y", 0))
-                        bw = float(raw_box.get("width", 0))
-                        bh = float(raw_box.get("height", 0))
-                    except (TypeError, ValueError):
-                        return None
-                    if 0 <= bx <= 1.0 and 0 <= by <= 1.0 and 0 < bw <= 1.0 and 0 < bh <= 1.0:
-                        bx *= vw
-                        by *= vh
-                        bw *= vw
-                        bh *= vh
-                    if bw <= 2 or bh <= 2:
-                        return None
-                    return {"x": int(round(bx)), "y": int(round(by)), "width": int(round(bw)), "height": int(round(bh))}
-
-                inpaint_boxes = []
-                blur_rect = norm_layout.get("blur")
-                if norm_layout.get("blur_enabled", True) and isinstance(blur_rect, dict):
-                    px_blur = _to_px_box(blur_rect)
-                    if px_blur:
-                        inpaint_boxes.append(px_blur)
-                for extra_key, enabled in (
-                    ("custom_blur_region", True),
-                    ("secondary_sub_region", bool(config.get("secondary_sub_blur", True))),
-                ):
-                    if enabled and isinstance(config.get(extra_key), dict):
-                        px_extra = _to_px_box(config[extra_key])
-                        if px_extra:
-                            inpaint_boxes.append(px_extra)
-                if inpaint_boxes:
-                    write_progress(
-                        job_dir,
-                        stage="render",
-                        percent=80,
-                        status="running",
-                        message="Đang xóa sạch chữ/logo gốc (Text-Aware Inpaint) không làm mờ…",
-                        mode=mode,
-                    )
-                    inpainted_out = job_dir / "inpainted_source.mp4"
-                    render_source = inpaint_video_regions(
-                        source_video,
-                        inpainted_out,
-                        inpaint_boxes,
-                        video_width=vw,
-                        video_height=vh,
-                        text_aware=False,
-                        preview_seconds=preview_seconds,
-                    )
-                else:
-                    effective_blur_mode = "delogo"
-            except Exception as inpaint_err:
-                print(f"[INPAINT FALLBACK] {inpaint_err}")
-                effective_blur_mode = "delogo"
 
         effective_original_volume = original_volume
         effective_music_path = config.get("music_path")

@@ -163,8 +163,34 @@ def _whisper_model_class():
     return WhisperModel
 
 
+@lru_cache(maxsize=1)
+def _register_cuda_dll_dirs() -> None:
+    """Register bundled or Python-installed NVIDIA CUDA DLL folders on Windows."""
+    if os.name != "nt" or not hasattr(os, "add_dll_directory"):
+        return
+    candidates: list[Path] = []
+    cuda_env = os.getenv("CUDA_PATH", "").strip()
+    if cuda_env:
+        candidates.append(Path(cuda_env) / "bin")
+    for base in {Path(sys.prefix) / "Lib" / "site-packages", Path(__file__).resolve().parents[2] / "venv" / "Lib" / "site-packages"}:
+        nvidia_root = base / "nvidia"
+        if nvidia_root.is_dir():
+            candidates.extend(p / "bin" for p in nvidia_root.iterdir() if (p / "bin").is_dir())
+        ct2_dir = base / "ctranslate2"
+        if ct2_dir.is_dir():
+            candidates.append(ct2_dir)
+    for folder in candidates:
+        try:
+            if folder.is_dir():
+                os.add_dll_directory(str(folder))
+                os.environ["PATH"] = str(folder) + os.pathsep + os.environ.get("PATH", "")
+        except OSError:
+            pass
+
+
 def _create_model():
     """Prefer CUDA when its libraries are usable, then safely fall back to CPU."""
+    _register_cuda_dll_dirs()
     WhisperModel = _whisper_model_class()
     if _CUDA_DISABLED_FOR_SESSION:
         return _cpu_model()
@@ -172,7 +198,7 @@ def _create_model():
         "device": "cpu",
         "compute_type": "int8",
         "cpu_threads": _cpu_threads(),
-        "num_workers": 1,
+        "num_workers": 2 if (_cpu_threads() >= 6) else 1,
     }
     if WHISPER_DEVICE in {"cpu", "none"}:
         print(f"Whisper: {WHISPER_MODEL} / CPU / {_cpu_threads()} threads")
@@ -184,7 +210,7 @@ def _create_model():
                 WHISPER_MODEL,
                 device="cuda",
                 compute_type="float16",
-                num_workers=1,
+                num_workers=2,
             )
             print(f"Whisper: {WHISPER_MODEL} / NVIDIA CUDA / float16")
             return model
@@ -238,6 +264,8 @@ def _run_transcription(
     options = {
         "beam_size": WHISPER_BEAM_SIZE,
         "best_of": 1,
+        "temperature": 0.0,
+        "without_timestamps": False,
         "condition_on_previous_text": False,
         "vad_filter": True,
         "vad_parameters": {

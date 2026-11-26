@@ -338,6 +338,107 @@ class V060RegressionTests(unittest.TestCase):
         with patch.object(tts, "_edge_tts_online_available", return_value=False):
             self.assertEqual(tts.resolve_auto_voice("auto"), "Trúc Ly")
 
+    def test_fit_audio_fast_pcm_bypass_skips_ffmpeg_for_1x_mono_and_stereo_wavs(self):
+        import wave
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mono_24k = root / "vieneu_raw.wav"
+            out_from_mono = root / "0001.wav"
+            tone_24k = (np.sin(np.linspace(0, 50, 24000)) * 12000).astype("<i2")
+            with wave.open(str(mono_24k), "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(24000)
+                w.writeframes(tone_24k.tobytes())
+
+            stereo_44k = root / "edge_raw.wav"
+            out_from_stereo = root / "0002.wav"
+            tone_44k = np.column_stack((tone_24k[:22050], tone_24k[:22050])).astype("<i2")
+            with wave.open(str(stereo_44k), "wb") as w:
+                w.setnchannels(2)
+                w.setsampwidth(2)
+                w.setframerate(44100)
+                w.writeframes(tone_44k.tobytes())
+
+            prev_speed = tts.BASE_TTS_SPEED
+            try:
+                tts.BASE_TTS_SPEED = 1.0
+                with patch.object(tts.subprocess, "run", side_effect=AssertionError("ffmpeg should not spawn at 1.0x")):
+                    info_mono = tts.fit_audio(str(mono_24k), str(out_from_mono), 1.5)
+                    info_stereo = tts.fit_audio(str(stereo_44k), str(out_from_stereo), 1.0)
+                self.assertAlmostEqual(info_mono["final_duration"], 1.0, delta=0.02)
+                self.assertAlmostEqual(info_stereo["final_duration"], 0.5, delta=0.01)
+                with wave.open(str(out_from_mono), "rb") as chk:
+                    self.assertEqual((chk.getnchannels(), chk.getsampwidth(), chk.getframerate()), (2, 2, 44100))
+            finally:
+                tts.BASE_TTS_SPEED = prev_speed
+
+    def test_vectorized_voice_timeline_mixes_pcm_clips_accurately(self):
+        import wave
+        import numpy as np
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            clip1 = root / "c1.wav"
+            clip2 = root / "c2.wav"
+            samples = np.full((22050, 2), 4000, dtype="<i2")  # 0.5s constant amplitude
+            for p in (clip1, clip2):
+                with wave.open(str(p), "wb") as w:
+                    w.setnchannels(2)
+                    w.setsampwidth(2)
+                    w.setframerate(44100)
+                    w.writeframes(samples.tobytes())
+
+            out_wav = root / "timeline.wav"
+            prev_out = tts.OUTPUT_AUDIO
+            try:
+                tts.OUTPUT_AUDIO = str(out_wav)
+                manifest = [
+                    {"audio_file": str(clip1), "start_ms": 200, "final_audio_duration": 0.5},
+                    {"audio_file": str(clip2), "start_ms": 400, "final_audio_duration": 0.5},
+                ]
+                built = Path(tts.build_voice_timeline(manifest, 2000))
+                self.assertTrue(built.is_file())
+                with wave.open(str(built), "rb") as w:
+                    self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (2, 2, 44100))
+                    pcm = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").reshape(-1, 2)
+                # Overlap region around 0.5s (frame ~22050) should sum clip1 + clip2 = 8000
+                mid_frame = int(0.5 * 44100)
+                self.assertEqual(int(pcm[mid_frame, 0]), 8000)
+            finally:
+                tts.OUTPUT_AUDIO = prev_out
+
+    def test_single_pass_inpaint_filter_and_non_bilibili_parallel_fragments(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ass = Path(tmp) / "sub.ass"
+            ass.write_text("[Events]\n", encoding="utf-8")
+            region = {
+                "video": {"width": 1280, "height": 720},
+                "blur": {"x": 80, "y": 600, "width": 1120, "height": 90},
+                "blur_enabled": True,
+                "subtitle": {"x": 640, "y": 645, "max_width": 1000},
+            }
+            saved_ass = renderer.ASS_PATH
+            saved_mode = renderer.BLUR_MODE
+            try:
+                renderer.ASS_PATH = str(ass)
+                renderer.BLUR_MODE = "inpaint"
+                vf = renderer.build_video_filter(region)
+                self.assertIn("delogo=", vf)
+                self.assertIn("unsharp=3:3:0.35:3:3:0.0", vf)
+            finally:
+                renderer.ASS_PATH = saved_ass
+                renderer.BLUR_MODE = saved_mode
+
+        yt_cmd = pipeline.build_ytdlp_command("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "out.%(ext)s")
+        bili_cmd = pipeline.build_ytdlp_command("https://www.bilibili.com/video/BV1fwwJz6Ewg/", "out.%(ext)s")
+        yt_idx = yt_cmd.index("--concurrent-fragments")
+        bili_idx = bili_cmd.index("--concurrent-fragments")
+        self.assertEqual(bili_cmd[bili_idx + 1], "1")
+        self.assertGreaterEqual(int(yt_cmd[yt_idx + 1]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

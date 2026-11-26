@@ -91,7 +91,7 @@ def _is_offline_mode() -> bool:
 
 
 def _is_stability_mode() -> bool:
-    return _env_flag("REUP_STABILITY_MODE", False) or _is_offline_mode()
+    return _env_flag("REUP_STABILITY_MODE", False)
 
 
 def _local_fallback_active() -> bool:
@@ -379,8 +379,11 @@ def _mark_model_exhausted(model_name: str, ttl: int = MODEL_EXHAUSTED_TTL_SECOND
         _MODEL_COOLDOWN_UNTIL[model_name] = time.monotonic() + ttl
 
 
-# 20 subtitle / request de giam so request Gemini.
-BATCH_SIZE = 20
+# 40 subtitle / request de giam 50% so vong mang Gemini tren video dai ma van luu checkpoint day du.
+BATCH_SIZE = max(
+    10,
+    int(os.getenv("REUP_TRANSLATION_BATCH_SIZE", "40") or "40"),
+)
 
 MAX_RETRIES = 2
 
@@ -424,7 +427,7 @@ LOCAL_BATCH_SIZE = max(
     int(
         os.getenv(
             "LOCAL_TRANSLATION_BATCH_SIZE",
-            "4",
+            "8",
         )
     ),
 )
@@ -1084,13 +1087,19 @@ def translate_batch_local(
             in encoded.items()
         }
 
+        if device == "cpu":
+            try:
+                torch.set_num_threads(min(8, max(2, (os.cpu_count() or 4) - 1)))
+            except Exception:
+                pass
         with torch.inference_mode():
             generated = model.generate(
                 **encoded,
                 forced_bos_token_id=
                     forced_bos_token_id,
-                max_new_tokens=192,
-                num_beams=2,
+                max_new_tokens=160,
+                num_beams=1,
+                do_sample=False,
             )
 
         translated_texts = (
@@ -1759,7 +1768,7 @@ def translate_all(
         if batch_number % 20 == 0:
             gc.collect()
         time.sleep(
-            0.35
+            0.08
         )
 
     # Second-pass guard: retry any empty line or line still containing CJK characters
