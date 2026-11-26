@@ -3567,9 +3567,18 @@ def pipeline(
 
 
 
+    _sleep_guard_active = False
+    if os.name == "nt":
+        try:
+            import ctypes as _win_ctypes
+            # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x00000001)
+            # Prevents Windows from suspending CPU/GPU mid-job while still allowing the display to dim/sleep.
+            _win_ctypes.windll.kernel32.SetThreadExecutionState(0x80000001)
+            _sleep_guard_active = True
+        except Exception:
+            _sleep_guard_active = False
+
     try:
-
-
 
         offline_mode = bool(config.get("offline_mode"))
         boost_gpu = bool(config.get("boost_gpu"))
@@ -3952,6 +3961,11 @@ def pipeline(
 
         transcription_signature_path.write_text(transcription_signature, encoding="utf-8")
         _record_stage_checkpoint(job_dir, "transcript", {"chinese_srt": rel(chinese_srt), "no_speech": no_speech})
+        try:
+            from services import transcriber as _tr_cleanup
+            _tr_cleanup.release_models()
+        except Exception:
+            pass
 
 
 
@@ -4225,6 +4239,12 @@ def pipeline(
             write_cache_fingerprint(tts_fingerprint_path, tts_fingerprint)
             tts_in_progress_fingerprint_path.unlink(missing_ok=True)
             _record_stage_checkpoint(job_dir, "tts", {"voice": rel(voice_path)})
+            try:
+                import gc as _tts_gc
+                tts_module._close_vieneu()
+                _tts_gc.collect()
+            except Exception:
+                pass
 
 
 
@@ -4791,6 +4811,12 @@ def pipeline(
 
         raise
     finally:
+        if locals().get("_sleep_guard_active"):
+            try:
+                import ctypes as _win_ctypes
+                _win_ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
+            except Exception:
+                pass
         for _k, _old in locals().get("_saved_env", {}).items():
             if _old is None:
                 os.environ.pop(_k, None)

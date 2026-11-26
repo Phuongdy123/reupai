@@ -118,7 +118,7 @@ from services.library_api import (
 from services.windows_distribution import distribution_info
 
 
-ENGINE_VERSION = "0.2.63"
+ENGINE_VERSION = "0.2.64"
 ENGINE_CAPABILITIES = {
     "verified_updates": not distribution_info()["managedUpdates"],
     "store_updates": distribution_info()["channel"] == "msix",
@@ -1441,10 +1441,26 @@ async def subtitle_lines_preview(video_id: str, body: SubtitleOcrPreviewRequest,
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+class _PreviewCancelled(Exception):
+    """Raised internally when a background transcript preview is superseded or abandoned."""
+
+
 def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str, task_id: str):
     from core.pipeline import extract_audio
+    from services import transcriber as _tr_mod
     from services.transcriber import transcribe
     seen_segments: set[tuple] = set()
+
+    def _check_alive():
+        now = time.time()
+        with _transcript_preview_jobs_lock:
+            task = _transcript_preview_jobs.get(task_id)
+            if not task:
+                raise _PreviewCancelled()
+            last_poll = float(task.get("last_polled_at", now) or now)
+        # Stop burning CPU if user closed modal (>45s without poll) or started a real video job.
+        if (now - last_poll) > 45.0 or bool(list_active_jobs()):
+            raise _PreviewCancelled()
 
     def update(**values):
         with _transcript_preview_jobs_lock:
@@ -1453,12 +1469,14 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
                 task.update(values)
 
     def on_progress(processed: float, total: float):
+        _check_alive()
         total = max(0.0, float(total or 0))
         processed = max(0.0, min(float(processed or 0), total)) if total else 0.0
         update(progress=round(processed / total * 100) if total else 0,
                processed_seconds=round(processed, 2), total_seconds=round(total, 2))
 
     def on_segment(line: dict):
+        _check_alive()
         text = str(line.get("text", "")).strip()
         start, end = float(line.get("start", 0)), float(line.get("end", 0))
         if not text or end <= start:
@@ -1474,6 +1492,37 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
     should_unlink = True
     try:
         audio_path.parent.mkdir(parents=True, exist_ok=True)
+        # Fast reuse: if chinese.srt was already produced for this source video, return it in <20ms!
+        existing_srt = audio_path.parent / "chinese.srt"
+        try:
+            if (
+                existing_srt.is_file()
+                and existing_srt.stat().st_size > 16
+                and existing_srt.stat().st_mtime >= source_path.stat().st_mtime
+            ):
+                from services import translator as _srt_reader
+                from services.tts import srt_time_to_ms
+                parsed = _srt_reader.read_srt(str(existing_srt))
+                if parsed:
+                    for item in parsed:
+                        s_sec = srt_time_to_ms(item["start"]) / 1000.0
+                        e_sec = srt_time_to_ms(item["end"]) / 1000.0
+                        txt = str(item.get("text") or "").strip()
+                        if txt and e_sec > s_sec:
+                            with _transcript_preview_jobs_lock:
+                                task = _transcript_preview_jobs.get(task_id)
+                                if task:
+                                    task["lines"].append({"id": len(task["lines"]) + 1, "start": s_sec, "end": e_sec, "text": txt})
+                                    task["line_count"] = len(task["lines"])
+                    if _transcript_preview_jobs.get(task_id, {}).get("lines"):
+                        update(status="complete", phase="complete", progress=100,
+                               message="Đã tải lời thoại có sẵn.", line_count=len(_transcript_preview_jobs[task_id]["lines"]))
+                        should_unlink = False
+                        return
+        except Exception:
+            pass
+
+        _check_alive()
         # Reclaim stale preview WAVs left behind by earlier cancelled/interrupted scans.
         stale_cutoff = time.time() - 600
         for stale in audio_path.parent.glob(".transcript-preview-*.wav"):
@@ -1498,6 +1547,7 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
         if should_unlink:
             update(phase="extracting_audio", message="Đang tách âm thanh từ video…")
             extract_audio(source_path, audio_path, force=True)
+        _check_alive()
         update(phase="recognizing", progress=0, message="Đang nhận diện lời thoại bằng Whisper…")
         lines = transcribe(str(audio_path), language=None if language == "auto" else language,
                            on_progress=on_progress, on_segment=on_segment)
@@ -1507,9 +1557,16 @@ def _transcribe_audio_preview(source_path: Path, audio_path: Path, language: str
                 on_segment(line)
         update(status="complete", phase="complete", progress=100,
                message="Đã nhận diện xong lời thoại.", line_count=len(_transcript_preview_jobs.get(task_id, {}).get("lines", [])))
+    except _PreviewCancelled:
+        with _transcript_preview_jobs_lock:
+            _transcript_preview_jobs.pop(task_id, None)
     finally:
         if should_unlink:
             audio_path.unlink(missing_ok=True)
+        try:
+            _tr_mod.release_models()
+        except Exception:
+            pass
 
 
 def _prune_transcript_preview_jobs():
@@ -1532,11 +1589,13 @@ async def audio_transcript_preview(video_id: str, body: AudioTranscriptPreviewRe
         raise HTTPException(status_code=404, detail="Hãy tải video về máy trước khi quét lời thoại.")
     _prune_transcript_preview_jobs()
     task_id = secrets.token_urlsafe(24)
+    now_ts = time.time()
     with _transcript_preview_jobs_lock:
         _transcript_preview_jobs[task_id] = {
             "task_id": task_id, "video_id": video_id, "status": "processing", "phase": "queued",
             "progress": 0, "processed_seconds": 0, "total_seconds": 0,
-            "lines": [], "line_count": 0, "message": "Đang chuẩn bị nhận diện…", "updated_at": time.time(),
+            "lines": [], "line_count": 0, "message": "Đang chuẩn bị nhận diện…",
+            "updated_at": now_ts, "last_polled_at": now_ts,
         }
     audio_path = job_dir_for(channel, video_id) / f".transcript-preview-{secrets.token_hex(8)}.wav"
     def worker():
@@ -1568,8 +1627,10 @@ async def audio_transcript_preview_status(video_id: str, task_id: str, _: str = 
         task = _transcript_preview_jobs.get(task_id)
         if not task or task.get("video_id") != validate_video_id(video_id):
             raise HTTPException(status_code=404, detail="Phiên nhận diện đã hết hạn. Hãy quét lại lời thoại.")
-        task["updated_at"] = time.time()
-        return {key: value for key, value in task.items() if key != "updated_at"}
+        now_poll = time.time()
+        task["updated_at"] = now_poll
+        task["last_polled_at"] = now_poll
+        return {key: value for key, value in task.items() if key not in {"updated_at", "last_polled_at"}}
 
 
 @app.post("/api/preview/subtitle-translation")

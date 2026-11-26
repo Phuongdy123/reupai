@@ -88,6 +88,13 @@ if not sea_g2p_dictionary.is_file():
     raise SystemExit("Missing sea_g2p.bin required by VieNeu TTS.")
 datas.append((str(sea_g2p_dictionary), "sea_g2p"))
 
+# Bundle NVIDIA cuBLAS 12 runtime DLLs when present so CTranslate2/faster-whisper
+# runs natively on RTX/GTX GPUs out-of-the-box without requiring CUDA Toolkit.
+cublas_bin = ROOT / "venv" / "Lib" / "site-packages" / "nvidia" / "cublas" / "bin"
+if cublas_bin.is_dir():
+    for dll_file in cublas_bin.glob("*.dll"):
+        binaries.append((str(dll_file), "nvidia/cublas/bin"))
+
 for tool in ("ffmpeg", "ffprobe"):
     executable = shutil.which(tool)
     if not executable:

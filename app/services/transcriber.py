@@ -172,7 +172,17 @@ def _register_cuda_dll_dirs() -> None:
     cuda_env = os.getenv("CUDA_PATH", "").strip()
     if cuda_env:
         candidates.append(Path(cuda_env) / "bin")
-    for base in {Path(sys.prefix) / "Lib" / "site-packages", Path(__file__).resolve().parents[2] / "venv" / "Lib" / "site-packages"}:
+    roots = {
+        Path(sys.prefix) / "Lib" / "site-packages",
+        Path(__file__).resolve().parents[2] / "venv" / "Lib" / "site-packages",
+    }
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.add(Path(meipass))
+    exe_internal = Path(sys.executable).resolve().parent / "_internal"
+    if exe_internal.is_dir():
+        roots.add(exe_internal)
+    for base in roots:
         nvidia_root = base / "nvidia"
         if nvidia_root.is_dir():
             candidates.extend(p / "bin" for p in nvidia_root.iterdir() if (p / "bin").is_dir())
@@ -240,6 +250,13 @@ def _cpu_model():
         cpu_threads=_cpu_threads(),
         num_workers=1,
     )
+
+
+def release_models() -> None:
+    """Free cached Whisper CTranslate2 weights after transcription finishes."""
+    _model.cache_clear()
+    _cpu_model.cache_clear()
+    gc.collect()
 
 
 def _is_cuda_runtime_error(error: Exception) -> bool:

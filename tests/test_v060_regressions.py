@@ -427,7 +427,7 @@ class V060RegressionTests(unittest.TestCase):
                 renderer.BLUR_MODE = "inpaint"
                 vf = renderer.build_video_filter(region)
                 self.assertIn("delogo=", vf)
-                self.assertIn("unsharp=3:3:0.35:3:3:0.0", vf)
+                self.assertNotIn("unsharp=", vf)
             finally:
                 renderer.ASS_PATH = saved_ass
                 renderer.BLUR_MODE = saved_mode
@@ -438,6 +438,108 @@ class V060RegressionTests(unittest.TestCase):
         bili_idx = bili_cmd.index("--concurrent-fragments")
         self.assertEqual(bili_cmd[bili_idx + 1], "1")
         self.assertGreaterEqual(int(yt_cmd[yt_idx + 1]), 2)
+
+    def test_parallel_nvenc_segmented_render_seeks_vocal_stem_and_skips_muted_source_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "source.mp4"
+            voice = root / "voice.wav"
+            stem = root / "source_no_vocals.wav"
+            ass = root / "final.ass"
+            output = root / "final_voice.mp4"
+            for f in (video, voice, stem):
+                f.write_bytes(b"m" * 4096)
+            ass.write_text("[Script Info]\nTitle: T\n\n[Events]\n", encoding="utf-8-sig")
+            region = {"video": {"width": 1280, "height": 720}, "blur": {"x": 0, "y": 580, "width": 1280, "height": 80}}
+
+            saved = {
+                "VIDEO_PATH": renderer.VIDEO_PATH,
+                "VOICE_PATH": renderer.VOICE_PATH,
+                "MUSIC_PATH": renderer.MUSIC_PATH,
+                "ORIGINAL_VOLUME": renderer.ORIGINAL_VOLUME,
+                "ASS_PATH": renderer.ASS_PATH,
+                "OUTPUT_PATH": renderer.OUTPUT_PATH,
+            }
+            try:
+                renderer.VIDEO_PATH = str(video)
+                renderer.VOICE_PATH = str(voice)
+                renderer.MUSIC_PATH = str(stem)
+                renderer.ORIGINAL_VOLUME = 0.0
+                renderer.ASS_PATH = str(ass)
+                renderer.OUTPUT_PATH = str(output)
+
+                rendered_cmds = []
+
+                def fake_ffmpeg(cmd, use_voice=False):
+                    rendered_cmds.append(list(cmd))
+                    Path(cmd[-1]).write_bytes(b"seg-data" * 300)
+
+                def fake_concat(cmd, **kwargs):
+                    Path(cmd[-1]).write_bytes(b"merged-data" * 300)
+                    return SimpleNamespace(returncode=0, stderr="")
+
+                with patch.object(renderer, "_probe_has_audio", return_value=True), \
+                     patch.object(renderer, "_segment_video_ok", side_effect=lambda p: Path(p).is_file()), \
+                     patch.object(renderer, "ffmpeg_has_nvenc", return_value=True), \
+                     patch.object(renderer, "run_ffmpeg_with_fallback", side_effect=fake_ffmpeg), \
+                     patch.object(renderer.subprocess, "run", side_effect=fake_concat):
+                    renderer._render_segmented_long_video(
+                        region,
+                        mode="voiceover",
+                        duration_sec=1200.0,
+                        chunk_seconds=600,
+                        use_voice=True,
+                        use_music=True,
+                        use_logo=False,
+                        logo_path=None,
+                        logo_is_prepared=False,
+                        output_path=output,
+                    )
+
+                self.assertEqual(len(rendered_cmds), 2)
+                seg1_cmd = next(c for c in rendered_cmds if "600.000" in c)
+                # Vocal stem must seek to 600s rather than looping from 0s, and muted [0:a] must be skipped
+                self.assertNotIn("-stream_loop", seg1_cmd)
+                fc = seg1_cmd[seg1_cmd.index("-filter_complex") + 1]
+                self.assertNotIn("[0:a]", fc)
+                self.assertIn("amix=inputs=2", fc)
+            finally:
+                for k, v in saved.items():
+                    setattr(renderer, k, v)
+
+    def test_transcript_preview_reuses_existing_chinese_srt_instantly(self):
+        import local_engine
+
+        with tempfile.TemporaryDirectory() as tmp:
+            job_dir = Path(tmp)
+            src = job_dir / "source.mp4"
+            src.write_bytes(b"v" * 2048)
+            srt = job_dir / "chinese.srt"
+            srt.write_text("1\n00:00:01,000 --> 00:00:03,500\n林凡穿越海洋求生\n", encoding="utf-8")
+            task_id = "preview-fast-reuse"
+            now = time.time()
+            with local_engine._transcript_preview_jobs_lock:
+                local_engine._transcript_preview_jobs[task_id] = {
+                    "task_id": task_id,
+                    "video_id": "BV1test",
+                    "status": "processing",
+                    "phase": "queued",
+                    "progress": 0,
+                    "lines": [],
+                    "line_count": 0,
+                    "updated_at": now,
+                    "last_polled_at": now,
+                }
+            try:
+                with patch("services.transcriber.transcribe", side_effect=AssertionError("Should reuse chinese.srt")):
+                    local_engine._transcribe_audio_preview(src, job_dir / ".transcript-preview-1.wav", "auto", task_id)
+                task = local_engine._transcript_preview_jobs[task_id]
+                self.assertEqual(task["status"], "complete")
+                self.assertEqual(task["line_count"], 1)
+                self.assertEqual(task["lines"][0]["text"], "林凡穿越海洋求生")
+            finally:
+                with local_engine._transcript_preview_jobs_lock:
+                    local_engine._transcript_preview_jobs.pop(task_id, None)
 
 
 if __name__ == "__main__":

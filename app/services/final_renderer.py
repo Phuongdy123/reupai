@@ -6207,10 +6207,17 @@ def _anti_reuse_atempo_filter():
     return f"atempo={speed:.4f}"
 
 
+_UNSET = object()
+
+
 def build_video_filter(
     region,
     logo_input_index=None,
     logo_is_prepared=False,
+    *,
+    ass_path_override=None,
+    blur_intervals_override=None,
+    outro_cta_start_override=_UNSET,
 ):
 
     layout = normalize_region(region)
@@ -6225,7 +6232,11 @@ def build_video_filter(
     width = int(blur["width"])
     height = int(blur["height"])
 
-    ass = ffmpeg_filter_path(ASS_PATH)
+    effective_ass_path = ASS_PATH if ass_path_override is None else ass_path_override
+    effective_blur_intervals = BLUR_INTERVALS if blur_intervals_override is None else blur_intervals_override
+    effective_outro_cta_start = OUTRO_CTA_START if outro_cta_start_override is _UNSET else outro_cta_start_override
+
+    ass = ffmpeg_filter_path(effective_ass_path)
     platform = detect_source_platform()
 
     brand_blur_boxes = get_bilibili_text_blur_boxes(
@@ -6246,10 +6257,7 @@ def build_video_filter(
 
     # 1) Blur / Erase subtitle Trung goc
     if layout.get("blur_enabled", True) and width > 0 and height > 0:
-        if erase_mode == "inpaint" and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
-            parts.append(f"[{input_stream}]format=yuv420p,{dl},unsharp=3:3:0.35:3:3:0.0[clean_sub]")
-            current = "clean_sub"
-        elif erase_mode == "delogo" and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
+        if erase_mode in ("delogo", "inpaint") and (dl := _delogo_expr(x, y, width, height, video_width, video_height)):
             parts.append(f"[{input_stream}]format=yuv420p,{dl}[clean_sub]")
             current = "clean_sub"
         else:
@@ -6329,7 +6337,7 @@ def build_video_filter(
                 current = "sec_sub_out"
 
     # 2b) Additional blur/delogo intervals selected in the web editor.
-    for interval_index, interval in enumerate(BLUR_INTERVALS or [], start=1):
+    for interval_index, interval in enumerate(effective_blur_intervals or [], start=1):
         try:
             start = max(0.0, float(interval.get("start", 0)))
             end = max(start, float(interval.get("end", 0)))
@@ -6375,7 +6383,7 @@ def build_video_filter(
                 zx = max(0, (video_width - zw) // 2)
                 zy = max(0, (video_height - zh) // 2)
                 ar_ops.append(f"crop={zw}:{zh}:{zx}:{zy}")
-                ar_ops.append(f"scale={video_width}:{video_height}:flags=lanczos")
+                ar_ops.append(f"scale={video_width}:{video_height}:flags=fast_bilinear")
         if ANTI_REUSE_MIRROR:
             ar_ops.append("hflip")
         if ANTI_REUSE_COLOR:
@@ -6448,9 +6456,9 @@ def build_video_filter(
     if not target_width and min(video_width, video_height) < 720:
         hd_label = "hd_sub_base"
         if video_width >= video_height:
-            parts.append(f"[{current}]scale=-2:720:flags=lanczos,setsar=1[{hd_label}]")
+            parts.append(f"[{current}]scale=-2:720:flags=bicubic,setsar=1[{hd_label}]")
         else:
-            parts.append(f"[{current}]scale=720:-2:flags=lanczos,setsar=1[{hd_label}]")
+            parts.append(f"[{current}]scale=720:-2:flags=bicubic,setsar=1[{hd_label}]")
         current = hd_label
 
     subtitle_label = "subtitled"
@@ -6488,11 +6496,11 @@ def build_video_filter(
         stage_label = "resized"
 
     # Outro CTA runs AFTER output crop/scale so 9:16 vertical Shorts never chop off the banner.
-    if OUTRO_CTA_ENABLED and OUTRO_CTA_START is not None:
+    if OUTRO_CTA_ENABLED and effective_outro_cta_start is not None:
         out_h = int(target_height) if needs_output_resize else int(video_height)
         cta_raw = str(OUTRO_CTA_TEXT or "Đăng ký kênh để xem tập tiếp theo!").strip() or "Đăng ký kênh để xem tập tiếp theo!"
         cta_esc = cta_raw.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-        cta_start = max(0.0, float(OUTRO_CTA_START))
+        cta_start = max(0.0, float(effective_outro_cta_start))
         cta_font = min(32, max(16, int(round(out_h * 0.028))))
         cta_box_h = cta_font + 24
         cta_y = max(20, int(round(out_h * 0.045)))
@@ -7381,163 +7389,207 @@ def _render_segmented_long_video(
             pass
 
     total_chunks = max(1, int(math.ceil(duration_sec / chunk_seconds)))
-    seg_files: list[Path] = []
+    seg_files_by_idx: dict[int, Path] = {}
     source_has_audio = _probe_has_audio(VIDEO_PATH)
+    effective_source_audio = source_has_audio and float(ORIGINAL_VOLUME) > 0.001
     orig_ass_path = ASS_PATH
     orig_blur_intervals = list(BLUR_INTERVALS or [])
     orig_outro_cta_start = OUTRO_CTA_START
+    music_is_aligned_stem = bool(use_music and str(MUSIC_PATH or "").lower().endswith("_no_vocals.wav"))
+    use_nvenc = ffmpeg_has_nvenc()
+    parallel_workers = 2 if (use_nvenc and not _is_stability_mode() and total_chunks >= 2) else 1
 
     print()
     print("==================================")
-    print(f"SEGMENTED RENDER ({total_chunks} DOAN · {chunk_seconds}s/DOAN · CO CHECKPOINT)")
+    print(f"SEGMENTED RENDER ({total_chunks} DOAN · {chunk_seconds}s/DOAN · {parallel_workers} LUONG · CO CHECKPOINT)")
     print("==================================")
 
-    try:
-        for idx in range(total_chunks):
-            seg_start = idx * chunk_seconds
-            seg_end = min(duration_sec, seg_start + chunk_seconds)
-            seg_dur = seg_end - seg_start
-            if seg_dur <= 0.02:
+    progress_lock = None
+    if parallel_workers > 1:
+        import threading as _seg_threading
+        progress_lock = _seg_threading.Lock()
+    completed_seconds = 0.0
+
+    def _report_segment_done(done_dur: float) -> None:
+        nonlocal completed_seconds
+        if progress_lock is not None:
+            with progress_lock:
+                completed_seconds = min(duration_sec, completed_seconds + done_dur)
+                reported = completed_seconds
+        else:
+            completed_seconds = min(duration_sec, completed_seconds + done_dur)
+            reported = completed_seconds
+        if callable(RENDER_PROGRESS_CALLBACK):
+            RENDER_PROGRESS_CALLBACK(reported, duration_sec)
+
+    pending_indices: list[tuple[int, float, float, float, Path, Path]] = []
+    for idx in range(total_chunks):
+        seg_start = idx * chunk_seconds
+        seg_end = min(duration_sec, seg_start + chunk_seconds)
+        seg_dur = seg_end - seg_start
+        if seg_dur <= 0.02:
+            continue
+        seg_path = chunk_dir / f"seg_{idx:05d}.mp4"
+        seg_tmp = chunk_dir / f"seg_{idx:05d}.tmp.mp4"
+        if reuse and _segment_video_ok(seg_path):
+            seg_files_by_idx[idx] = seg_path
+            print(f"[CHECKPOINT] Bo qua doan render {idx + 1}/{total_chunks} ({seg_end / 60:.1f}/{duration_sec / 60:.1f} phut)")
+            _report_segment_done(seg_dur)
+            continue
+        pending_indices.append((idx, seg_start, seg_end, seg_dur, seg_path, seg_tmp))
+
+    def _encode_one_segment(item: tuple[int, float, float, float, Path, Path]) -> tuple[int, Path, float]:
+        idx, seg_start, seg_end, seg_dur, seg_path, seg_tmp = item
+        seg_ass = chunk_dir / f"seg_{idx:05d}.ass"
+        _slice_ass_file(orig_ass_path, seg_ass, seg_start, seg_end)
+
+        shifted_intervals = []
+        for iv in orig_blur_intervals:
+            try:
+                iv_start = float(iv.get("start", 0))
+                iv_end = float(iv.get("end", 0))
+            except (TypeError, ValueError):
                 continue
-
-            seg_path = chunk_dir / f"seg_{idx:05d}.mp4"
-            seg_tmp = chunk_dir / f"seg_{idx:05d}.tmp.mp4"
-            if reuse and _segment_video_ok(seg_path):
-                seg_files.append(seg_path)
-                print(f"[CHECKPOINT] Bo qua doan render {idx + 1}/{total_chunks} ({seg_end / 60:.1f}/{duration_sec / 60:.1f} phut)")
-                if callable(RENDER_PROGRESS_CALLBACK):
-                    RENDER_PROGRESS_CALLBACK(seg_end, duration_sec)
+            if iv_end <= seg_start or iv_start >= seg_end:
                 continue
+            shifted_intervals.append({
+                **iv,
+                "start": max(0.0, iv_start - seg_start),
+                "end": min(seg_dur, iv_end - seg_start),
+            })
 
-            seg_ass = chunk_dir / f"seg_{idx:05d}.ass"
-            _slice_ass_file(orig_ass_path, seg_ass, seg_start, seg_end)
+        if OUTRO_CTA_ENABLED and orig_outro_cta_start is not None:
+            cta_abs = float(orig_outro_cta_start)
+            seg_cta_start = max(0.0, cta_abs - seg_start) if cta_abs < seg_end else None
+        else:
+            seg_cta_start = None
 
-            shifted_intervals = []
-            for item in orig_blur_intervals:
-                try:
-                    iv_start = float(item.get("start", 0))
-                    iv_end = float(item.get("end", 0))
-                except (TypeError, ValueError):
-                    continue
-                if iv_end <= seg_start or iv_start >= seg_end:
-                    continue
-                shifted_intervals.append({
-                    **item,
-                    "start": max(0.0, iv_start - seg_start),
-                    "end": min(seg_dur, iv_end - seg_start),
-                })
+        logo_input_index = ((2 if use_voice else 1) + (1 if use_music else 0)) if use_logo else None
+        seg_video_filter = build_video_filter(
+            region,
+            logo_input_index=logo_input_index,
+            logo_is_prepared=logo_is_prepared,
+            ass_path_override=str(seg_ass),
+            blur_intervals_override=shifted_intervals,
+            outro_cta_start_override=seg_cta_start,
+        )
 
-            ASS_PATH = str(seg_ass)
-            BLUR_INTERVALS = shifted_intervals
-            if OUTRO_CTA_ENABLED and orig_outro_cta_start is not None:
-                cta_abs = float(orig_outro_cta_start)
-                OUTRO_CTA_START = max(0.0, cta_abs - seg_start) if cta_abs < seg_end else None
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
+            "-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VIDEO_PATH),
+        ]
+        if use_voice:
+            cmd.extend(["-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VOICE_PATH)])
+        if use_music:
+            if music_is_aligned_stem:
+                cmd.extend(["-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(MUSIC_PATH)])
             else:
-                OUTRO_CTA_START = None
-
-            logo_input_index = ((2 if use_voice else 1) + (1 if use_music else 0)) if use_logo else None
-            seg_video_filter = build_video_filter(
-                region,
-                logo_input_index=logo_input_index,
-                logo_is_prepared=logo_is_prepared,
-            )
-
-            cmd = [
-                "ffmpeg", "-y", "-hide_banner", "-loglevel", "warning",
-                "-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VIDEO_PATH),
-            ]
-            if use_voice:
-                cmd.extend(["-ss", f"{seg_start:.3f}", "-t", f"{seg_dur:.3f}", "-i", str(VOICE_PATH)])
-            if use_music:
                 cmd.extend(["-stream_loop", "-1", "-i", str(MUSIC_PATH)])
-            if use_logo:
-                cmd.extend(["-loop", "1", "-i", str(logo_path)])
+        if use_logo:
+            cmd.extend(["-loop", "1", "-i", str(logo_path)])
 
-            seg_use_voice = use_voice
-            atempo = _anti_reuse_atempo_filter()
-            atempo_suffix = f",{atempo}" if atempo else ""
-            if seg_use_voice:
-                music_index = 2
-                if source_has_audio:
-                    music_filter = (
-                        f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-                        f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                        if use_music
-                        else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                    )
-                    audio_part = (
-                        f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
-                        f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
-                        + music_filter
-                    )
-                else:
-                    audio_part = (
-                        f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
-                        f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
-                        f"[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                        if use_music
-                        else f"[1:a]volume={float(VOICE_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
-                    )
-                filter_complex = f"{seg_video_filter};{audio_part}"
-            elif use_music:
+        seg_use_voice = use_voice
+        atempo = _anti_reuse_atempo_filter()
+        atempo_suffix = f",{atempo}" if atempo else ""
+        if seg_use_voice:
+            music_index = 2
+            if effective_source_audio:
                 music_filter = (
-                    f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
-                    f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-                    if source_has_audio
-                    else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
+                    f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                    f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                    if use_music
+                    else f"[original][voice]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
                 )
-                filter_complex = f"{seg_video_filter};{music_filter}"
-                seg_use_voice = True
+                audio_part = (
+                    f"[0:a]volume={float(ORIGINAL_VOLUME)}[original];"
+                    f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                    + music_filter
+                )
             else:
-                filter_complex = seg_video_filter
+                audio_part = (
+                    f"[1:a]volume={float(VOICE_VOLUME)}[voice];"
+                    f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
+                    f"[voice][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                    if use_music
+                    else f"[1:a]volume={float(VOICE_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
+                )
+            filter_complex = f"{seg_video_filter};{audio_part}"
+        elif use_music:
+            music_filter = (
+                f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
+                f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
+                if effective_source_audio
+                else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
+            )
+            filter_complex = f"{seg_video_filter};{music_filter}"
+            seg_use_voice = True
+        else:
+            filter_complex = seg_video_filter
 
-            cmd.extend(["-filter_threads", "0", "-filter_complex", filter_complex, "-map", "[vout]"])
-            if seg_use_voice:
-                cmd.extend(["-map", "[aout]"])
-            elif source_has_audio:
-                cmd.extend(["-map", "0:a?"])
-                if atempo:
-                    cmd.extend(["-af", atempo])
+        cmd.extend(["-filter_threads", "0", "-filter_complex", filter_complex, "-map", "[vout]"])
+        if seg_use_voice:
+            cmd.extend(["-map", "[aout]"])
+        elif source_has_audio:
+            cmd.extend(["-map", "0:a?"])
+            if atempo:
+                cmd.extend(["-af", atempo])
 
-            if ffmpeg_has_nvenc():
-                cmd.extend([
-                    "-c:v", "h264_nvenc",
-                    "-preset", NVENC_PRESET,
-                    "-tune", NVENC_TUNE,
-                    "-rc", "constqp",
-                    "-qp", NVENC_QP,
-                    "-bf", NVENC_BFRAMES,
-                    "-pix_fmt", "yuv420p",
-                ])
-            else:
-                cmd.extend(["-c:v", "libx264", "-preset", "superfast", "-crf", "21", "-pix_fmt", "yuv420p"])
-                if _is_stability_mode():
-                    cmd.extend(["-threads", "4"])
-
-            if seg_use_voice or source_has_audio:
-                cmd.extend(["-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2"])
-
-            seg_out_dur = seg_dur / _anti_reuse_speed_factor()
+        if use_nvenc:
             cmd.extend([
-                "-t", f"{seg_out_dur:.3f}",
-                "-video_track_timescale", "90000",
-                str(seg_tmp),
+                "-c:v", "h264_nvenc",
+                "-preset", NVENC_PRESET,
+                "-tune", NVENC_TUNE,
+                "-rc", "constqp",
+                "-qp", NVENC_QP,
+                "-bf", NVENC_BFRAMES,
+                "-pix_fmt", "yuv420p",
             ])
-            print(f"\n[RENDER SEGMENT {idx + 1}/{total_chunks}] {seg_start / 60:.1f} -> {seg_end / 60:.1f} phut")
-            seg_tmp.unlink(missing_ok=True)
-            run_ffmpeg_with_fallback(cmd, use_voice=seg_use_voice)
-            if not _segment_video_ok(seg_tmp):
-                raise RuntimeError(f"Doan render {idx + 1}/{total_chunks} bi hong hoac rong.")
-            os.replace(seg_tmp, seg_path)
-            seg_files.append(seg_path)
-            seg_ass.unlink(missing_ok=True)
+        else:
+            cmd.extend(["-c:v", "libx264", "-preset", "superfast", "-crf", "21", "-pix_fmt", "yuv420p"])
+            if _is_stability_mode():
+                cmd.extend(["-threads", "4"])
+
+        if seg_use_voice or source_has_audio:
+            cmd.extend(["-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2"])
+
+        seg_out_dur = seg_dur / _anti_reuse_speed_factor()
+        cmd.extend([
+            "-t", f"{seg_out_dur:.3f}",
+            "-video_track_timescale", "90000",
+            str(seg_tmp),
+        ])
+        print(f"\n[RENDER SEGMENT {idx + 1}/{total_chunks}] {seg_start / 60:.1f} -> {seg_end / 60:.1f} phut")
+        seg_tmp.unlink(missing_ok=True)
+        run_ffmpeg_with_fallback(cmd, use_voice=seg_use_voice)
+        if not _segment_video_ok(seg_tmp):
+            raise RuntimeError(f"Doan render {idx + 1}/{total_chunks} bi hong hoac rong.")
+        os.replace(seg_tmp, seg_path)
+        seg_ass.unlink(missing_ok=True)
+        return idx, seg_path, seg_dur
+
+    if parallel_workers > 1 and len(pending_indices) >= 2:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        pool = ThreadPoolExecutor(max_workers=parallel_workers)
+        try:
+            futs = {pool.submit(_encode_one_segment, item): item[0] for item in pending_indices}
+            for fut in as_completed(futs):
+                idx_done, path_done, dur_done = fut.result()
+                seg_files_by_idx[idx_done] = path_done
+                _report_segment_done(dur_done)
+        except Exception:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+        else:
+            pool.shutdown(wait=True)
+        gc.collect()
+    else:
+        for item in pending_indices:
+            idx_done, path_done, dur_done = _encode_one_segment(item)
+            seg_files_by_idx[idx_done] = path_done
             gc.collect()
-            if callable(RENDER_PROGRESS_CALLBACK):
-                RENDER_PROGRESS_CALLBACK(seg_end, duration_sec)
-    finally:
-        ASS_PATH = orig_ass_path
-        BLUR_INTERVALS = orig_blur_intervals
-        OUTRO_CTA_START = orig_outro_cta_start
+            _report_segment_done(dur_done)
+
+    seg_files = [seg_files_by_idx[k] for k in sorted(seg_files_by_idx)]
 
     concat_list = chunk_dir / "concat.txt"
     concat_list.write_text(
@@ -8020,12 +8072,13 @@ def render_final(region):
 
 
     source_has_audio = _probe_has_audio(VIDEO_PATH)
+    effective_source_audio = source_has_audio and float(ORIGINAL_VOLUME) > 0.001
     atempo = _anti_reuse_atempo_filter()
     atempo_suffix = f",{atempo}" if atempo else ""
 
     if use_voice:
         music_index = 2
-        if source_has_audio:
+        if effective_source_audio:
             music_filter = (
                 f"[{music_index}:a]volume={float(MUSIC_VOLUME)}[music];"
                 f"[original][voice][music]amix=inputs=3:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
@@ -8052,7 +8105,7 @@ def render_final(region):
         music_filter = (
             f"[1:a]volume={float(MUSIC_VOLUME)}[music];"
             f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.97{atempo_suffix}[aout]"
-            if source_has_audio
+            if effective_source_audio
             else f"[1:a]volume={float(MUSIC_VOLUME)},alimiter=limit=0.97{atempo_suffix}[aout]"
         )
         filter_complex = video_filter + ";" + music_filter

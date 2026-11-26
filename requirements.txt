@@ -33,6 +33,7 @@ huggingface_hub==1.30.0
 idna==3.19
 multidict==6.7.1
 numpy==2.5.3
+nvidia-cublas-cu12==12.9.2.10 ; sys_platform == "win32"
 onnxruntime==1.29.0
 packaging==26.3
 propcache==0.5.2
