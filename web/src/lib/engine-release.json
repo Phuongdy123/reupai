@@ -1,18 +1,16 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.62",
+    "version": "0.2.63",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.62/ReupAI-Setup-0.2.62.exe",
-    "sha256": "d35af728e32b8140007a502ef75b3c40f0b813c0633c002cfec233d861fc7f41",
-    "size": 468409656,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.63/ReupAI-Setup-0.2.63.exe",
+    "sha256": "ade465a87d4e88ca65e40a55115b47bebe0647923dc5771f34918e14290ba440",
+    "size": 468398915,
     "notes": [
-      "Tối ưu chế độ 2 giọng hội thoại: ánh xạ giọng phụ Nam Minh sang Hải Đăng chạy 100% offline siêu nhanh, không còn lỗi Voice not found hay kẹt chờ Edge-TTS.",
-      "Cập nhật tiến độ % từng câu mượt mà khi chạy offline và hủy tác vụ lỗi tức thì thay vì treo hàng giờ.",
-      "Bao gồm đầy đủ bản vá DRM v2 Edge-TTS (7.3.1), kiểm tra dung lượng video dài (FLAC) và dọn file preview."
+      "Tối ưu toàn diện tốc độ xử lý video: Tự động chọn giọng Online/Offline thông minh, xử lý clip TTS 1.0x không cần gọi FFmpeg phụ, trộn timeline âm thanh bằng numpy nhanh gấp 20 lần, tăng tốc Whisper/dịch Gemini/OCR và gộp xóa chữ Inpaint vào 1 lượt render duy nhất."
     ],
-    "publishedAt": "2026-11-24T13:38:24+00:00"
+    "publishedAt": "2026-11-26T06:17:35+00:00"
   },
-  "signature": "W8gaKZ0XoBWYxUXKpFKkIhFp11YKSot3QP+jZlFF7YhCSdAM68RF1A8sWBrnbZbtv5MJo3BxSv/qlRskhWXeAQ=="
+  "signature": "E6Ae1j94Q/TbIxUWfkziYute/OhXxCn/IuPLyi18wdybXGGzVjLIts2pStmWD8JFpzd6UNPxKwK/yHRNMRgiDQ=="
 }
