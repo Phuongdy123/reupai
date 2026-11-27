@@ -1,16 +1,16 @@
 {
   "release": {
     "format": 1,
-    "version": "0.2.63",
+    "version": "0.2.64",
     "minimumVersion": "0.2.26",
     "platform": "windows-x64",
-    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.63/ReupAI-Setup-0.2.63.exe",
-    "sha256": "ade465a87d4e88ca65e40a55115b47bebe0647923dc5771f34918e14290ba440",
-    "size": 468398915,
+    "downloadUrl": "https://github.com/Phuongdy123/reupai/releases/download/v0.2.64/ReupAI-Setup-0.2.64.exe",
+    "sha256": "5d47b8ee6cbad0bef2bd060ccfd988dbfb1399788367f1e5b9eed8eddbf13c1b",
+    "size": 936763274,
     "notes": [
-      "Tối ưu toàn diện tốc độ xử lý video: Tự động chọn giọng Online/Offline thông minh, xử lý clip TTS 1.0x không cần gọi FFmpeg phụ, trộn timeline âm thanh bằng numpy nhanh gấp 20 lần, tăng tốc Whisper/dịch Gemini/OCR và gộp xóa chữ Inpaint vào 1 lượt render duy nhất."
+      "Mở khóa tối đa GPU NVIDIA RTX: tích hợp sẵn thư viện CUDA cuBLAS 12 cho Whisper FP16 nhanh gấp 15-20 lần, render song song 2 luồng NVENC cùng lúc, chống Windows tự Sleep khi xuất video dài và tái sử dụng tức thì lời thoại xem trước."
     ],
-    "publishedAt": "2026-11-26T06:17:35+00:00"
+    "publishedAt": "2026-11-27T14:24:30+00:00"
   },
-  "signature": "E6Ae1j94Q/TbIxUWfkziYute/OhXxCn/IuPLyi18wdybXGGzVjLIts2pStmWD8JFpzd6UNPxKwK/yHRNMRgiDQ=="
+  "signature": "cfHfZaBjsRYnPkmNVsvxvo3t+WGYwUfI6htclXXguHXrxUun12hsVbU83NI468W8dtUG9wvEIjTUxcOsKjflDw=="
 }
